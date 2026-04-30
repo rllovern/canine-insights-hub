@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PropertyOverview } from "@/components/data/PropertyOverview";
 import { EmptyState } from "@/components/data/EmptyState";
 import { PropertyAvatar } from "@/components/brand/PropertyAvatar";
+import { CallTracking } from "@/components/data/CallTracking";
 
 export default function PropertyPage() {
   const { slug } = useParams();
@@ -51,7 +52,7 @@ export default function PropertyPage() {
           <EmptyState title="PPC — coming soon" description="Google Ads integration arrives in the next phase." />
         </TabsContent>
         <TabsContent value="calls" className="mt-6">
-          <EmptyState title="Call Tracking — coming soon" description="CallTrackingMetrics integration arrives in the next phase." />
+          <CallTracking propertyId={property.id} />
         </TabsContent>
         <TabsContent value="web" className="mt-6">
           <EmptyState title="Web Analytics — coming soon" description="GA4 integration arrives in the next phase." />
