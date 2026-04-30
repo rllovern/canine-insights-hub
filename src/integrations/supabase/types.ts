@@ -14,6 +14,65 @@ export type Database = {
   }
   public: {
     Tables: {
+      ctm_calls: {
+        Row: {
+          ad_group: string | null
+          call_score_bucket: string | null
+          call_score_label: string | null
+          called_at: string
+          caller_number: string | null
+          campaign_name: string | null
+          channel: string | null
+          ctm_call_id: string
+          duration_seconds: number | null
+          id: string
+          property_id: string
+          raw_payload: Json | null
+          synced_at: string
+          tracking_source: string | null
+        }
+        Insert: {
+          ad_group?: string | null
+          call_score_bucket?: string | null
+          call_score_label?: string | null
+          called_at: string
+          caller_number?: string | null
+          campaign_name?: string | null
+          channel?: string | null
+          ctm_call_id: string
+          duration_seconds?: number | null
+          id?: string
+          property_id: string
+          raw_payload?: Json | null
+          synced_at?: string
+          tracking_source?: string | null
+        }
+        Update: {
+          ad_group?: string | null
+          call_score_bucket?: string | null
+          call_score_label?: string | null
+          called_at?: string
+          caller_number?: string | null
+          campaign_name?: string | null
+          channel?: string | null
+          ctm_call_id?: string
+          duration_seconds?: number | null
+          id?: string
+          property_id?: string
+          raw_payload?: Json | null
+          synced_at?: string
+          tracking_source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ctm_calls_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       properties: {
         Row: {
           created_at: string
@@ -140,6 +199,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_ctm_calls_by_report_token: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: {
+          ad_group: string | null
+          call_score_bucket: string | null
+          call_score_label: string | null
+          called_at: string
+          caller_number: string | null
+          campaign_name: string | null
+          channel: string | null
+          ctm_call_id: string
+          duration_seconds: number | null
+          id: string
+          property_id: string
+          raw_payload: Json | null
+          synced_at: string
+          tracking_source: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ctm_calls"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_property_by_report_token: {
         Args: { _token: string }
         Returns: {

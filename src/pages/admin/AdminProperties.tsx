@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link as LinkIcon, Copy, ExternalLink, Pencil, Plus, RefreshCw } from "lucide-react";
+import { Link as LinkIcon, Copy, ExternalLink, Pencil, Phone, Plus, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property, DataSource, PropertyDataSource } from "@/lib/types";
 import { PageHeader } from "@/components/data/PageHeader";
@@ -14,6 +14,7 @@ import { generateReportToken, slugify } from "@/lib/tokens";
 import { useProperties } from "@/contexts/PropertyContext";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/data/EmptyState";
+import { CTMConnectionDialog } from "@/components/data/CTMConnectionDialog";
 
 function PropertyDialog({
   initial,
@@ -153,8 +154,24 @@ export default function AdminProperties() {
     const m = new Map<string, DataSource[]>();
     sources.filter((s) => s.is_connected).forEach((s) => {
       const arr = m.get(s.property_id) ?? [];
-      arr.push(s.source);
+      arr.push(s.source as DataSource);
       m.set(s.property_id, arr);
+    });
+    return m;
+  }, [sources]);
+
+  const ctmByProp = useMemo(() => {
+    const m = new Map<string, PropertyDataSource>();
+    sources.filter((s) => s.source === "ctm").forEach((s) => m.set(s.property_id, s));
+    return m;
+  }, [sources]);
+
+  const lastSyncByProp = useMemo(() => {
+    const m = new Map<string, string>();
+    sources.forEach((s) => {
+      if (!s.last_synced_at) return;
+      const cur = m.get(s.property_id);
+      if (!cur || new Date(s.last_synced_at) > new Date(cur)) m.set(s.property_id, s.last_synced_at);
     });
     return m;
   }, [sources]);
@@ -236,9 +253,23 @@ export default function AdminProperties() {
                   <TableCell>
                     <SourceBadges connected={sourcesByProp.get(p.id) ?? []} />
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">Never</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {lastSyncByProp.get(p.id)
+                      ? new Date(lastSyncByProp.get(p.id)!).toLocaleString()
+                      : "Never"}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
+                      <CTMConnectionDialog
+                        property={p}
+                        source={ctmByProp.get(p.id) ?? null}
+                        onChanged={load}
+                        trigger={
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="CTM connection">
+                            <Phone className="h-3.5 w-3.5" />
+                          </Button>
+                        }
+                      />
                       <PropertyDialog
                         initial={p}
                         onSaved={load}

@@ -5,6 +5,7 @@ import { Property } from "@/lib/types";
 import { PublicShell } from "@/components/layout/PublicShell";
 import { PropertyOverview } from "@/components/data/PropertyOverview";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { CallTracking } from "@/components/data/CallTracking";
 
 export default function PublicReport() {
   const { token } = useParams();
@@ -47,7 +48,15 @@ export default function PublicReport() {
 
   return (
     <PublicShell property={property}>
-      <PropertyOverview readOnly />
+      <div className="space-y-10">
+        <PropertyOverview readOnly />
+        <section>
+          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Call Tracking
+          </h2>
+          <CallTracking propertyId={property.id} publicToken={token} forceRole="viewer" />
+        </section>
+      </div>
     </PublicShell>
   );
 }
