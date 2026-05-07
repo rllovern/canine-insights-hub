@@ -1,17 +1,12 @@
 import { PageHeader } from "@/components/data/PageHeader";
-import { EmptyState } from "@/components/data/EmptyState";
 
 export default function AdminSettings() {
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
-      <PageHeader
-        title="Settings"
-        description="Global workspace configuration and integration credentials."
-      />
-      <EmptyState
-        title="Settings arrive in the next phase"
-        description="Google Ads, CallTrackingMetrics, and GA4 connection forms will live here."
-      />
+    <div className="mx-auto max-w-5xl p-6 space-y-6">
+      <PageHeader title="Settings" description="Workspace and integration preferences." />
+      <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+        Settings UI coming with the next prompt.
+      </div>
     </div>
   );
 }

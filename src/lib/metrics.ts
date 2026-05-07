@@ -1,34 +1,28 @@
-/**
- * Central calculated-field utilities. All functions return `null` for
- * divide-by-zero or missing inputs — never NaN or Infinity. UI should render
- * `null` as an em dash ("—").
- */
+import { format, parseISO, subDays, differenceInDays } from "date-fns";
 
-const safe = (numerator: number, denominator: number): number | null => {
-  if (!Number.isFinite(numerator) || !Number.isFinite(denominator)) return null;
-  if (denominator === 0) return null;
-  return numerator / denominator;
+export const fmtCurrency = (n: number, digits = 0) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: digits }).format(n || 0);
+export const fmtNumber = (n: number, digits = 0) =>
+  new Intl.NumberFormat("en-US", { maximumFractionDigits: digits }).format(n || 0);
+export const fmtPct = (n: number, digits = 1) => `${(n || 0).toFixed(digits)}%`;
+export const fmtDate = (s: string) => format(parseISO(s), "MMM d");
+
+export type DateRange = { from: Date; to: Date };
+export function getRange(days: number): DateRange { const to = new Date(); return { from: subDays(to, days - 1), to }; }
+export function priorRange(r: DateRange): DateRange { const span = differenceInDays(r.to, r.from) + 1; return { from: subDays(r.from, span), to: subDays(r.to, span) }; }
+export function rangeToISO(r: DateRange) { return { from: format(r.from, "yyyy-MM-dd"), to: format(r.to, "yyyy-MM-dd") }; }
+export function pctChange(curr: number, prev: number): number { if (!prev) return curr ? 100 : 0; return ((curr - prev) / prev) * 100; }
+
+// Per-call metric helpers (used by CTM components)
+export const costPerCall = (cost: number, n: number) => (n ? cost / n : null);
+export const ctr = (clicks: number, imp: number) => (imp ? (clicks / imp) * 100 : null);
+export const cpc = (cost: number, clicks: number) => (clicks ? cost / clicks : null);
+
+export const SOURCE_COLORS: Record<string, string> = {
+  "Google PPC": "hsl(var(--chart-1))",
+  "Organic": "hsl(var(--chart-2))",
+  "Website": "hsl(var(--chart-3))",
+  "Yelp": "hsl(var(--chart-5))",
+  "Facebook": "hsl(var(--chart-4))",
+  "Other": "hsl(var(--chart-5))",
 };
-
-export const costPerCall = (cost: number, recordCount: number) => safe(cost, recordCount);
-export const costPerGoodLead = (cost: number, goodLeads: number) => safe(cost, goodLeads);
-export const costPerBadLead = (cost: number, badLeads: number) => safe(cost, badLeads);
-export const costPerLead = (cost: number, leads: number) => safe(cost, leads);
-export const costPerIntake = (cost: number, admissions: number) => safe(cost, admissions);
-
-export const ctr = (clicks: number, impressions: number) => safe(clicks, impressions);
-export const cpc = (cost: number, clicks: number) => safe(cost, clicks);
-export const cpm = (cost: number, impressions: number) => {
-  const v = safe(cost, impressions);
-  return v === null ? null : v * 1000;
-};
-
-/** Format helpers — UI-only, default behavior */
-export const fmtCurrency = (v: number | null | undefined, currency = "USD") =>
-  v === null || v === undefined ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(v);
-
-export const fmtNumber = (v: number | null | undefined) =>
-  v === null || v === undefined ? "—" : new Intl.NumberFormat("en-US").format(v);
-
-export const fmtPercent = (v: number | null | undefined, digits = 2) =>
-  v === null || v === undefined ? "—" : `${(v * 100).toFixed(digits)}%`;

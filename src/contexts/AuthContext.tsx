@@ -1,83 +1,49 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { AppRole } from "@/lib/types";
+import type { Session, User } from "@supabase/supabase-js";
+import type { AppRole } from "@/lib/types";
 
-interface AuthContextValue {
-  session: Session | null;
+interface AuthCtx {
   user: User | null;
-  roles: AppRole[];
+  session: Session | null;
+  role: AppRole | null;
   loading: boolean;
   signOut: () => Promise<void>;
-  refreshRoles: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const Ctx = createContext<AuthCtx>({} as AuthCtx);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [roles, setRoles] = useState<AppRole[]>([]);
+  const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadRoles = async (uid: string | undefined) => {
-    if (!uid) {
-      setRoles([]);
-      return;
-    }
-    const { data, error } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", uid);
-    if (error) {
-      console.error("Failed to load roles", error);
-      setRoles([]);
-      return;
-    }
-    setRoles((data ?? []).map((r) => r.role as AppRole));
-  };
-
   useEffect(() => {
-    // Subscribe FIRST to avoid race with getSession
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess);
-      setUser(sess?.user ?? null);
-      // Defer role fetch to avoid deadlocks inside the listener
-      if (sess?.user) {
-        setTimeout(() => loadRoles(sess.user.id), 0);
-      } else {
-        setRoles([]);
-      }
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      setUser(s?.user ?? null);
     });
-
-    supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
-      setSession(sess);
-      setUser(sess?.user ?? null);
-      if (sess?.user) await loadRoles(sess.user.id);
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setUser(s?.user ?? null);
       setLoading(false);
     });
-
-    return () => subscription.unsubscribe();
+    return () => sub.subscription.unsubscribe();
   }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setRoles([]);
-  };
-
-  const refreshRoles = async () => {
-    await loadRoles(user?.id);
-  };
+  useEffect(() => {
+    if (!user) { setRole(null); return; }
+    supabase.from("user_roles").select("role").eq("user_id", user.id).then(({ data }) => {
+      setRole(((data?.[0]?.role as AppRole) ?? null));
+    });
+  }, [user]);
 
   return (
-    <AuthContext.Provider value={{ session, user, roles, loading, signOut, refreshRoles }}>
+    <Ctx.Provider value={{ user, session, role, loading, signOut: async () => { await supabase.auth.signOut(); } }}>
       {children}
-    </AuthContext.Provider>
+    </Ctx.Provider>
   );
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-}
+export const useAuth = () => useContext(Ctx);

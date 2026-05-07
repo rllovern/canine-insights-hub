@@ -1,62 +1,29 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Property } from "@/lib/types";
 import { PublicShell } from "@/components/layout/PublicShell";
-import { PropertyOverview } from "@/components/data/PropertyOverview";
-import { BrandMark } from "@/components/brand/BrandMark";
-import { CallTracking } from "@/components/data/CallTracking";
+import { Property } from "@/lib/types";
 
 export default function PublicReport() {
-  const { token } = useParams();
+  const { token } = useParams<{ token: string }>();
   const [property, setProperty] = useState<Property | null>(null);
-  const [status, setStatus] = useState<"loading" | "ok" | "notfound">("loading");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) {
-      setStatus("notfound");
-      return;
-    }
-    (async () => {
-      const { data, error } = await supabase.rpc("get_property_by_report_token", { _token: token });
-      if (error || !data || data.length === 0) {
-        setStatus("notfound");
-        return;
-      }
-      setProperty(data[0] as Property);
-      setStatus("ok");
-    })();
+    if (!token) return;
+    supabase.rpc("get_property_by_report_token", { _token: token }).then(({ data, error }) => {
+      if (error || !data || data.length === 0) setError("This report link is invalid or has expired.");
+      else setProperty(data[0] as Property);
+    });
   }, [token]);
 
-  if (status === "loading") {
-    return <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">Loading report…</div>;
-  }
-
-  if (status === "notfound" || !property) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-background p-6">
-        <div className="max-w-sm text-center">
-          <BrandMark className="mx-auto mb-6 justify-center" />
-          <h1 className="text-lg font-semibold">Report not found</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This share link is invalid or has been revoked. Please contact your account manager for a new link.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (error) return <div className="min-h-screen grid place-items-center text-muted-foreground">{error}</div>;
+  if (!property) return <div className="min-h-screen grid place-items-center"><Loader2 className="animate-spin" /></div>;
 
   return (
     <PublicShell property={property}>
-      <div className="space-y-10">
-        <PropertyOverview readOnly />
-        <section>
-          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Call Tracking
-          </h2>
-          <CallTracking propertyId={property.id} publicToken={token} forceRole="viewer" />
-        </section>
-      </div>
+      <div className="text-sm text-muted-foreground">Public report for {property.name}.</div>
     </PublicShell>
   );
 }

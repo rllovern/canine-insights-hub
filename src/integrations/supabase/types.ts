@@ -73,12 +73,180 @@ export type Database = {
           },
         ]
       }
+      daily_metrics: {
+        Row: {
+          ad_source: string
+          admissions: number
+          bad_leads: number
+          campaign: string
+          clicks: number
+          cost: number
+          created_at: string
+          date: string
+          good_leads: number
+          id: string
+          impressions: number
+          leads: number
+          medicaid: number
+          no_entry: number
+          property_id: string
+          record_count: number
+          sessions: number
+          spam: number
+          users: number
+        }
+        Insert: {
+          ad_source: string
+          admissions?: number
+          bad_leads?: number
+          campaign: string
+          clicks?: number
+          cost?: number
+          created_at?: string
+          date: string
+          good_leads?: number
+          id?: string
+          impressions?: number
+          leads?: number
+          medicaid?: number
+          no_entry?: number
+          property_id: string
+          record_count?: number
+          sessions?: number
+          spam?: number
+          users?: number
+        }
+        Update: {
+          ad_source?: string
+          admissions?: number
+          bad_leads?: number
+          campaign?: string
+          clicks?: number
+          cost?: number
+          created_at?: string
+          date?: string
+          good_leads?: number
+          id?: string
+          impressions?: number
+          leads?: number
+          medicaid?: number
+          no_entry?: number
+          property_id?: string
+          record_count?: number
+          sessions?: number
+          spam?: number
+          users?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_metrics_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      keyword_rankings: {
+        Row: {
+          captured_at: string
+          created_at: string
+          id: string
+          keyword: string
+          keyword_id: number
+          position: number | null
+          previous_position: number | null
+          property_id: string
+          ranking_url: string | null
+          region: string | null
+          search_engine: string | null
+          search_volume: number | null
+        }
+        Insert: {
+          captured_at: string
+          created_at?: string
+          id?: string
+          keyword: string
+          keyword_id: number
+          position?: number | null
+          previous_position?: number | null
+          property_id: string
+          ranking_url?: string | null
+          region?: string | null
+          search_engine?: string | null
+          search_volume?: number | null
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          id?: string
+          keyword?: string
+          keyword_id?: number
+          position?: number | null
+          previous_position?: number | null
+          property_id?: string
+          ranking_url?: string | null
+          region?: string | null
+          search_engine?: string | null
+          search_volume?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "keyword_rankings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      keyword_share_of_voice: {
+        Row: {
+          captured_at: string
+          created_at: string
+          domain: string
+          id: string
+          is_own_domain: boolean
+          property_id: string
+          sov_score: number
+        }
+        Insert: {
+          captured_at: string
+          created_at?: string
+          domain: string
+          id?: string
+          is_own_domain?: boolean
+          property_id: string
+          sov_score: number
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          domain?: string
+          id?: string
+          is_own_domain?: boolean
+          property_id?: string
+          sov_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "keyword_share_of_voice_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       properties: {
         Row: {
+          brand_color: string | null
           created_at: string
+          hidden_metrics: Json
           id: string
           is_active: boolean
           logo_url: string | null
+          metric_labels: Json
           name: string
           primary_color: string | null
           public_report_token: string | null
@@ -86,10 +254,13 @@ export type Database = {
           timezone: string
         }
         Insert: {
+          brand_color?: string | null
           created_at?: string
+          hidden_metrics?: Json
           id?: string
           is_active?: boolean
           logo_url?: string | null
+          metric_labels?: Json
           name: string
           primary_color?: string | null
           public_report_token?: string | null
@@ -97,10 +268,13 @@ export type Database = {
           timezone?: string
         }
         Update: {
+          brand_color?: string | null
           created_at?: string
+          hidden_metrics?: Json
           id?: string
           is_active?: boolean
           logo_url?: string | null
+          metric_labels?: Json
           name?: string
           primary_color?: string | null
           public_report_token?: string | null
@@ -109,34 +283,166 @@ export type Database = {
         }
         Relationships: []
       }
+      property_call_score_mappings: {
+        Row: {
+          bucket: string
+          created_at: string
+          id: string
+          priority: number
+          property_id: string
+          score_label: string
+          updated_at: string
+        }
+        Insert: {
+          bucket: string
+          created_at?: string
+          id?: string
+          priority?: number
+          property_id: string
+          score_label: string
+          updated_at?: string
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          id?: string
+          priority?: number
+          property_id?: string
+          score_label?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_call_score_mappings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       property_data_sources: {
         Row: {
           config: Json | null
+          external_account_id: string | null
           id: string
           is_connected: boolean
+          last_error: string | null
           last_synced_at: string | null
+          login_customer_id: string | null
           property_id: string
+          refresh_token: string | null
           source: string
+          status: string
+          updated_at: string
         }
         Insert: {
           config?: Json | null
+          external_account_id?: string | null
           id?: string
           is_connected?: boolean
+          last_error?: string | null
           last_synced_at?: string | null
+          login_customer_id?: string | null
           property_id: string
+          refresh_token?: string | null
           source: string
+          status?: string
+          updated_at?: string
         }
         Update: {
           config?: Json | null
+          external_account_id?: string | null
           id?: string
           is_connected?: boolean
+          last_error?: string | null
           last_synced_at?: string | null
+          login_customer_id?: string | null
           property_id?: string
+          refresh_token?: string | null
           source?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "property_data_sources_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      property_settings: {
+        Row: {
+          data_sources: Json
+          property_id: string
+          updated_at: string
+          visible_metrics: Json
+        }
+        Insert: {
+          data_sources?: Json
+          property_id: string
+          updated_at?: string
+          visible_metrics?: Json
+        }
+        Update: {
+          data_sources?: Json
+          property_id?: string
+          updated_at?: string
+          visible_metrics?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_settings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: true
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_runs: {
+        Row: {
+          acknowledged_at: string | null
+          error: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          property_id: string | null
+          source: string
+          started_at: string
+          stats: Json | null
+          status: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          error?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          property_id?: string | null
+          source: string
+          started_at?: string
+          stats?: Json | null
+          status: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          error?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          property_id?: string | null
+          source?: string
+          started_at?: string
+          stats?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_runs_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
@@ -199,6 +505,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ai_assistant_context: {
+        Args: { _from: string; _property_id: string; _to: string }
+        Returns: Json
+      }
       get_ctm_calls_by_report_token: {
         Args: { _from: string; _to: string; _token: string }
         Returns: {
@@ -224,13 +534,69 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_daily_metrics_by_report_token: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: {
+          ad_source: string
+          admissions: number
+          bad_leads: number
+          campaign: string
+          clicks: number
+          cost: number
+          created_at: string
+          date: string
+          good_leads: number
+          id: string
+          impressions: number
+          leads: number
+          medicaid: number
+          no_entry: number
+          property_id: string
+          record_count: number
+          sessions: number
+          spam: number
+          users: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "daily_metrics"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_keyword_rankings_by_report_token: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: {
+          captured_at: string
+          created_at: string
+          id: string
+          keyword: string
+          keyword_id: number
+          position: number | null
+          previous_position: number | null
+          property_id: string
+          ranking_url: string | null
+          region: string | null
+          search_engine: string | null
+          search_volume: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "keyword_rankings"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_property_by_report_token: {
         Args: { _token: string }
         Returns: {
+          brand_color: string | null
           created_at: string
+          hidden_metrics: Json
           id: string
           is_active: boolean
           logo_url: string | null
+          metric_labels: Json
           name: string
           primary_color: string | null
           public_report_token: string | null
@@ -244,12 +610,94 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_score_mappings_by_report_token: {
+        Args: { _token: string }
+        Returns: {
+          bucket: string
+          created_at: string
+          id: string
+          priority: number
+          property_id: string
+          score_label: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "property_call_score_mappings"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      public_ai_assistant_context: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: Json
+      }
+      public_report_client: {
+        Args: { _token: string }
+        Returns: {
+          brand_color: string
+          hidden_metrics: Json
+          id: string
+          logo_url: string
+          metric_labels: Json
+          name: string
+          slug: string
+        }[]
+      }
+      public_report_metrics: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: {
+          ad_source: string
+          admissions: number
+          bad_leads: number
+          campaign: string
+          clicks: number
+          cost: number
+          created_at: string
+          date: string
+          good_leads: number
+          id: string
+          impressions: number
+          leads: number
+          medicaid: number
+          no_entry: number
+          property_id: string
+          record_count: number
+          sessions: number
+          spam: number
+          users: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "daily_metrics"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      public_report_score_mappings: {
+        Args: { _token: string }
+        Returns: {
+          bucket: string
+          created_at: string
+          id: string
+          priority: number
+          property_id: string
+          score_label: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "property_call_score_mappings"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       viewer_can_access: {
         Args: { _property_id: string; _user_id: string }
