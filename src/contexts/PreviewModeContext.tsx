@@ -15,14 +15,14 @@ interface PreviewModeContextValue {
 const PreviewModeContext = createContext<PreviewModeContextValue | undefined>(undefined);
 
 export function PreviewModeProvider({ children }: { children: ReactNode }) {
-  const { roles } = useAuth();
+  const { role } = useAuth();
   const [previewing, setPreviewing] = useState(false);
 
   const realRole: AppRole | null = useMemo(() => {
-    if (roles.includes("internal")) return "internal";
-    if (roles.includes("viewer")) return "viewer";
-    return null;
-  }, [roles]);
+    if (role === "internal") return "internal";
+    if (role === "viewer") return "viewer";
+    return role ?? null;
+  }, [role]);
 
   const effectiveRole: AppRole | null = useMemo(() => {
     if (realRole === "internal" && previewing) return "viewer";
