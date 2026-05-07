@@ -68,6 +68,15 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 138 26% 33%;
+
+    /* Section divider gradient (sage) */
+    --section: 138 30% 95%;
+    --section-foreground: 138 40% 22%;
+    --gradient-section: linear-gradient(180deg, hsl(138 30% 96%), hsl(138 26% 92%));
+    --gradient-brand: linear-gradient(135deg, hsl(138 26% 33%), hsl(138 32% 45%));
+    --shadow-sm: 0 1px 2px 0 hsl(222 25% 12% / 0.04);
+    --shadow-md: 0 2px 8px -2px hsl(222 25% 12% / 0.08), 0 1px 2px hsl(222 25% 12% / 0.04);
+    --shadow-lg: 0 12px 32px -8px hsl(222 25% 12% / 0.12);
   }
 
   .dark {
@@ -128,5 +137,29 @@ All colors MUST be HSL.
 
   h1, h2, h3, h4, h5 {
     @apply tracking-tight;
+  }
+}
+
+@layer components {
+  .kpi-card {
+    @apply bg-card rounded-xl border border-border p-4 transition-all hover:shadow-md;
+  }
+  .card-surface {
+    @apply bg-card rounded-xl border border-border;
+  }
+  .section-divider {
+    @apply rounded-lg px-4 py-2.5 text-sm font-semibold tracking-tight;
+    background: var(--gradient-section);
+    color: hsl(var(--section-foreground));
+  }
+  .bg-gradient-brand {
+    background: var(--gradient-brand);
+  }
+  .animate-fade-in {
+    animation: fadeIn 0.25s ease-out;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 }
