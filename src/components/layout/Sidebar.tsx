@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { to: "/dashboard", label: "PPC Overview", icon: BarChart3 },
   { to: "/calls", label: "Call Tracking", icon: PhoneCall },
-  { to: "/keywords", label: "Keywords", icon: Search },
   { to: "/reports", label: "Reports", icon: FileText },
 ];
 
