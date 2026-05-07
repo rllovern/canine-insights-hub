@@ -1,95 +1,86 @@
-# Port AlienX Build → Ridgeside Canine
+## What's actually missing
 
-Goal: bring every capability from the AlienX dashboard into this project, but keep the Ridgeside brand (sage green `#3F6B4A`, Inter, "Ridgeside Canine" wordmark) and the existing `properties` / `ctm_calls` data model already shipped in Prompts 1–3.
+You're right — the previous pass added the database tables, edge functions, and a few chart primitives, but the **pages you see in the app are still the original Ridgeside scaffolding**. None of the screens from your AlienX screenshots exist yet:
 
-## What AlienX has that we need to add
+- No "Google PPC Overview" page with the Cost / Clicks / Actions sections, dual-axis charts, KPI strip
+- No full Call Tracking page (only the basic CTM tab)
+- No Keywords page
+- No Client Management page (the rich one with logo upload, sources badges, share link, sync/backfill row actions, score-mappings dialog, CTM diagnostic dialog, sync-health bell)
+- No client-facing public report layout that matches screenshot #2
+- No AI Assistant slide-out wired to the `ai-assistant` edge function
+- Top bar lacks the property switcher pill, period selector, "vs previous" pill, export, and Internal/Viewer toggle in the layout shown
 
-Pages
-- **PPC Overview** — 3-column layout (Cost & Impressions / Clicks / Actions), KPI cards with period-over-period deltas, dual-axis daily charts.
-- **Call Tracking** — replaces our current basic CallTracking; richer source × outcome, score-bucket breakdown, multi-line trend.
-- **Keywords** — rankings + share-of-voice tables and trend.
-- **Clients Admin** (becomes **Properties Admin**) — full data-source connection management for Google Ads (OAuth + MCC picker), CTM (account picker), GA4, Keyword.com; logo upload; visible-metric toggles; score mapping editor; sync health.
-- **Settings** — internal preferences, secrets status, scheduled sync controls.
-- **Public Report** — branded read-only version of the PPC overview.
-- **AI Assistant** — chat panel that answers questions about the active property's metrics.
+This plan ports each of those, rebranded to Ridgeside (sage green, Inter), running on the existing data model.
 
-Cross-cutting components
-- `DashboardContext` with date-range presets (MTD / 7 / 30 / 90 / custom) **plus compare mode** (off / previous period / custom).
-- `SectionDivider`, `KpiCard` w/ Delta, `ChartCard`, `DualAxisChart`, `MultiLineChart`.
-- `SyncHealthBell` (top bar) + `CtmDiagnosticDialog` + `ScoreMappingsDialog`.
-- `client-labels` → `property-labels`: per-property visible metric config + relabeling (e.g., "admissions" → "intakes" if a property prefers it).
-- Blended-metrics fetcher (`data-sources.ts`) reading from `daily_metrics`.
+## Plan
 
-Edge functions to port
-- `sync-google-ads`, `google-ads-oauth-url`, `google-ads-oauth`, `list-mcc-customers`
-- `sync-ga4`
-- `sync-keyword-com`
-- `list-ctm-accounts` (we already have `sync-ctm` and `test-ctm` — keep ours, add the account picker)
-- `scheduled-sync-all` (cron orchestrator)
-- `ai-assistant` (uses Lovable AI Gateway, no key needed)
+### 1. Layout shell rebuild
+Replace `AppShell` / sidebar / top bar with the AlienX layout, kept on Ridgeside tokens:
+- Left sidebar: brand mark + "DASHBOARD" eyebrow, sections **Analytics** (PPC Overview, Call Tracking, Keywords) and **Admin** (Clients, Settings)
+- Top bar: title + sub-line on the left; on the right — property switcher pill, "This Month" period selector, date-range pill, "vs previous" comparison pill, export button, Internal/Viewer toggle
+- Wire to existing `PropertyContext`, `DateRangeContext`, `PreviewModeContext`
 
-## Data model changes
+### 2. PPC Overview page (`/dashboard`)
+Port `PpcOverview.tsx`:
+- ADS OVERVIEW section divider
+- Three KPI groups: **Cost & Impressions** (Cost, Avg CPM, Impressions), **Clicks** (Clicks, CTR, Avg CPC), **Actions** (Leads, Good Leads, Intakes/Admissions, Medicaid → relabel to "Boarded" or property-specific via `metric_labels`)
+- Three dual-axis charts: Cost vs CPM, Clicks vs CTR, Impressions vs Calls
+- Reads from `daily_metrics` for the active property + date range, with prior-period deltas
 
-AlienX is keyed on `clients`; we're keyed on `properties`. We will keep `properties` and add the missing tables, all referencing `property_id`:
+### 3. Call Tracking page (`/calls`)
+Port `CallTracking.tsx` to replace the current CTM tab content:
+- CALL PERFORMANCE divider, Total Calls + Calls by Source line charts
+- Source × Outcome matrix and per-campaign breakdown (already partially built)
+- Joins `ctm_calls` with `property_call_score_mappings` for Good Lead / Bad Lead / SPAM / Admission buckets
+- Respects `canSeeSpam` / `canSeeBadLead` for viewers and public reports
 
-- `daily_metrics(property_id, date, ad_source, campaign, cost, impressions, clicks, record_count, no_entry, leads, good_leads, bad_leads, spam, admissions, sessions, users)` + index `(property_id, date)`.
-- `property_settings(property_id pk, visible_metrics jsonb, data_sources jsonb, metric_labels jsonb, updated_at)`.
-- `property_call_score_mappings(property_id, score_label, bucket)` — drives good/bad/spam classification on `ctm_calls` (the missing piece flagged at the end of Prompt 3).
-- `sync_runs(id, property_id, source, status, started_at, finished_at, error, stats jsonb)`.
-- `keyword_rankings(property_id, date, keyword, position, search_engine, location)`.
-- `keyword_share_of_voice(property_id, date, share_pct, competitors jsonb)`.
-- New enums: `data_source_type` (extend existing `DataSource`: add `bigquery`, `keyword_com`), `connection_status`, `score_bucket` (`good`/`bad`/`spam`/`no_entry`).
-- Extend `property_data_sources.config` usage to store OAuth tokens, GA4 property id, CTM account id, Keyword.com project id.
-- RLS: internal full access; viewers limited via existing `viewer_can_access(uid, property_id)` helper. Public report token read paths via `SECURITY DEFINER` functions (`get_daily_metrics_by_report_token`, `get_keyword_rankings_by_report_token`, etc.) following the pattern already used for `get_ctm_calls_by_report_token`.
-- Seed 90 days of synthetic `daily_metrics` for existing properties so the UI is populated immediately (mirrors AlienX seed loop).
+### 4. Keywords page (`/keywords`)
+Port `Keywords.tsx`:
+- Rankings table from `keyword_rankings`
+- Share-of-Voice from `keyword_share_of_voice`
+- Trend chart, position-bucket distribution
 
-We keep `ctm_calls` exactly as-is and resolve good/bad/spam by joining to `property_call_score_mappings` — that closes the loop on Prompt 3 and feeds the new Call Tracking page.
+### 5. Client Management page (`/admin/properties`)
+Replace current `AdminProperties` with full `ClientsAdmin` port (screenshot #3):
+- "Add a client" card (Name, Slug, Brand color, Add)
+- "Import from MCC" and "Import from CTM" buttons (call `list-mcc-customers` / `list-ctm-accounts`)
+- All-clients table: Brand swatch, Logo upload, Name, Slug, Sources badges (ADS/CTM/GA4), Status, Last synced, Share link with copy, row actions (visible-metrics editor, score mappings dialog, CTM diagnostic dialog, Sync, Backfill, Delete)
+- "Sync all clients" button → `scheduled-sync-all`
+- Sync-health bell in top bar
 
-## Brand / design system
+### 6. Public Report page (`/report/:token`)
+Rebuild `PublicReport` to match screenshot #2:
+- Centered "PERFORMANCE REPORT" header with property logo, name, date range, "vs previous", period pill
+- Same ADS OVERVIEW + CALL PERFORMANCE sections as internal view
+- Hides metrics listed in `properties.hidden_metrics` and SPAM/Bad-Lead per scoping rules
+- No sidebar, no admin actions, AI Assistant disabled
 
-- Keep our current sage palette (`--primary 138 26% 33%`) and Inter font.
-- Adopt AlienX's structural tokens: `--section`, `--shadow-sm/md/lg`, `--gradient-section`, the seven-color chart palette (recolor to sage-led: chart-1 sage, chart-2 slate, chart-3 amber, chart-4 terracotta, chart-5 sky, chart-6 muted rose, chart-7 stone) and the dark sidebar surface.
-- Port AlienX's `kpi-card`, `section-divider`, `glass-panel` component utilities.
-- Rebrand all copy: "AlienX" → "Ridgeside Canine", "client(s)" → "property(ies)", "admissions" stays as default but is relabel-able per property via `metric_labels`.
-- Replace AlienX logo with our existing `BrandMark`.
+### 7. Settings page (`/admin/settings`)
+Port `Settings.tsx`:
+- Google Ads OAuth connect button (uses `google-ads-oauth-url` / `google-ads-oauth`)
+- CTM credentials form
+- Default metric labels
+- Sync schedule info
 
-## Routing reconciliation
+### 8. AI Assistant
+Mount `AIAssistant.tsx` slide-out (already-built `ai-assistant` edge function + `ai_assistant_context` RPC). Visible on internal pages and on the public report when enabled.
 
-Our shell stays; we extend it with the new pages:
+### 9. Routes & navigation
+Update `App.tsx`:
+- `/dashboard` → PPC Overview (keep current "all properties" picker as `/dashboard/properties` or fold into property switcher)
+- `/calls`, `/keywords`, `/admin/properties`, `/admin/settings`
+- Keep `/report/:token`, `/login`, `/register`, `/properties/:slug` (legacy, redirects to PPC Overview with that property selected)
 
-```
-/dashboard                 → PPC Overview (current property)
-/properties/:slug          → property detail tabs: Overview | Calls | Keywords | Reports
-/calls                     → Call Tracking (active property)
-/keywords                  → Keywords (active property)
-/assistant                 → AI Assistant (already exists, wire to ai-assistant function)
-/admin/properties          → Properties admin (port of ClientsAdmin, 1253 LOC)
-/admin/users               → keep
-/admin/settings            → port of AlienX Settings
-/report/:token             → public branded report (extend current PublicReport)
-```
+### Preserved
+- All existing tables, RPCs, and edge functions
+- Auth flow, super-admin account, role/preview-mode logic
+- Ridgeside sage-green tokens, Inter font, BrandMark/PropertyAvatar
+- CTM sync edge function (already working)
 
-Active-property selection continues to come from `PropertyContext` + sidebar `PropertySwitcher`. Date range + compare lives in a new `DashboardContext` that wraps our existing `DateRangeContext`.
+### Technical notes
+- Sweeping rename during port: `client_id`→`property_id`, `clients`→`properties`, `activeClient`→`activeProperty`, `useDashboard`→reuse existing contexts
+- Files touched: ~12 new pages/components, edits to `App.tsx`, `AppShell.tsx`, removal of obsolete `Dashboard.tsx` / `PropertyPage.tsx` (or repurposed)
+- No new migrations needed — schema already in place
 
-## Implementation phases (one PR-sized step each)
-
-1. **Schema & seed** — migration adding the six new tables, enum extensions, SECURITY DEFINER read functions, seed 90 days of `daily_metrics` for existing properties.
-2. **Design tokens & shared components** — extend `index.css`, port `KpiCard`/`Delta`/`ChartCard`/`DualAxisChart`/`MultiLineChart`/`SectionDivider`, add `lib/metrics.ts` helpers (`sumMetrics`, `groupByDate`, `pctChange`, `fmtCurrency/Number/Pct`, `getRange`, `priorRange`, `rangeToISO`), add `lib/data-sources.ts` (`fetchBlendedMetrics`, `calc`).
-3. **DashboardContext + PPC Overview page** — wired to seeded data.
-4. **Call Tracking rebuild** — replace current component, add score-mapping join, source × outcome + bucket breakdowns + trend.
-5. **Keywords page** + rankings/SoV tables.
-6. **Admin: Properties** — port ClientsAdmin connection cards, score mappings dialog, visible-metrics editor, logo, sync-health bell, CTM diagnostic dialog.
-7. **Edge functions** — port `sync-google-ads` (+OAuth), `sync-ga4`, `sync-keyword-com`, `list-mcc-customers`, `list-ctm-accounts`, `scheduled-sync-all`, `ai-assistant`. Google Ads OAuth requires `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_DEVELOPER_TOKEN` secrets — will request via `add_secret` only when reached (user said Google Ads is deferred, so this function will deploy but stay unconfigured until they're ready).
-8. **AI Assistant page** — wire UI to `ai-assistant` function (uses Lovable AI Gateway — no extra key).
-9. **Settings page + Public Report** — port and rebrand.
-
-## Things explicitly preserved from current Ridgeside build
-
-- Existing tables: `properties`, `property_data_sources`, `user_roles`, `viewer_property_access`, `ctm_calls`.
-- Existing functions: `has_role`, `viewer_can_access`, `get_property_by_report_token`, `get_ctm_calls_by_report_token`.
-- Invite-code registration flow, super-admin account, sage brand, `BrandMark`, `PropertyAvatar`, `PropertySwitcher`, `PreviewMode` toggle.
-- The CTM sync we shipped in Prompt 3 — Google Ads remains stubbed per your direction.
-
-## Open question before we build
-
-Two metric models exist in parallel: (a) **per-call rows** in `ctm_calls` (live, accurate, our current source of truth) and (b) **pre-aggregated `daily_metrics`** that AlienX's PPC Overview reads from. Plan: aggregate `ctm_calls` into `daily_metrics` on each CTM sync (cheap upsert), and let Google Ads / GA4 syncs write their own rows. That way one page (`/dashboard`) reads the blended view AlienX expects, while detail pages keep using the raw `ctm_calls` for drill-downs. If you'd prefer to skip `daily_metrics` and rebuild PPC Overview directly off raw tables, say so and I'll adjust before step 1.
+### Out of scope
+Google Ads, GA4, and Keyword.com remain unconfigured until you provide credentials; their pages render with empty-state messaging in the meantime. CTM continues to work with live data.
