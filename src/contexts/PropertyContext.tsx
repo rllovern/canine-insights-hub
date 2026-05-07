@@ -8,6 +8,8 @@ interface PropertyContextValue {
   properties: Property[];
   loading: boolean;
   reload: () => Promise<void>;
+  activeProperty: Property | null;
+  setActiveProperty: (p: Property | null) => void;
 }
 
 const PropertyContext = createContext<PropertyContextValue | undefined>(undefined);
@@ -17,6 +19,12 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
   const { effectiveRole } = usePreviewMode();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeProperty, setActivePropertyState] = useState<Property | null>(null);
+
+  const setActiveProperty = (p: Property | null) => {
+    setActivePropertyState(p);
+    if (p) localStorage.setItem("activePropertyId", p.id);
+  };
 
   const load = useCallback(async () => {
     if (!user) {
@@ -47,7 +55,11 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
       console.error("Load properties failed", error);
       setProperties([]);
     } else {
-      setProperties((data ?? []) as Property[]);
+      const list = (data ?? []) as Property[];
+      setProperties(list);
+      const stored = localStorage.getItem("activePropertyId");
+      const found = list.find((p) => p.id === stored) ?? list[0] ?? null;
+      setActivePropertyState(found);
     }
     setLoading(false);
   }, [user, effectiveRole]);
@@ -57,7 +69,7 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   return (
-    <PropertyContext.Provider value={{ properties, loading, reload: load }}>
+    <PropertyContext.Provider value={{ properties, loading, reload: load, activeProperty, setActiveProperty }}>
       {children}
     </PropertyContext.Provider>
   );
