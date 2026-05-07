@@ -1,62 +1,102 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Property } from "@/lib/types";
+import { PublicAuthProvider, type Property } from "@/contexts/AuthContext";
+import { DashboardProvider } from "@/contexts/DashboardContext";
+import type { MetricRow } from "@/lib/data-sources";
+import { PpcOverviewBody } from "./PpcOverview";
+import { CallTrackingBody } from "./CallTracking";
 import { PublicShell } from "@/components/layout/PublicShell";
-import { PropertyOverview } from "@/components/data/PropertyOverview";
-import { BrandMark } from "@/components/brand/BrandMark";
-import { CallTracking } from "@/components/data/CallTracking";
+import { SectionDivider } from "@/components/dashboard/SectionDivider";
+import { AIAssistant } from "@/components/ai/AIAssistant";
 
 export default function PublicReport() {
-  const { token } = useParams();
-  const [property, setProperty] = useState<Property | null>(null);
-  const [status, setStatus] = useState<"loading" | "ok" | "notfound">("loading");
+  const { token } = useParams<{ token: string }>();
+  const [client, setClient] = useState<Property | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!token) {
-      setStatus("notfound");
-      return;
-    }
-    (async () => {
-      const { data, error } = await supabase.rpc("get_property_by_report_token", { _token: token });
-      if (error || !data || data.length === 0) {
-        setStatus("notfound");
-        return;
+    // Redirect old lovable.app share links to the canonical custom domain.
+    if (typeof window !== "undefined" && token) {
+      const host = window.location.hostname;
+      const CANONICAL_HOST = "ridgeside-canine.lovable.app";
+      if (host.endsWith(".lovable.app") && host !== CANONICAL_HOST) {
+        window.location.replace(`https://${CANONICAL_HOST}/report/${token}${window.location.search}`);
       }
-      setProperty(data[0] as Property);
-      setStatus("ok");
-    })();
+    }
   }, [token]);
 
-  if (status === "loading") {
-    return <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">Loading report…</div>;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!token) {
+        setError("Missing report token.");
+        setLoading(false);
+        return;
+      }
+      const { data, error } = await supabase.rpc("public_report_client", { _token: token });
+      if (cancelled) return;
+      if (error) {
+        setError("This report link is invalid or has expired.");
+      } else if (!data || data.length === 0) {
+        setError("This report link is invalid or has expired.");
+      } else {
+        setClient(data[0] as Property);
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-background">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
-  if (status === "notfound" || !property) {
+  if (error || !client) {
     return (
-      <div className="grid min-h-screen place-items-center bg-background p-6">
-        <div className="max-w-sm text-center">
-          <BrandMark className="mx-auto mb-6 justify-center" />
-          <h1 className="text-lg font-semibold">Report not found</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This share link is invalid or has been revoked. Please contact your account manager for a new link.
+      <div className="min-h-screen grid place-items-center bg-background px-6">
+        <div className="text-center max-w-md">
+          <div className="mx-auto mb-5 h-12 w-12 rounded-xl bg-gradient-brand grid place-items-center text-white text-lg font-bold tracking-tight">
+            A
+          </div>
+          <div className="text-3xl font-bold tracking-tight mb-2">Report unavailable</div>
+          <p className="text-muted-foreground">
+            We couldn't load this report right now. Please contact your Ridgeside Canine account manager for an updated link.
           </p>
+          <div className="mt-6 text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">
+            Ridgeside Canine Performance Reporting
+          </div>
         </div>
       </div>
     );
   }
 
+  const fetcher = async (from: string, to: string): Promise<MetricRow[]> => {
+    const { data, error } = await supabase.rpc("public_report_metrics", {
+      _token: token!,
+      _from: from,
+      _to: to,
+    });
+    if (error) throw error;
+    return (data ?? []) as MetricRow[];
+  };
+
   return (
-    <PublicShell property={property}>
-      <div className="space-y-10">
-        <PropertyOverview readOnly />
-        <section>
-          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Call Tracking
-          </h2>
-          <CallTracking propertyId={property.id} publicToken={token} forceRole="viewer" />
-        </section>
-      </div>
-    </PublicShell>
+    <PublicAuthProvider client={client}>
+      <DashboardProvider fetcher={fetcher} fetcherKey={`public:${token}`} enabled>
+        <PublicShell>
+          <PpcOverviewBody />
+          <div className="h-2" />
+          <CallTrackingBody />
+          <AIAssistant forceViewerRole publicToken={token} />
+        </PublicShell>
+      </DashboardProvider>
+    </PublicAuthProvider>
   );
 }
