@@ -324,27 +324,45 @@ export type Database = {
       property_data_sources: {
         Row: {
           config: Json | null
+          external_account_id: string | null
           id: string
           is_connected: boolean
+          last_error: string | null
           last_synced_at: string | null
+          login_customer_id: string | null
           property_id: string
+          refresh_token: string | null
           source: string
+          status: string
+          updated_at: string
         }
         Insert: {
           config?: Json | null
+          external_account_id?: string | null
           id?: string
           is_connected?: boolean
+          last_error?: string | null
           last_synced_at?: string | null
+          login_customer_id?: string | null
           property_id: string
+          refresh_token?: string | null
           source: string
+          status?: string
+          updated_at?: string
         }
         Update: {
           config?: Json | null
+          external_account_id?: string | null
           id?: string
           is_connected?: boolean
+          last_error?: string | null
           last_synced_at?: string | null
+          login_customer_id?: string | null
           property_id?: string
+          refresh_token?: string | null
           source?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -387,7 +405,9 @@ export type Database = {
       }
       sync_runs: {
         Row: {
+          acknowledged_at: string | null
           error: string | null
+          error_message: string | null
           finished_at: string | null
           id: string
           property_id: string | null
@@ -397,7 +417,9 @@ export type Database = {
           status: string
         }
         Insert: {
+          acknowledged_at?: string | null
           error?: string | null
+          error_message?: string | null
           finished_at?: string | null
           id?: string
           property_id?: string | null
@@ -407,7 +429,9 @@ export type Database = {
           status: string
         }
         Update: {
+          acknowledged_at?: string | null
           error?: string | null
+          error_message?: string | null
           finished_at?: string | null
           id?: string
           property_id?: string | null
@@ -481,6 +505,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ai_assistant_context: {
+        Args: { _from: string; _property_id: string; _to: string }
+        Returns: Json
+      }
       get_ctm_calls_by_report_token: {
         Args: { _from: string; _to: string; _token: string }
         Returns: {
@@ -606,6 +634,70 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      public_ai_assistant_context: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: Json
+      }
+      public_report_client: {
+        Args: { _token: string }
+        Returns: {
+          brand_color: string
+          hidden_metrics: Json
+          id: string
+          logo_url: string
+          metric_labels: Json
+          name: string
+          slug: string
+        }[]
+      }
+      public_report_metrics: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: {
+          ad_source: string
+          admissions: number
+          bad_leads: number
+          campaign: string
+          clicks: number
+          cost: number
+          created_at: string
+          date: string
+          good_leads: number
+          id: string
+          impressions: number
+          leads: number
+          medicaid: number
+          no_entry: number
+          property_id: string
+          record_count: number
+          sessions: number
+          spam: number
+          users: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "daily_metrics"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      public_report_score_mappings: {
+        Args: { _token: string }
+        Returns: {
+          bucket: string
+          created_at: string
+          id: string
+          priority: number
+          property_id: string
+          score_label: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "property_call_score_mappings"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       viewer_can_access: {
         Args: { _property_id: string; _user_id: string }
