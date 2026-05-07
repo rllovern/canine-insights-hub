@@ -8,6 +8,9 @@ export interface Property {
   slug: string;
   logo_url: string | null;
   primary_color: string | null;
+  brand_color?: string | null;
+  metric_labels?: Record<string, string> | null;
+  hidden_metrics?: string[] | null;
   timezone: string;
   is_active: boolean;
   public_report_token: string | null;
