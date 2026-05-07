@@ -18,6 +18,10 @@ export const costPerCall = (cost: number, n: number) => (n ? cost / n : null);
 export const ctr = (clicks: number, imp: number) => (imp ? (clicks / imp) * 100 : null);
 export const cpc = (cost: number, clicks: number) => (clicks ? cost / clicks : null);
 
+export const fmtPercent = (n: number | null, digits = 1) =>
+  n == null ? "—" : `${n.toFixed(digits)}%`;
+export const costPerLead = (cost: number, leads: number) => (leads ? cost / leads : 0);
+
 export const SOURCE_COLORS: Record<string, string> = {
   "Google PPC": "hsl(var(--chart-1))",
   "Organic": "hsl(var(--chart-2))",
