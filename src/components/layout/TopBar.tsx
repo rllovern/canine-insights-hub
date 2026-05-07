@@ -11,10 +11,13 @@ import { format } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { PropertyAvatar } from "@/components/brand/PropertyAvatar";
+import { Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export function TopBar() {
   const { properties, activeProperty, setActiveProperty } = useProperties();
   const { realRole, effectiveRole, isPreviewing, togglePreview } = usePreviewMode();
+  const navigate = useNavigate();
   const {
     range, setRange, rangePreset, setRangePreset,
     compareMode, setCompareMode, compareRange, setCompareRange,
@@ -38,7 +41,7 @@ export function TopBar() {
         </div>
 
         {/* Property switcher */}
-        {properties.length > 0 && (
+        {properties.length > 0 ? (
           <Select
             value={activeProperty?.id ?? ""}
             onValueChange={(v) => setActiveProperty(properties.find((p) => p.id === v) ?? null)}
@@ -52,6 +55,12 @@ export function TopBar() {
               ))}
             </SelectContent>
           </Select>
+        ) : realRole === "internal" ? (
+          <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => navigate("/admin/properties")}>
+            <Plus className="size-4" /> Add client
+          </Button>
+        ) : (
+          <div className="text-xs text-muted-foreground">No clients assigned</div>
         )}
 
         {activeProperty && (
