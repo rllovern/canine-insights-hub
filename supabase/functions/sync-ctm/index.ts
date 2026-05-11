@@ -16,7 +16,7 @@ function isoDaysAgo(n: number): string {
 }
 function isoToday(): string { return new Date().toISOString().slice(0, 10); }
 
-type Bucket = "admission" | "good" | "medicaid" | "bad" | "spam" | "repeat" | "no_entry" | "ignore";
+type Bucket = "admission" | "good" | "bad" | "spam" | "repeat" | "no_entry" | "ignore";
 
 function extractScoreLabels(call: any): string[] {
   const out: string[] = [];
@@ -233,9 +233,9 @@ Deno.serve(async (req) => {
     }
 
     // Aggregate by date × channel × campaign for daily_metrics.
-    type Agg = { record_count: number; leads: number; good_leads: number; bad_leads: number; medicaid: number; admissions: number; no_entry: number; spam: number };
+    type Agg = { record_count: number; leads: number; good_leads: number; bad_leads: number; admissions: number; no_entry: number; spam: number };
     const agg = new Map<string, Agg>();
-    const newAgg = (): Agg => ({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, admissions: 0, no_entry: 0, spam: 0 });
+    const newAgg = (): Agg => ({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, admissions: 0, no_entry: 0, spam: 0 });
     for (const c of filtered) {
       const callDate = String(c.called_at ?? c.start_time ?? c.date ?? "").slice(0, 10);
       if (!callDate) continue;
@@ -249,7 +249,6 @@ Deno.serve(async (req) => {
       switch (cls) {
         case "admission": b.admissions += 1; b.leads += 1; break;
         case "good":      b.good_leads += 1; b.leads += 1; break;
-        case "medicaid":  b.medicaid   += 1; b.leads += 1; break;
         case "bad":       b.bad_leads  += 1; b.leads += 1; break;
         case "no_entry":  b.no_entry   += 1; b.leads += 1; break;
         case "spam":      b.spam       += 1; break;
@@ -273,7 +272,6 @@ Deno.serve(async (req) => {
         leads: b.leads,
         good_leads: b.good_leads,
         bad_leads: b.bad_leads,
-        medicaid: b.medicaid,
         no_entry: b.no_entry,
         spam: b.spam,
         admissions: b.admissions,

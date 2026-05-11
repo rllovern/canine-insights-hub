@@ -1,7 +1,7 @@
 import { useProperties } from "@/contexts/PropertyContext";
 
 export const CUSTOMIZABLE_METRIC_KEYS = [
-  "leads", "good_leads", "bad_leads", "admissions", "medicaid", "spam",
+  "leads", "good_leads", "bad_leads", "admissions", "spam",
 ] as const;
 
 export type MetricKey = (typeof CUSTOMIZABLE_METRIC_KEYS)[number];
@@ -11,7 +11,6 @@ export const DEFAULT_METRIC_LABELS: Record<MetricKey, string> = {
   good_leads: "Good Leads",
   bad_leads: "Bad Leads",
   admissions: "Sale",
-  medicaid: "Medicaid",
   spam: "Spam",
 };
 
