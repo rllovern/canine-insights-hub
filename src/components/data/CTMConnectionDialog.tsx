@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Property, PropertyDataSource } from "@/lib/types";
 import { toast } from "sonner";
-import { Loader2, Phone, RefreshCw, Unplug, CheckCircle2 } from "lucide-react";
+import { Loader2, Phone, RefreshCw, Unplug, CheckCircle2, Plus, Trash2, Tags } from "lucide-react";
 
 interface Props {
   property: Property;
@@ -23,6 +24,45 @@ interface CTMConfig {
   number_filter?: string[];
 }
 
+type Bucket = "sale" | "good" | "bad" | "medicaid" | "spam" | "repeat" | "no_entry" | "ignore";
+// In the database the "sale" bucket is stored as "admission" (the column is `admissions`).
+const BUCKET_TO_DB: Record<Bucket, string> = {
+  sale: "admission",
+  good: "good",
+  bad: "bad",
+  medicaid: "medicaid",
+  spam: "spam",
+  repeat: "repeat",
+  no_entry: "no_entry",
+  ignore: "ignore",
+};
+const DB_TO_BUCKET: Record<string, Bucket> = {
+  admission: "sale",
+  good: "good",
+  bad: "bad",
+  medicaid: "medicaid",
+  spam: "spam",
+  repeat: "repeat",
+  no_entry: "no_entry",
+  ignore: "ignore",
+};
+const BUCKET_LABELS: Record<Bucket, string> = {
+  sale: "Sale",
+  good: "Good Lead",
+  bad: "Bad Lead",
+  medicaid: "Medicaid",
+  spam: "Spam",
+  repeat: "Repeat (excluded)",
+  no_entry: "No Entry",
+  ignore: "Ignore (drop)",
+};
+
+interface MappingRow {
+  id?: string;
+  score_label: string;
+  bucket: Bucket;
+}
+
 export function CTMConnectionDialog({ property, source, onChanged, trigger }: Props) {
   const [open, setOpen] = useState(false);
   const cfg = (source?.config ?? {}) as CTMConfig;
@@ -35,6 +75,10 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger }: Pr
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [testedName, setTestedName] = useState<string | null>(cfg.account_name ?? null);
+  const [mappings, setMappings] = useState<MappingRow[]>([]);
+  const [seenLabels, setSeenLabels] = useState<string[]>([]);
+  const [savingMappings, setSavingMappings] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -43,9 +87,90 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger }: Pr
       setApiSecret(cfg.api_secret ?? "");
       setNumberFilter((cfg.number_filter ?? []).join(", "));
       setTestedName(cfg.account_name ?? null);
+      void loadMappings();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const loadMappings = async () => {
+    const [m, c] = await Promise.all([
+      supabase
+        .from("property_call_score_mappings")
+        .select("id,score_label,bucket")
+        .eq("property_id", property.id)
+        .order("score_label"),
+      supabase
+        .from("ctm_calls")
+        .select("call_score_label")
+        .eq("property_id", property.id)
+        .not("call_score_label", "is", null),
+    ]);
+    const rows: MappingRow[] = (m.data ?? []).map((r: any) => ({
+      id: r.id,
+      score_label: r.score_label,
+      bucket: DB_TO_BUCKET[r.bucket] ?? (r.bucket as Bucket),
+    }));
+    const seen = Array.from(new Set((c.data ?? []).map((r: any) => r.call_score_label).filter(Boolean) as string[]));
+    setMappings(rows);
+    setSeenLabels(seen);
+  };
+
+  const unmappedSeen = useMemo(() => {
+    const have = new Set(mappings.map((r) => r.score_label.toLowerCase()));
+    return seenLabels.filter((l) => !have.has(l.toLowerCase()));
+  }, [mappings, seenLabels]);
+
+  const updateMappingBucket = (idx: number, bucket: Bucket) => {
+    setMappings((rows) => rows.map((r, i) => (i === idx ? { ...r, bucket } : r)));
+  };
+
+  const removeMapping = (idx: number) => {
+    setMappings((rows) => rows.filter((_, i) => i !== idx));
+  };
+
+  const addMapping = (label: string, bucket: Bucket = "no_entry") => {
+    const clean = label.trim();
+    if (!clean) return;
+    if (mappings.some((r) => r.score_label.toLowerCase() === clean.toLowerCase())) {
+      toast.error("That label is already mapped.");
+      return;
+    }
+    setMappings((rows) => [...rows, { score_label: clean, bucket }]);
+    setNewLabel("");
+  };
+
+  const handleSaveMappings = async () => {
+    setSavingMappings(true);
+    // Replace-all strategy keeps it simple: delete then insert. Mappings are
+    // typically <50 rows per property and only edited by internal users.
+    const del = await supabase
+      .from("property_call_score_mappings")
+      .delete()
+      .eq("property_id", property.id);
+    if (del.error) {
+      toast.error(del.error.message);
+      setSavingMappings(false);
+      return;
+    }
+    if (mappings.length) {
+      const rows = mappings.map((r) => ({
+        property_id: property.id,
+        score_label: r.score_label.trim(),
+        bucket: BUCKET_TO_DB[r.bucket],
+        priority: 100,
+      }));
+      const ins = await supabase.from("property_call_score_mappings").insert(rows);
+      if (ins.error) {
+        toast.error(ins.error.message);
+        setSavingMappings(false);
+        return;
+      }
+    }
+    setSavingMappings(false);
+    toast.success("Mappings saved. Re-syncing to apply…");
+    await handleSyncNow();
+    await loadMappings();
+  };
 
   const handleTest = async () => {
     if (!accountId || !apiToken || !apiSecret) {
@@ -102,8 +227,46 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger }: Pr
     setSaving(false);
     toast.success("CTM connection saved.");
     onChanged();
+    // For brand-new connections, seed sensible default reporting-tag mappings
+    // so the dashboard isn't empty out of the gate.
+    if (!source) {
+      await seedDefaultMappings();
+    }
     // Kick off an initial 30-day sync so the property doesn't sit empty.
     handleSyncNow();
+  };
+
+  const seedDefaultMappings = async () => {
+    const existing = await supabase
+      .from("property_call_score_mappings")
+      .select("id")
+      .eq("property_id", property.id)
+      .limit(1);
+    if (existing.data && existing.data.length > 0) return;
+    const seeds: Array<[string, Bucket]> = [
+      ["SPAM / Dead Air / Hangup", "spam"],
+      ["Spam", "spam"],
+      ["Hangup", "spam"],
+      ["Dead Air", "spam"],
+      ["Sale", "sale"],
+      ["Boarded", "sale"],
+      ["Admission", "sale"],
+      ["Good Lead", "good"],
+      ["Qualified Lead", "good"],
+      ["Bad Lead", "bad"],
+      ["Unqualified", "bad"],
+      ["Medicaid", "medicaid"],
+      ["Repeat Caller", "repeat"],
+      ["Repeat", "repeat"],
+    ];
+    await supabase.from("property_call_score_mappings").insert(
+      seeds.map(([score_label, b]) => ({
+        property_id: property.id,
+        score_label,
+        bucket: BUCKET_TO_DB[b],
+        priority: 100,
+      })),
+    );
   };
 
   const handleSyncNow = async () => {
@@ -137,7 +300,7 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger }: Pr
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Phone className="h-4 w-4" />
@@ -191,6 +354,95 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger }: Pr
             {testedName && <span className="text-xs text-success">{testedName}</span>}
           </div>
         </div>
+
+        {source?.is_connected && (
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold">
+              <Tags className="h-3.5 w-3.5" />
+              Reporting Tag Mappings
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Map each CTM reporting tag to a dashboard bucket. Saving re-syncs and re-classifies existing calls.
+            </p>
+
+            {unmappedSeen.length > 0 && (
+              <div className="rounded-md border border-warning/40 bg-warning/10 p-2 text-[11px]">
+                <div className="mb-1 font-medium">Unmapped tags seen in calls:</div>
+                <div className="flex flex-wrap gap-1">
+                  {unmappedSeen.map((l) => (
+                    <button
+                      key={l}
+                      type="button"
+                      onClick={() => addMapping(l, "no_entry")}
+                      className="rounded bg-card px-1.5 py-0.5 ring-1 ring-border hover:ring-primary"
+                      title="Click to add"
+                    >
+                      <Plus className="mr-0.5 inline h-3 w-3" />
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              {mappings.length === 0 && (
+                <div className="text-[11px] text-muted-foreground italic">No mappings yet.</div>
+              )}
+              {mappings.map((row, idx) => (
+                <div key={`${row.score_label}-${idx}`} className="flex items-center gap-2">
+                  <Input
+                    value={row.score_label}
+                    onChange={(e) =>
+                      setMappings((rows) =>
+                        rows.map((r, i) => (i === idx ? { ...r, score_label: e.target.value } : r)),
+                      )
+                    }
+                    className="h-8 flex-1 text-xs"
+                  />
+                  <Select value={row.bucket} onValueChange={(v) => updateMappingBucket(idx, v as Bucket)}>
+                    <SelectTrigger className="h-8 w-40 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(BUCKET_LABELS) as Bucket[]).map((b) => (
+                        <SelectItem key={b} value={b} className="text-xs">
+                          {BUCKET_LABELS[b]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeMapping(idx)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Input
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                placeholder="Add new label…"
+                className="h-8 flex-1 text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addMapping(newLabel);
+                  }
+                }}
+              />
+              <Button variant="outline" size="sm" onClick={() => addMapping(newLabel)}>
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add
+              </Button>
+              <Button size="sm" onClick={handleSaveMappings} disabled={savingMappings}>
+                {savingMappings ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                Save mappings
+              </Button>
+            </div>
+          </div>
+        )}
 
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
           <div className="flex gap-2">
