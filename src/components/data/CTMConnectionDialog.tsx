@@ -24,13 +24,12 @@ interface CTMConfig {
   number_filter?: string[];
 }
 
-type Bucket = "sale" | "good" | "bad" | "medicaid" | "spam" | "repeat" | "no_entry" | "ignore";
+type Bucket = "sale" | "good" | "bad" | "spam" | "repeat" | "no_entry" | "ignore";
 // In the database the "sale" bucket is stored as "admission" (the column is `admissions`).
 const BUCKET_TO_DB: Record<Bucket, string> = {
   sale: "admission",
   good: "good",
   bad: "bad",
-  medicaid: "medicaid",
   spam: "spam",
   repeat: "repeat",
   no_entry: "no_entry",
@@ -40,7 +39,6 @@ const DB_TO_BUCKET: Record<string, Bucket> = {
   admission: "sale",
   good: "good",
   bad: "bad",
-  medicaid: "medicaid",
   spam: "spam",
   repeat: "repeat",
   no_entry: "no_entry",
@@ -50,7 +48,6 @@ const BUCKET_LABELS: Record<Bucket, string> = {
   sale: "Sale",
   good: "Good Lead",
   bad: "Bad Lead",
-  medicaid: "Medicaid",
   spam: "Spam",
   repeat: "Repeat (excluded)",
   no_entry: "No Entry",
@@ -244,20 +241,13 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger }: Pr
       .limit(1);
     if (existing.data && existing.data.length > 0) return;
     const seeds: Array<[string, Bucket]> = [
-      ["SPAM / Dead Air / Hangup", "spam"],
-      ["Spam", "spam"],
-      ["Hangup", "spam"],
-      ["Dead Air", "spam"],
       ["Sale", "sale"],
-      ["Boarded", "sale"],
-      ["Admission", "sale"],
       ["Good Lead", "good"],
-      ["Qualified Lead", "good"],
       ["Bad Lead", "bad"],
-      ["Unqualified", "bad"],
-      ["Medicaid", "medicaid"],
       ["Repeat Caller", "repeat"],
-      ["Repeat", "repeat"],
+      ["Misc", "no_entry"],
+      ["Wrong Number", "spam"],
+      ["SPAM / Dead Air / Hangup", "spam"],
     ];
     await supabase.from("property_call_score_mappings").insert(
       seeds.map(([score_label, b]) => ({
