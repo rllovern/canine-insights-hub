@@ -233,9 +233,9 @@ Deno.serve(async (req) => {
     }
 
     // Aggregate by date × channel × campaign for daily_metrics.
-    type Agg = { record_count: number; leads: number; good_leads: number; bad_leads: number; medicaid: number; admissions: number; no_entry: number; spam: number };
+    type Agg = { record_count: number; leads: number; good_leads: number; bad_leads: number; admissions: number; no_entry: number; spam: number };
     const agg = new Map<string, Agg>();
-    const newAgg = (): Agg => ({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, admissions: 0, no_entry: 0, spam: 0 });
+    const newAgg = (): Agg => ({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, admissions: 0, no_entry: 0, spam: 0 });
     for (const c of filtered) {
       const callDate = String(c.called_at ?? c.start_time ?? c.date ?? "").slice(0, 10);
       if (!callDate) continue;
@@ -272,7 +272,6 @@ Deno.serve(async (req) => {
         leads: b.leads,
         good_leads: b.good_leads,
         bad_leads: b.bad_leads,
-        medicaid: b.medicaid,
         no_entry: b.no_entry,
         spam: b.spam,
         admissions: b.admissions,
