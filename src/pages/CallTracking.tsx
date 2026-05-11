@@ -157,7 +157,7 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
   );
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
+    <div className="bg-card border border-border rounded-xl overflow-x-auto">
       <Table className="min-w-[720px]">
         <TableHeader>
           <TableRow className="bg-muted/40">
@@ -223,7 +223,7 @@ function CampaignTable({ current, prior, cfg }: any) {
   };
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
+    <div className="bg-card border border-border rounded-xl overflow-x-auto">
       <Table className="min-w-[920px]">
         <TableHeader>
           <TableRow className="bg-muted/40">
