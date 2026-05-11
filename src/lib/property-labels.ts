@@ -10,7 +10,7 @@ export const DEFAULT_METRIC_LABELS: Record<MetricKey, string> = {
   leads: "Leads",
   good_leads: "Good Leads",
   bad_leads: "Bad Leads",
-  admissions: "Boarded",
+  admissions: "Sale",
   medicaid: "Medicaid",
   spam: "Spam",
 };
