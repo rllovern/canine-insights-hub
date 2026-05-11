@@ -9,6 +9,7 @@ import { DashboardProvider } from "@/contexts/DashboardContext";
 import type { MetricRow } from "@/lib/data-sources";
 import Dashboard from "./Dashboard";
 import CallTracking from "./CallTracking";
+import { PublicReportToolbar } from "@/components/layout/PublicReportToolbar";
 
 export default function PublicReport() {
   const { token } = useParams<{ token: string }>();
@@ -41,13 +42,13 @@ export default function PublicReport() {
   };
 
   return (
-    <PublicShell property={property}>
-      <DashboardProvider fetcher={fetcher} fetcherKey={`public:${token}`} enabled={true}>
+    <DashboardProvider fetcher={fetcher} fetcherKey={`public:${token}`} enabled={true}>
+      <PublicShell property={property} toolbar={<PublicReportToolbar />}>
         <div className="space-y-8">
           <Dashboard />
           <CallTracking />
         </div>
-      </DashboardProvider>
-    </PublicShell>
+      </PublicShell>
+    </DashboardProvider>
   );
 }
