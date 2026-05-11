@@ -14,7 +14,7 @@ function isoDaysAgo(n: number): string {
   d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
 }
-function isoYesterday(): string { return isoDaysAgo(1); }
+function isoToday(): string { return new Date().toISOString().slice(0, 10); }
 
 type Bucket = "admission" | "good" | "medicaid" | "bad" | "spam" | "repeat" | "no_entry" | "ignore";
 
@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
     // Accept both new and legacy arg names so it works regardless of caller.
     propertyId = body.property_id ?? body.client_id;
     const from = body.from_date ?? body.date_from ?? isoDaysAgo(30);
-    const to = body.to_date ?? body.date_to ?? isoYesterday();
+    const to = body.to_date ?? body.date_to ?? isoToday();
     const debug = !!body.debug;
 
     if (!propertyId) {
