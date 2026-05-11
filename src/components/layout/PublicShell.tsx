@@ -1,9 +1,16 @@
 import { ReactNode } from "react";
-import { DateRangePicker } from "./DateRangePicker";
 import { PropertyAvatar } from "@/components/brand/PropertyAvatar";
 import { Property } from "@/lib/types";
 
-export function PublicShell({ property, children }: { property: Property; children: ReactNode }) {
+export function PublicShell({
+  property,
+  toolbar,
+  children,
+}: {
+  property: Property;
+  toolbar?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
       <header className="border-b border-border bg-card/40">
@@ -13,7 +20,7 @@ export function PublicShell({ property, children }: { property: Property; childr
             <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Performance Report</span>
             <h1 className="text-lg font-semibold tracking-tight">{property.name}</h1>
           </div>
-          <div className="ml-auto"><DateRangePicker /></div>
+          <div className="ml-auto">{toolbar}</div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-6">{children}</main>
