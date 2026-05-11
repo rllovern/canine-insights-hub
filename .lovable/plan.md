@@ -1,38 +1,60 @@
-# Restore the Clients tab + property switcher (AlienX parity)
+## Why no data shows for Ridgeside K9 Ashtabula
 
-## What's actually wrong
+The Test Connection succeeded and credentials were saved (the "Connected" badge comes from `is_connected = true`), but the actual data sync has never run for this property — and never will in its current state. Database confirms it:
 
-The Clients sidebar item and the top‑bar property switcher are already built, but they're invisible right now for two reasons:
+- `property_data_sources` row: `is_connected = true`, but `status = 'disconnected'`, `last_synced_at = null`, `last_error = null` → sync was never attempted, or it failed silently.
+- `ctm_calls`: 0 rows for this property.
+- `daily_metrics`: 0 rows for this property.
+- `sync_runs`: 0 rows for this property.
 
-1. **Backend permission bug** — `public.has_role(uuid, app_role)` was created `SECURITY DEFINER` but never granted `EXECUTE` to the `authenticated` role. Every RLS policy on `properties` (and other tables) that calls `has_role()` therefore fails with `42501 permission denied for function has_role`. Console confirms this on every page load. Net effect: `PropertyContext` receives an empty list → the top‑bar `<Select>` is rendered conditionally on `properties.length > 0` and so it disappears.
-2. **Empty `properties` table** — even with the grant fixed, `SELECT * FROM properties` currently returns 0 rows, so there's nothing to select. The UI needs to handle the empty state by showing the switcher anyway with an "Add a client" call‑to‑action that links to `/admin/properties` (matches the AlienX screenshot's behavior).
+### Root cause
 
-The Clients link itself is in `Sidebar.tsx` under the "ADMIN" section, gated on `effectiveRole === "internal"`. Once `has_role` works, your role loads and the link appears.
+The `sync-ctm` edge function is written against an **old, no-longer-existing schema**. Every reference is wrong:
 
-## Changes
+| sync-ctm uses | Actual current schema |
+|---|---|
+| table `client_data_sources` | `property_data_sources` |
+| column `client_id` | `property_id` |
+| `external_account_id` for the CTM sub-account | UI saves it under `config.account_id` |
+| env secrets `CTM_API_ACCESS_KEY` / `CTM_API_SECRET_KEY` (agency-wide) | UI saves per-property `config.api_token` + `config.api_secret` |
+| table `client_call_score_mappings` | `property_call_score_mappings` |
+| writes `daily_metrics.client_id` | column is `property_id` |
 
-### 1. Database migration
-- `GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated, anon;`
-- Same grant for `public.viewer_can_access(uuid, uuid)` (used by the viewer policy on `properties`).
-- Verify with `supabase--linter` after.
+On top of the schema mismatch, the dialog calls `sync-ctm` with `{ property_id, from_date, to_date }` while the function reads `{ client_id, date_from, date_to }`, so even a "Sync now" click would 400-out before reaching CTM.
 
-### 2. `src/components/layout/TopBar.tsx`
-- Render the property `<Select>` unconditionally for internal users.
-- When `properties.length === 0`, replace the select with a small "+ Add client" button that routes to `/admin/properties`.
-- Keep the existing avatar chip to the right of the selector (matches screenshot).
+Net effect: clicking "Sync now" silently fails, and the 12-hour scheduled orchestrator (`scheduled-sync-all`, which has the same schema problem) never produces rows either.
 
-### 3. `src/components/layout/Sidebar.tsx`
-- No structural change — the Clients/Users/Settings group already exists. Just confirm icon is `Users` and label is "Clients" (it is). Add a tiny safeguard so the Admin section also renders during the brief `role === null` loading window for users whose JWT has an internal role cached, to avoid a flash of missing nav.
+## Plan
 
-### 4. `src/pages/admin/AdminProperties.tsx`
-- Already functional. After the grant fix, "Add property" will succeed and newly created rows will appear in the top‑bar switcher immediately (PropertyContext.reload() is already wired).
+Frontend stays as-is. All work is in `supabase/functions/sync-ctm/index.ts`.
 
-## Out of scope
-- No new pages, no schema changes beyond the two GRANTs.
-- AlienX‑style "Import from MCC / Import from CTM" buttons on the Clients page are a separate task — the edge functions already exist (`list-mcc-customers`, `list-ctm-accounts`); wiring them into AdminProperties UI can follow once the basics are visible.
+### 1. Rewrite `sync-ctm` against current schema
 
-## Verification
-1. Reload `/dashboard` — no `permission denied` errors in console.
-2. Sidebar shows ANALYTICS group + ADMIN group with Clients / Users / Settings.
-3. Top bar shows the property selector (empty state with "Add client" button).
-4. Create a client at `/admin/properties` → it appears in the top‑bar selector and becomes the active property.
+- Accept `{ property_id, from_date, to_date, debug? }`.
+- Look up the connection in `property_data_sources` (`property_id = ?`, `source = 'ctm'`).
+- Read credentials from the row's `config` JSON: `account_id`, `api_token`, `api_secret`, optional `number_filter`. No env secrets — per-property creds, matching how Test Connection works.
+- Build Basic auth from `api_token:api_secret` (matches `test-ctm`).
+- Page through `…/accounts/{account_id}/calls/search.json?start_date=…&end_date=…`, identical pagination logic to today.
+- Load score → bucket mapping from `property_call_score_mappings` (not `client_call_score_mappings`).
+- Apply `number_filter` if present: drop calls whose tracking number isn't in the list (one CTM account can serve multiple Ridgeside locations).
+- Insert raw call rows into `ctm_calls` (id from `ctm_call_id` upsert key) — this table is currently empty for every property and is what powers Call Tracking pages.
+- Aggregate the same way it does today (date × channel × campaign), then upsert into `daily_metrics` with `property_id` (not `client_id`), preserving existing cost/impressions/clicks/sessions/users from other sources.
+- On success: update the row with `status = 'connected'`, `last_synced_at = now()`, `last_error = null`. On failure: `status = 'error'`, `last_error = <message>`. Always insert a row into `sync_runs` so admin diagnostics work.
+
+### 2. Trigger sync automatically after Connect/Update
+
+Small UX fix in `CTMConnectionDialog.handleSave`: after a successful save, immediately call `sync-ctm` for the last 30 days (same as "Sync now") so a freshly-connected property doesn't sit empty until the user clicks again. Keep the manual "Sync now" button.
+
+### 3. Out of scope (call out, don't fix here)
+
+- `scheduled-sync-all` and the other sync functions (`sync-google-ads`, `sync-ga4`, `sync-keyword-com`) reference the same dead `client_data_sources` / `client_id` schema. They also need the same rewrite, but that's a separate task — this plan unblocks CTM only, which is what the user is asking about.
+- No DB migrations. No new tables. No schema changes.
+
+## Verification after implementing
+
+1. Open the CTM dialog for Ashtabula → click Sync now (30d).
+2. Toast should show "Synced N calls."
+3. `select count(*) from ctm_calls where property_id = 'ea92c5ce-…'` > 0.
+4. `select count(*), sum(record_count) from daily_metrics where property_id = 'ea92c5ce-…'` > 0.
+5. `property_data_sources.status = 'connected'`, `last_synced_at` populated.
+6. Dashboard for Ashtabula shows call volume in the chosen date range.
