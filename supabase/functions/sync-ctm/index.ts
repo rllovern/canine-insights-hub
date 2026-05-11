@@ -16,7 +16,7 @@ function isoDaysAgo(n: number): string {
 }
 function isoToday(): string { return new Date().toISOString().slice(0, 10); }
 
-type Bucket = "admission" | "good" | "medicaid" | "bad" | "spam" | "repeat" | "no_entry" | "ignore";
+type Bucket = "admission" | "good" | "bad" | "spam" | "repeat" | "no_entry" | "ignore";
 
 function extractScoreLabels(call: any): string[] {
   const out: string[] = [];
@@ -249,7 +249,6 @@ Deno.serve(async (req) => {
       switch (cls) {
         case "admission": b.admissions += 1; b.leads += 1; break;
         case "good":      b.good_leads += 1; b.leads += 1; break;
-        case "medicaid":  b.medicaid   += 1; b.leads += 1; break;
         case "bad":       b.bad_leads  += 1; b.leads += 1; break;
         case "no_entry":  b.no_entry   += 1; b.leads += 1; break;
         case "spam":      b.spam       += 1; break;
