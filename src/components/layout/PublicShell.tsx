@@ -14,7 +14,7 @@ export function PublicShell({
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
       <header className="border-b border-border bg-card/40">
-        <div className="mx-auto grid max-w-6xl grid-cols-3 items-center gap-4 px-6 py-4">
+        <div className="grid w-full grid-cols-3 items-center gap-4 px-6 py-4">
           <div className="flex items-center justify-start">
             <img
               src={ridgesideLogo}
@@ -29,7 +29,7 @@ export function PublicShell({
           <div className="flex items-center justify-end">{toolbar}</div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-6">{children}</main>
+      <main className="w-full flex-1 px-6 py-6">{children}</main>
       <footer className="border-t border-border py-4 text-center text-[11px] text-muted-foreground">
         Powered by Ridgeside Canine Dashboard
       </footer>
