@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
-import { PropertyAvatar } from "@/components/brand/PropertyAvatar";
 import { Property } from "@/lib/types";
+import ridgesideLogo from "@/assets/ridgeside-ashtabula-logo.webp";
 
 export function PublicShell({
   property,
@@ -14,13 +14,19 @@ export function PublicShell({
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
       <header className="border-b border-border bg-card/40">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-6 py-4">
-          <PropertyAvatar property={property} size="lg" />
-          <div className="flex flex-col">
+        <div className="mx-auto grid max-w-6xl grid-cols-3 items-center gap-4 px-6 py-4">
+          <div className="flex items-center justify-start">
+            <img
+              src={ridgesideLogo}
+              alt={property.name}
+              className="h-14 w-auto object-contain"
+            />
+          </div>
+          <div className="flex flex-col items-center text-center">
             <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Performance Report</span>
             <h1 className="text-lg font-semibold tracking-tight">{property.name}</h1>
           </div>
-          <div className="ml-auto">{toolbar}</div>
+          <div className="flex items-center justify-end">{toolbar}</div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-6">{children}</main>
