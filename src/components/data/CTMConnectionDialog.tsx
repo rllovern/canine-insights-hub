@@ -102,6 +102,8 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger }: Pr
     setSaving(false);
     toast.success("CTM connection saved.");
     onChanged();
+    // Kick off an initial 30-day sync so the property doesn't sit empty.
+    handleSyncNow();
   };
 
   const handleSyncNow = async () => {
