@@ -18,10 +18,10 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 222 25% 12%;
 
-    /* Sage / forest green — Ridgeside accent */
-    --primary: 138 26% 33%;
-    --primary-foreground: 138 30% 98%;
-    --primary-muted: 138 22% 92%;
+    /* Ridgeside K9 Ashtabula — navy primary, red accent, gold highlight */
+    --primary: 222 55% 22%;
+    --primary-foreground: 40 50% 96%;
+    --primary-muted: 222 40% 92%;
 
     --secondary: 220 15% 96%;
     --secondary-foreground: 222 25% 18%;
@@ -29,21 +29,21 @@ All colors MUST be HSL.
     --muted: 220 14% 96%;
     --muted-foreground: 220 10% 44%;
 
-    --accent: 138 26% 33%;
-    --accent-foreground: 138 30% 98%;
+    --accent: 354 65% 42%;
+    --accent-foreground: 40 50% 98%;
 
-    --destructive: 0 70% 48%;
+    --destructive: 354 70% 42%;
     --destructive-foreground: 0 0% 98%;
 
-    --warning: 35 92% 50%;
-    --warning-foreground: 35 90% 12%;
+    --warning: 42 78% 50%;
+    --warning-foreground: 42 90% 12%;
 
     --success: 142 60% 38%;
     --success-foreground: 142 60% 98%;
 
     --border: 220 14% 91%;
     --input: 220 14% 91%;
-    --ring: 138 26% 33%;
+    --ring: 222 55% 22%;
 
     /* Mode badges */
     --badge-internal: 265 60% 55%;
@@ -51,29 +51,29 @@ All colors MUST be HSL.
     --badge-viewer: 220 9% 46%;
     --badge-viewer-foreground: 0 0% 100%;
 
-    /* Chart palette (constrained: accent + slate + amber + red for negatives) */
-    --chart-1: 138 26% 33%;
-    --chart-2: 215 16% 47%;
-    --chart-3: 35 88% 55%;
-    --chart-4: 0 70% 55%;
-    --chart-5: 200 30% 60%;
+    /* Chart palette — navy, red, gold, slate */
+    --chart-1: 222 55% 22%;
+    --chart-2: 354 65% 42%;
+    --chart-3: 42 78% 52%;
+    --chart-4: 215 16% 47%;
+    --chart-5: 222 35% 55%;
 
     --radius: 0.625rem;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 138 26% 33%;
+    --sidebar-primary: 222 55% 22%;
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 220 14% 95%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 138 26% 33%;
+    --sidebar-ring: 222 55% 22%;
 
     /* Section divider gradient (sage) */
-    --section: 138 30% 95%;
-    --section-foreground: 138 40% 22%;
-    --gradient-section: linear-gradient(180deg, hsl(138 30% 96%), hsl(138 26% 92%));
-    --gradient-brand: linear-gradient(135deg, hsl(138 26% 33%), hsl(138 32% 45%));
+    --section: 222 40% 95%;
+    --section-foreground: 222 55% 22%;
+    --gradient-section: linear-gradient(180deg, hsl(222 40% 96%), hsl(222 35% 92%));
+    --gradient-brand: linear-gradient(135deg, hsl(222 55% 22%), hsl(354 65% 42%));
     --shadow-sm: 0 1px 2px 0 hsl(222 25% 12% / 0.04);
     --shadow-md: 0 2px 8px -2px hsl(222 25% 12% / 0.08), 0 1px 2px hsl(222 25% 12% / 0.04);
     --shadow-lg: 0 12px 32px -8px hsl(222 25% 12% / 0.12);
@@ -86,41 +86,41 @@ All colors MUST be HSL.
     --card-foreground: 210 20% 96%;
     --popover: 222 22% 9%;
     --popover-foreground: 210 20% 96%;
-    --primary: 138 32% 55%;
-    --primary-foreground: 138 40% 8%;
-    --primary-muted: 138 25% 18%;
+    --primary: 222 55% 60%;
+    --primary-foreground: 222 50% 10%;
+    --primary-muted: 222 35% 18%;
     --secondary: 222 18% 14%;
     --secondary-foreground: 210 20% 96%;
     --muted: 222 18% 14%;
     --muted-foreground: 220 10% 65%;
-    --accent: 138 32% 55%;
-    --accent-foreground: 138 40% 8%;
-    --destructive: 0 62% 50%;
+    --accent: 354 65% 55%;
+    --accent-foreground: 40 50% 98%;
+    --destructive: 354 65% 50%;
     --destructive-foreground: 0 0% 98%;
-    --warning: 35 88% 55%;
-    --warning-foreground: 35 90% 12%;
+    --warning: 42 78% 55%;
+    --warning-foreground: 42 90% 12%;
     --success: 142 50% 45%;
     --success-foreground: 142 60% 98%;
     --border: 222 18% 18%;
     --input: 222 18% 18%;
-    --ring: 138 32% 55%;
+    --ring: 222 55% 60%;
     --badge-internal: 265 55% 65%;
     --badge-internal-foreground: 265 50% 10%;
     --badge-viewer: 220 10% 60%;
     --badge-viewer-foreground: 220 20% 10%;
-    --chart-1: 138 32% 55%;
-    --chart-2: 220 12% 60%;
-    --chart-3: 35 88% 60%;
-    --chart-4: 0 65% 60%;
-    --chart-5: 200 35% 65%;
+    --chart-1: 222 55% 60%;
+    --chart-2: 354 65% 55%;
+    --chart-3: 42 78% 58%;
+    --chart-4: 220 12% 60%;
+    --chart-5: 222 35% 70%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 138 32% 55%;
+    --sidebar-primary: 222 55% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 3.7% 15.9%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 138 32% 55%;
+    --sidebar-ring: 222 55% 60%;
   }
 }
 
