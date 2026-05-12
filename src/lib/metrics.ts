@@ -12,6 +12,32 @@ export const fmtDate = (s: string) => format(parseISO(s), "MMM d");
 
 export type DateRange = { from: Date; to: Date };
 
+export function eachDateISO(from: Date, to: Date): string[] {
+  const out: string[] = [];
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  for (let d = start; d <= end; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+    out.push(format(d, "yyyy-MM-dd"));
+  }
+  return out;
+}
+
+/**
+ * Ensure series has one row per day in [from, to]. Missing dates are filled
+ * with `defaults` (e.g. zeros for known keys) so trend lines stay continuous.
+ */
+export function fillDateRange<T extends { date: string }>(
+  series: T[],
+  from: Date,
+  to: Date,
+  defaults: Partial<T> = {} as Partial<T>,
+): T[] {
+  const map = new Map(series.map((r) => [r.date, r]));
+  return eachDateISO(from, to).map(
+    (date) => (map.get(date) ?? ({ date, ...defaults } as unknown as T)),
+  );
+}
+
 export function getRange(days: number): DateRange {
   const to = new Date();
   return { from: subDays(to, days - 1), to };
