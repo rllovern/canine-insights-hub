@@ -37,8 +37,8 @@ Deno.serve(async (req) => {
 
   // Pull every connected source row.
   const { data: srcRows, error: srcErr } = await admin
-    .from("client_data_sources")
-    .select("client_id, source, status")
+    .from("property_data_sources")
+    .select("property_id, source, status")
     .in("source", ["google_ads", "ctm", "ga4", "keyword_com"])
     .eq("status", "connected");
 
@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
 
     try {
       const { data, error } = await admin.functions.invoke(fnName, {
-        body: { client_id: row.client_id, date_from, date_to },
+        body: { property_id: row.property_id, date_from, date_to },
       });
       if (error) {
         status = "failure";
@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
     else failed++;
 
     await admin.from("sync_runs").insert({
-      client_id: row.client_id,
+      property_id: row.property_id,
       source: row.source,
       status,
       error_message: error_message ? error_message.slice(0, 2000) : null,
