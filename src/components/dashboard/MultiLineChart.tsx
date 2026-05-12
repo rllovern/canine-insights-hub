@@ -25,7 +25,7 @@ export function MultiLineChart({ data, sources, fmt = (n) => String(n), height =
       <LineChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 4" stroke="hsl(var(--border))" vertical={false} />
         <XAxis dataKey="date" tickFormatter={fmtDate} tick={tickStyle} axisLine={false} tickLine={false} minTickGap={20} padding={{ left: 8, right: 8 }} />
-        <YAxis tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} width={56} />
+        <YAxis tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} width={56} domain={[0, 'auto']} allowDataOverflow={false} />
         <Tooltip
           cursor={cursorStyle}
           contentStyle={tooltipStyle}
@@ -50,7 +50,7 @@ export function SingleLineChart({ data, dataKey, label, color = "hsl(var(--chart
       <LineChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 4" stroke="hsl(var(--border))" vertical={false} />
         <XAxis dataKey="date" tickFormatter={fmtDate} tick={tickStyle} axisLine={false} tickLine={false} minTickGap={20} padding={{ left: 8, right: 8 }} />
-        <YAxis tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} width={56} />
+        <YAxis tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} width={56} domain={[0, 'auto']} allowDataOverflow={false} />
         <Tooltip
           cursor={cursorStyle}
           contentStyle={tooltipStyle}

@@ -35,8 +35,8 @@ export function DualAxisChart({
       <LineChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 4" stroke="hsl(var(--border))" vertical={false} />
         <XAxis dataKey="date" tickFormatter={fmtDate} tick={tickStyle} axisLine={false} tickLine={false} minTickGap={20} padding={{ left: 8, right: 8 }} />
-        <YAxis yAxisId="left" tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => leftFmt(v)} width={56} />
-        <YAxis yAxisId="right" orientation="right" tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => rightFmt(v)} width={56} />
+        <YAxis yAxisId="left" tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => leftFmt(v)} width={56} domain={[0, 'auto']} />
+        <YAxis yAxisId="right" orientation="right" tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => rightFmt(v)} width={56} domain={[0, 'auto']} />
         <Tooltip
           cursor={cursorStyle}
           contentStyle={tooltipStyle}
