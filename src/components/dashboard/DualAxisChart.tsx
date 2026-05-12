@@ -15,6 +15,15 @@ interface DualAxisProps {
 }
 
 const tickStyle = { fill: "hsl(var(--muted-foreground))", fontSize: 11 };
+const tooltipStyle = {
+  background: "hsl(var(--card))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: 10,
+  fontSize: 12,
+  boxShadow: "0 8px 24px -12px hsl(var(--foreground) / 0.18)",
+  padding: "8px 12px",
+};
+const cursorStyle = { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.6 };
 
 export function DualAxisChart({
   data, leftKey, leftLabel, leftColor = "hsl(var(--chart-2))", leftFmt = (n) => String(n),
@@ -23,13 +32,15 @@ export function DualAxisChart({
 }: DualAxisProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-        <XAxis dataKey="date" tickFormatter={fmtDate} tick={tickStyle} axisLine={false} tickLine={false} minTickGap={24} />
+      <LineChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 4" stroke="hsl(var(--border))" vertical={false} />
+        <XAxis dataKey="date" tickFormatter={fmtDate} tick={tickStyle} axisLine={false} tickLine={false} minTickGap={20} padding={{ left: 8, right: 8 }} />
         <YAxis yAxisId="left" tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => leftFmt(v)} width={56} />
         <YAxis yAxisId="right" orientation="right" tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => rightFmt(v)} width={56} />
         <Tooltip
-          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+          cursor={cursorStyle}
+          contentStyle={tooltipStyle}
+          labelStyle={{ fontWeight: 600, marginBottom: 2 }}
           labelFormatter={(l) => fmtDate(l as string)}
           formatter={(v: any, name: string) => {
             if (name === leftLabel) return [leftFmt(Number(v)), leftLabel];
@@ -38,8 +49,8 @@ export function DualAxisChart({
           }}
         />
         <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} iconType="circle" />
-        <Line yAxisId="left" type="monotone" dataKey={leftKey} name={leftLabel} stroke={leftColor} strokeWidth={2.2} dot={false} activeDot={{ r: 4 }} />
-        <Line yAxisId="right" type="monotone" dataKey={rightKey} name={rightLabel} stroke={rightColor} strokeWidth={2.2} dot={false} activeDot={{ r: 4 }} />
+        <Line yAxisId="left" type="natural" dataKey={leftKey} name={leftLabel} stroke={leftColor} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
+        <Line yAxisId="right" type="natural" dataKey={rightKey} name={rightLabel} stroke={rightColor} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
       </LineChart>
     </ResponsiveContainer>
   );
