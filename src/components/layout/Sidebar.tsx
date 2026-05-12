@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, Star } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { BrandMark } from "@/components/brand/BrandMark";
