@@ -5,26 +5,30 @@ import { ChartCard } from "@/components/dashboard/ChartCard";
 import { DualAxisChart } from "@/components/dashboard/DualAxisChart";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useProperties } from "@/contexts/PropertyContext";
-import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics } from "@/lib/metrics";
+import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fillDateRange } from "@/lib/metrics";
 import { calc } from "@/lib/data-sources";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePropertyMetricConfig, type MetricKey } from "@/lib/property-labels";
 
 export default function Dashboard() {
   const { activeProperty } = useProperties();
-  const { current, prior, isLoading } = useDashboard();
+  const { current, prior, isLoading, range } = useDashboard();
   const cfg = usePropertyMetricConfig();
 
   const totals = useMemo(() => sumMetrics(current), [current]);
   const prev = useMemo(() => sumMetrics(prior), [prior]);
-  const series = useMemo(
-    () => groupByDate(current).map((r) => ({
+  const series = useMemo(() => {
+    const raw = groupByDate(current).map((r) => ({
       ...r,
       cpm: calc.cpm(r.cost, r.impressions),
       ctr: calc.ctr(r.clicks, r.impressions),
-    })),
-    [current]
-  );
+    }));
+    return fillDateRange(raw, range.from, range.to, {
+      cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0,
+      leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0,
+      admissions: 0, sessions: 0, users: 0, cpm: 0, ctr: 0,
+    } as any);
+  }, [current, range]);
 
   if (!activeProperty) {
     return <div className="text-sm text-muted-foreground">Select a client to view performance.</div>;
