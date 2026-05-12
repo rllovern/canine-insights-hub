@@ -6,7 +6,7 @@ import { useDashboard } from "@/contexts/DashboardContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import {
-  fmtCurrency, fmtNumber, groupByDate, groupByDateAndSource, groupBySource, groupByCampaign, pctChange,
+  fmtCurrency, fmtNumber, groupByDate, groupByDateAndSource, groupBySource, groupByCampaign, pctChange, fillDateRange,
 } from "@/lib/metrics";
 import { calc } from "@/lib/data-sources";
 import { Delta } from "@/components/ui/Delta";
@@ -17,22 +17,35 @@ import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { usePropertyMetricConfig } from "@/lib/property-labels";
 
 export default function CallTracking() {
-  const { current, prior, isLoading } = useDashboard();
+  const { current, prior, isLoading, range } = useDashboard();
   const { activeProperty } = useProperties();
   const { effectiveRole } = usePreviewMode();
   const isInternal = effectiveRole === "internal";
   const cfg = usePropertyMetricConfig();
 
-  const series = useMemo(() => groupByDate(current).map((r) => ({
-    ...r,
-    cost_per_good_lead: calc.costPerGoodLead(r.cost, r.good_leads),
-    cost_per_intake: calc.costPerIntake(r.cost, r.admissions),
-  })), [current]);
+  const series = useMemo(() => {
+    const raw = groupByDate(current).map((r) => ({
+      ...r,
+      cost_per_good_lead: calc.costPerGoodLead(r.cost, r.good_leads),
+      cost_per_intake: calc.costPerIntake(r.cost, r.admissions),
+    }));
+    return fillDateRange(raw, range.from, range.to, {
+      cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0,
+      leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0,
+      admissions: 0, sessions: 0, users: 0,
+      cost_per_good_lead: 0, cost_per_intake: 0,
+    } as any);
+  }, [current, range]);
 
-  const callsBySource = useMemo(() => groupByDateAndSource(current, "record_count"), [current]);
-  const goodBySource = useMemo(() => groupByDateAndSource(current, "good_leads"), [current]);
-  const admBySource = useMemo(() => groupByDateAndSource(current, "admissions"), [current]);
-  const spamBySource = useMemo(() => groupByDateAndSource(current, "spam"), [current]);
+  const fillSources = (g: { series: any[]; sources: string[] }) => ({
+    sources: g.sources,
+    series: fillDateRange(g.series, range.from, range.to, Object.fromEntries(g.sources.map((s) => [s, 0])) as any),
+  });
+
+  const callsBySource = useMemo(() => fillSources(groupByDateAndSource(current, "record_count")), [current, range]);
+  const goodBySource = useMemo(() => fillSources(groupByDateAndSource(current, "good_leads")), [current, range]);
+  const admBySource = useMemo(() => fillSources(groupByDateAndSource(current, "admissions")), [current, range]);
+  const spamBySource = useMemo(() => fillSources(groupByDateAndSource(current, "spam")), [current, range]);
 
   const cpglBySource = useMemo(() => {
     const sources = Array.from(new Set(current.map((r) => r.ad_source)));
@@ -45,8 +58,9 @@ export default function CallTracking() {
     }
     const rows = Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
     for (const row of rows) for (const s of sources) row[s] = row[s + "::gl"] ? row[s + "::cost"] / row[s + "::gl"] : 0;
-    return { series: rows, sources };
-  }, [current]);
+    const filled = fillDateRange(rows, range.from, range.to, Object.fromEntries(sources.map((s) => [s, 0])) as any);
+    return { series: filled, sources };
+  }, [current, range]);
 
   if (!activeProperty) return <div className="text-sm text-muted-foreground">Select a client to view calls.</div>;
   if (isLoading) return <div className="space-y-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-64" />)}</div>;
