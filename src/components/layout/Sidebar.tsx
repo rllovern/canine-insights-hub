@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, Star } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { BrandMark } from "@/components/brand/BrandMark";
@@ -60,19 +60,6 @@ export function Sidebar() {
         )}
       </nav>
       <div className="px-3 pb-3 space-y-3">
-        {/* Performance Goal — visual slot */}
-        <div className="rounded-xl border border-sidebar-border/60 bg-sidebar-accent/40 px-3 py-3 text-center">
-          <div className="flex items-center justify-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-sidebar-foreground/70">
-            <Star className="size-3 text-sidebar-primary fill-sidebar-primary" />
-            Performance Goal
-          </div>
-          <div className="mt-1 text-2xl font-bold tracking-tight text-sidebar-primary tabular-nums">87%</div>
-          <div className="text-[10px] text-sidebar-foreground/60">of monthly target</div>
-          <div className="mt-2 h-1 rounded-full bg-sidebar-border/60 overflow-hidden">
-            <div className="h-full rounded-full bg-sidebar-primary" style={{ width: "87%" }} />
-          </div>
-        </div>
-
         <div className="flex items-center gap-2 rounded-lg border border-sidebar-border/60 px-2.5 py-2">
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sidebar-accent text-[11px] font-semibold text-sidebar-primary">
             {initials}
