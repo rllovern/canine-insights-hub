@@ -121,5 +121,7 @@ export const SOURCE_COLORS: Record<string, string> = {
   "Website": "hsl(var(--chart-3))",
   "Yelp": "hsl(var(--chart-5))",
   "Facebook": "hsl(var(--chart-4))",
-  "Other": "hsl(var(--chart-5))",
+  "Direct": "hsl(var(--chart-6))",
+  "Referral": "hsl(var(--chart-7))",
+  "Other": "hsl(var(--chart-8))",
 };
