@@ -35,7 +35,7 @@ export function MultiLineChart({ data, sources, fmt = (n) => String(n), height =
         />
         <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} iconType="circle" />
         {sources.map((s) => (
-          <Line key={s} type="natural" dataKey={s} name={s} stroke={SOURCE_COLORS[s] ?? "hsl(var(--chart-7))"} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
+          <Line key={s} type="monotone" dataKey={s} name={s} stroke={SOURCE_COLORS[s] ?? "hsl(var(--chart-7))"} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
         ))}
       </LineChart>
     </ResponsiveContainer>
@@ -58,7 +58,7 @@ export function SingleLineChart({ data, dataKey, label, color = "hsl(var(--chart
           labelFormatter={(l) => fmtDate(l as string)}
           formatter={(v: any) => [fmt(Number(v)), label]}
         />
-        <Line type="natural" dataKey={dataKey} name={label} stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
+        <Line type="monotone" dataKey={dataKey} name={label} stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
       </LineChart>
     </ResponsiveContainer>
   );

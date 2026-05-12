@@ -49,8 +49,8 @@ export function DualAxisChart({
           }}
         />
         <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} iconType="circle" />
-        <Line yAxisId="left" type="natural" dataKey={leftKey} name={leftLabel} stroke={leftColor} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
-        <Line yAxisId="right" type="natural" dataKey={rightKey} name={rightLabel} stroke={rightColor} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
+        <Line yAxisId="left" type="monotone" dataKey={leftKey} name={leftLabel} stroke={leftColor} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
+        <Line yAxisId="right" type="monotone" dataKey={rightKey} name={rightLabel} stroke={rightColor} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
       </LineChart>
     </ResponsiveContainer>
   );
