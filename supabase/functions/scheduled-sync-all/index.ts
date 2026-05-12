@@ -89,9 +89,9 @@ Deno.serve(async (req) => {
       source: row.source,
       status,
       error_message: error_message ? error_message.slice(0, 2000) : null,
-      rows_written,
       started_at,
       finished_at: new Date().toISOString(),
+      stats: { rows_written } as never,
     });
   }
 
