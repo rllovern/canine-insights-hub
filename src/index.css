@@ -8,42 +8,44 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Ridgeside Canine — Linear/Vercel-inspired SaaS palette */
-    --background: 220 20% 99%;
-    --foreground: 222 25% 12%;
+    /* Ridgeside K9 Ashtabula — branded palette: navy + red + gold + cream */
+    --background: 36 30% 97%;
+    --foreground: 222 45% 14%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 25% 12%;
+    --card-foreground: 222 45% 14%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 25% 12%;
+    --popover-foreground: 222 45% 14%;
 
-    /* Ridgeside K9 Ashtabula — navy primary, red accent, gold highlight */
-    --primary: 222 55% 22%;
-    --primary-foreground: 40 50% 96%;
-    --primary-muted: 222 40% 92%;
+    --primary: 222 60% 20%;
+    --primary-foreground: 40 40% 96%;
+    --primary-muted: 222 35% 92%;
 
-    --secondary: 220 15% 96%;
-    --secondary-foreground: 222 25% 18%;
+    --secondary: 36 25% 94%;
+    --secondary-foreground: 222 45% 18%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 10% 44%;
+    --muted: 36 22% 94%;
+    --muted-foreground: 222 12% 42%;
 
-    --accent: 354 65% 42%;
-    --accent-foreground: 40 50% 98%;
+    --accent: 354 70% 45%;
+    --accent-foreground: 40 40% 98%;
 
-    --destructive: 354 70% 42%;
+    --destructive: 354 70% 45%;
     --destructive-foreground: 0 0% 98%;
 
-    --warning: 42 78% 50%;
+    --warning: 42 78% 52%;
     --warning-foreground: 42 90% 12%;
 
-    --success: 142 60% 38%;
+    --success: 142 55% 38%;
     --success-foreground: 142 60% 98%;
 
-    --border: 220 14% 91%;
-    --input: 220 14% 91%;
-    --ring: 222 55% 22%;
+    --gold: 42 75% 55%;
+    --gold-foreground: 222 50% 14%;
+
+    --border: 36 18% 88%;
+    --input: 36 18% 88%;
+    --ring: 222 60% 20%;
 
     /* Mode badges */
     --badge-internal: 265 60% 55%;
@@ -51,32 +53,33 @@ All colors MUST be HSL.
     --badge-viewer: 220 9% 46%;
     --badge-viewer-foreground: 0 0% 100%;
 
-    /* Chart palette — distinct hues for every ad source */
-    --chart-1: 142 60% 42%;
-    --chart-2: 217 85% 58%;
-    --chart-3: 32 95% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 0 75% 58%;
-    --chart-6: 195 80% 45%;
-    --chart-7: 340 75% 55%;
-    --chart-8: 220 12% 45%;
+    /* Chart palette — brand-led navy/red/gold/cream + extensions */
+    --chart-1: 222 60% 22%;
+    --chart-2: 354 70% 48%;
+    --chart-3: 42 75% 55%;
+    --chart-4: 36 35% 78%;
+    --chart-5: 222 12% 50%;
+    --chart-6: 195 45% 42%;
+    --chart-7: 320 35% 48%;
+    --chart-8: 30 25% 55%;
 
     --radius: 0.625rem;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 222 55% 22%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 220 14% 95%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 222 55% 22%;
+    /* Dark navy sidebar with cream text + gold active accent */
+    --sidebar-background: 222 55% 13%;
+    --sidebar-foreground: 40 25% 90%;
+    --sidebar-primary: 42 75% 55%;
+    --sidebar-primary-foreground: 222 55% 13%;
+    --sidebar-accent: 222 45% 20%;
+    --sidebar-accent-foreground: 40 30% 96%;
+    --sidebar-border: 222 40% 22%;
+    --sidebar-ring: 42 75% 55%;
 
-    /* Section divider gradient (sage) */
-    --section: 222 40% 95%;
-    --section-foreground: 222 55% 22%;
-    --gradient-section: linear-gradient(180deg, hsl(222 40% 96%), hsl(222 35% 92%));
-    --gradient-brand: linear-gradient(135deg, hsl(222 55% 22%), hsl(354 65% 42%));
+    /* Section divider — warm cream */
+    --section: 36 30% 94%;
+    --section-foreground: 222 60% 20%;
+    --gradient-section: linear-gradient(180deg, hsl(36 32% 96%), hsl(36 25% 92%));
+    --gradient-brand: linear-gradient(135deg, hsl(222 60% 20%), hsl(354 70% 45%));
     --shadow-sm: 0 1px 2px 0 hsl(222 25% 12% / 0.04);
     --shadow-md: 0 2px 8px -2px hsl(222 25% 12% / 0.08), 0 1px 2px hsl(222 25% 12% / 0.04);
     --shadow-lg: 0 12px 32px -8px hsl(222 25% 12% / 0.12);
@@ -119,14 +122,16 @@ All colors MUST be HSL.
     --chart-6: 195 75% 60%;
     --chart-7: 340 70% 65%;
     --chart-8: 220 10% 65%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 222 55% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 222 55% 60%;
+    --sidebar-background: 222 55% 10%;
+    --sidebar-foreground: 40 25% 90%;
+    --sidebar-primary: 42 75% 55%;
+    --sidebar-primary-foreground: 222 55% 13%;
+    --sidebar-accent: 222 45% 18%;
+    --sidebar-accent-foreground: 40 30% 96%;
+    --sidebar-border: 222 40% 20%;
+    --sidebar-ring: 42 75% 55%;
+    --gold: 42 75% 60%;
+    --gold-foreground: 222 55% 12%;
   }
 }
 
@@ -157,6 +162,7 @@ All colors MUST be HSL.
     @apply rounded-lg px-4 py-2.5 text-sm font-semibold tracking-tight;
     background: var(--gradient-section);
     color: hsl(var(--section-foreground));
+    border-left: 3px solid hsl(var(--gold));
   }
   .bg-gradient-brand {
     background: var(--gradient-brand);

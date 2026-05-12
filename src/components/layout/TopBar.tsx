@@ -24,16 +24,17 @@ export function TopBar() {
   } = useDashboard();
 
   return (
-    <header className="shrink-0 border-b bg-card/70 backdrop-blur-md sticky top-0 z-30">
+    <header className="shrink-0 border-b border-border bg-card sticky top-0 z-30">
       <div className="min-h-16 px-4 py-3 sm:px-6 sm:py-0 flex flex-wrap items-center gap-2 sm:gap-4">
         <div className="basis-full sm:basis-auto flex-1 min-w-0">
-          <h1 className="text-[15px] font-semibold tracking-tight truncate">
+          <h1 className="text-[18px] font-semibold tracking-tight truncate text-foreground">
             {activeProperty?.name ?? "Dashboard"}
           </h1>
+          <div className="mt-1 h-[2px] w-10 rounded-full bg-gold" />
           <div className="text-xs text-muted-foreground leading-relaxed sm:truncate">
             {format(range.from, "MMM d")} – {format(range.to, "MMM d, yyyy")}
             {compareMode !== "off" && (
-              <span className="ml-2 text-primary/80">
+              <span className="ml-2 text-accent">
                 vs {format(compareRange.from, "MMM d")} – {format(compareRange.to, "MMM d, yyyy")}
               </span>
             )}

@@ -72,6 +72,10 @@ export default {
           7: "hsl(var(--chart-7))",
           8: "hsl(var(--chart-8))",
         },
+        gold: {
+          DEFAULT: "hsl(var(--gold))",
+          foreground: "hsl(var(--gold-foreground))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

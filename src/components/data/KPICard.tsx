@@ -13,14 +13,14 @@ interface KPICardProps {
 export function KPICard({ label, value, delta, hint, icon }: KPICardProps) {
   const positive = (delta ?? 0) >= 0;
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
         {icon && <span className="text-muted-foreground">{icon}</span>}
       </div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
+      <div className="mt-2 text-2xl font-bold tracking-tight tabular-nums text-foreground">{value}</div>
       <div className="mt-1 flex items-center gap-2 text-xs">
         {delta !== undefined && delta !== null && (
           <span
