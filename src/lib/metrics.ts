@@ -117,10 +117,10 @@ export function groupByCampaign(rows: MetricRow[]) {
 
 export const SOURCE_COLORS: Record<string, string> = {
   "Google PPC": "hsl(var(--chart-1))",
-  "Organic": "hsl(var(--chart-2))",
-  "Website": "hsl(var(--chart-3))",
+  "Facebook": "hsl(var(--chart-2))",
+  "Organic": "hsl(var(--chart-3))",
+  "Website": "hsl(var(--chart-4))",
   "Yelp": "hsl(var(--chart-5))",
-  "Facebook": "hsl(var(--chart-4))",
   "Direct": "hsl(var(--chart-6))",
   "Referral": "hsl(var(--chart-7))",
   "Other": "hsl(var(--chart-8))",
