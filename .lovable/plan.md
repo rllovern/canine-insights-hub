@@ -1,53 +1,111 @@
-## Diagnosis
+# Visual Rebrand to Match Ridgeside K9 Reference
 
-Looking at the DB right now:
+Goal: restyle the entire dashboard so it visually matches the uploaded reference (dark navy sidebar with gold accents, light cream/white main content, navy + red + gold KPIs and charts). No new charts, no functional changes — every existing page, filter, and metric stays as-is.
 
-- `property_call_score_mappings` for Ashtabula → **still 0 rows**. The seeding code I added only fires on a **brand-new** connect (when `!source`). Ashtabula's connection already existed, so it never seeded, and you also haven't opened the dialog and saved mappings yet. That's why the call is still classified as `no_entry`.
-- `daily_metrics` for Ashtabula → 1 row, `record_count: 1, no_entry: 1, spam: 0` — correct given empty mappings.
+## 1. Design tokens (`src/index.css` + `tailwind.config.ts`)
 
-So nothing's broken in the pipeline; the mappings just don't exist yet for this property. Two real changes needed:
+Rework the light-mode palette around the logo colors:
 
-1. **Drop Medicaid** everywhere it's user-visible.
-2. **Lock the canonical 7-label seed** to the exact spelling/casing you gave, and **apply it to Ashtabula now** (not just future connections), then re-sync.
+- `--background`: very light warm cream (≈ `40 30% 98%`)
+- `--card`: pure white
+- `--foreground`: deep navy (≈ `222 45% 14%`)
+- `--primary`: Ridgeside navy (`222 60% 20%`)
+- `--accent`: Ridgeside red (`354 70% 45%`)
+- New `--gold` token (`42 75% 55%`) for highlights, underline accents, and the "Performance Goal" card
+- `--muted` / `--border`: warm grays tinted toward cream
+- `--success` (greens for positive deltas) and `--destructive` (matched to accent red) preserved
 
-## Plan
+Sidebar tokens (used only inside the navy sidebar):
+- `--sidebar-background`: deep navy (`222 55% 14%`)
+- `--sidebar-foreground`: cream (`40 30% 92%`)
+- `--sidebar-accent`: slightly lighter navy for hover (`222 45% 22%`)
+- `--sidebar-primary`: gold for active item left-border / icon tint
+- `--sidebar-border`: navy +5% lightness
 
-### 1. Drop Medicaid from the product
+Dark mode: leave untouched aside from inheriting the new sidebar tokens (per your answer).
 
-- `src/lib/property-labels.ts`: remove `medicaid` from `CUSTOMIZABLE_METRIC_KEYS` and `DEFAULT_METRIC_LABELS`.
-- `src/components/data/CTMConnectionDialog.tsx`: remove `medicaid` from the bucket dropdown (`Bucket` type, `BUCKET_TO_DB`, `DB_TO_BUCKET`, `BUCKET_LABELS`).
-- `supabase/functions/sync-ctm/index.ts`: remove `medicaid` from the `Bucket` union and classifier so it can never be assigned. (DB column stays — leaving the column avoids a migration; it'll just always be 0 going forward.)
-- Other files (`metrics.ts`, `data-sources.ts`, `sync-ga4`, `sync-google-ads`) only reference the `medicaid` column passively in interfaces/sums. Leave the column references in `MetricRow` interfaces so existing rows still parse, but don't surface it anywhere in UI.
-- Verify no remaining UI text or column shows "Medicaid".
+Chart palette — brand-led with extensions, so 6–8 sources stay distinguishable:
+- `--chart-1`: navy
+- `--chart-2`: red
+- `--chart-3`: gold
+- `--chart-4`: cream/tan
+- `--chart-5`: slate gray
+- `--chart-6`: muted teal (extension)
+- `--chart-7`: plum (extension)
+- `--chart-8`: warm taupe (extension)
 
-### 2. Replace the seed list with the canonical 7 labels
+`SOURCE_COLORS` in `src/lib/metrics.ts` re-mapped so the most prominent sources (Google Ads, Facebook) get navy + red.
 
-In `CTMConnectionDialog.seedDefaultMappings`, replace the current seeds with exactly these (matching your spelling/casing):
+## 2. Sidebar (`src/components/layout/Sidebar.tsx`)
 
-| Reporting Tag | Bucket |
-|---|---|
-| `Sale` | sale (= `admission` in DB) |
-| `Good Lead` | good |
-| `Bad Lead` | bad |
-| `Repeat Caller` | repeat (excluded entirely from leads) |
-| `Misc` | no_entry (counts as a real call, uncategorized) |
-| `Wrong Number` | spam (non-lead noise, doesn't count as a lead) |
-| `SPAM / Dead Air / Hangup` | spam |
+Convert the existing sidebar into a persistent dark navy rail used on every authenticated route:
 
-(If you want `Misc` or `Wrong Number` mapped differently, say so before I implement and I'll swap them.)
+- Top: Ridgeside K9 logo (existing `BrandMark`) on navy, with a thin gold underline below "RIDGESIDE K9 / ASHTABULA" text
+- Nav items in cream text; active item gets a gold left border + slightly lighter navy background and gold icon
+- Hover: lighter navy fill
+- Bottom additions (no new functionality, just visual layout):
+  - "Performance Goal" card slot — purely decorative card styled to match reference (gold star, percent, progress bar, "Updated …" label). Pulls a value already exposed in dashboard context if available; otherwise renders a static branded placeholder until we wire a real goal in a later pass.
+  - User card row at the very bottom: avatar (initials), `user.email` shortened, role label, sign-out via existing dropdown/menu
+- Width unchanged (`w-60`); responsive behavior unchanged
 
-### 3. Apply the seed to Ashtabula right now and re-sync
+## 3. Top bar (`src/components/layout/TopBar.tsx`)
 
-Since Ashtabula already has a connection, the seed-on-connect path won't run. I'll directly insert these 7 mapping rows for Ashtabula via the data tool, then call `sync-ctm` for Ashtabula. Result: the existing call's `call_score_bucket` flips from `no_entry` to `spam`, and `daily_metrics` becomes `record_count: 1, spam: 1, no_entry: 0, leads: 0`.
+Keep all controls (property switcher, date range, compare, view-as toggle). Restyle only:
 
-### 4. Verification
+- White background, no blur
+- Page title gains a short gold underline accent (matches reference "Overview" treatment)
+- Buttons/selects re-themed via the new tokens (no per-component color overrides)
+- Export Report button styled as solid navy with white text on the right edge (uses existing export action if present; otherwise stays hidden — no new functionality added)
 
-1. CTM dialog opens → Reporting Tag Mappings shows the 7 canonical rows.
-2. No "Medicaid" anywhere — not in the bucket dropdown, not as a metric label, not in any card or table.
-3. `select * from daily_metrics where property_id = 'ea92c5ce-…'` → `spam = 1, no_entry = 0`.
-4. Call Tracking page: "Total SPAM" shows 1, "No Entry" shows 0.
+## 4. KPI cards (`src/components/dashboard/KpiCard.tsx`, `src/components/data/KPICard.tsx`)
 
-### Out of scope
+Match reference style without adding icons:
 
-- Dropping the `medicaid` column from `daily_metrics` (would need a migration; the column going unused is harmless and reversible).
-- Touching other sync functions' schema mismatches.
+- White card, subtle border, soft shadow, rounded-xl
+- Label: small uppercase, muted
+- Value: large bold tabular-nums, navy foreground
+- Delta chip below value: green ▲ / red ▼ pill matching reference, with "vs <prev range>" muted text inline
+- Layout adjusted from "label / value+delta inline" to "label / value / delta+hint row" to mirror reference
+
+Both KPI components updated together so all pages benefit.
+
+## 5. Chart cards (`ChartCard`, `MultiLineChart`, `SingleLineChart`, `DualAxisChart`)
+
+- Card: white, rounded-xl, soft shadow, title row with optional right-side control (already supported)
+- Lines: monotone curves, navy/red/gold from the new chart palette, `strokeWidth` 2.4, gold accent for secondary series
+- Light gridlines on cream background
+- Tooltips: white card, navy text, soft shadow (already styled — just adopt new tokens)
+- Legend dots styled as filled circles, matching reference
+
+No structural changes to which charts render where.
+
+## 6. Section dividers + tables
+
+- `SectionDivider`: cream background with navy text and a thin gold underline
+- Tables (Reports, Campaigns, Call Tracking lists): header row in cream, hover rows in `muted`, numeric columns tabular, positive/negative values tinted via `--success`/`--destructive`
+
+## 7. Out of scope (explicit)
+
+- No new charts, KPIs, or pages
+- No backend / data / metric logic changes
+- No icon additions to KPI cards
+- Dark mode: not redesigned beyond inheriting the new sidebar tokens
+- "Performance Goal" sidebar card is a visual slot only — wiring it to a real goal value is a future task
+
+## Files that will change
+
+- `src/index.css`
+- `tailwind.config.ts`
+- `src/lib/metrics.ts` (SOURCE_COLORS only)
+- `src/components/layout/Sidebar.tsx`
+- `src/components/layout/TopBar.tsx`
+- `src/components/layout/AppShell.tsx` (minor — background color)
+- `src/components/dashboard/KpiCard.tsx`
+- `src/components/data/KPICard.tsx`
+- `src/components/dashboard/ChartCard.tsx`
+- `src/components/dashboard/SectionDivider.tsx`
+- `src/components/dashboard/MultiLineChart.tsx`
+- `src/components/dashboard/DualAxisChart.tsx`
+- `src/components/brand/BrandMark.tsx` (color variant for navy sidebar)
+
+After implementation I'll screenshot `/dashboard` and `/calls` and compare against the reference to verify the palette, sidebar, and KPI styling match before handing back.
