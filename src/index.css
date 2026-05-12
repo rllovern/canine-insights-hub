@@ -51,12 +51,15 @@ All colors MUST be HSL.
     --badge-viewer: 220 9% 46%;
     --badge-viewer-foreground: 0 0% 100%;
 
-    /* Chart palette — green, blue, orange, purple, red (matches report reference) */
+    /* Chart palette — distinct hues for every ad source */
     --chart-1: 142 60% 42%;
     --chart-2: 217 85% 58%;
     --chart-3: 32 95% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 0 75% 58%;
+    --chart-6: 195 80% 45%;
+    --chart-7: 340 75% 55%;
+    --chart-8: 220 12% 45%;
 
     --radius: 0.625rem;
 
@@ -113,6 +116,9 @@ All colors MUST be HSL.
     --chart-3: 32 90% 60%;
     --chart-4: 280 60% 68%;
     --chart-5: 0 70% 62%;
+    --chart-6: 195 75% 60%;
+    --chart-7: 340 70% 65%;
+    --chart-8: 220 10% 65%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 222 55% 60%;
