@@ -66,6 +66,7 @@ const TRACKING_SOURCE_MAP: Record<string, string> = {
   "GMB Ad Extension": "Google PPC",
   "Facebook": "Facebook",
   "Facebook Call Extension": "Facebook",
+  "Facebook Call Asset": "Facebook",
   "Multi-Organic Search": "Organic",
   "Referral": "Referral",
   "Direct": "Direct",
