@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SourceBadges } from "@/components/data/SourceBadges";
 import { PropertyAvatar } from "@/components/brand/PropertyAvatar";
@@ -134,6 +135,8 @@ export default function AdminProperties() {
   const [sources, setSources] = useState<PropertyDataSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [regenTarget, setRegenTarget] = useState<Property | null>(null);
+  const [regenConfirm, setRegenConfirm] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -313,7 +316,7 @@ export default function AdminProperties() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" title="Copy share link" onClick={() => copyLink(p)}>
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Regenerate share link" onClick={() => regenToken(p)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Regenerate share link" onClick={() => { setRegenTarget(p); setRegenConfirm(""); }}>
                         <RefreshCw className="h-3.5 w-3.5" />
                       </Button>
                       {p.public_report_token && (
@@ -337,6 +340,49 @@ export default function AdminProperties() {
           </Table>
         </div>
       )}
+
+      <AlertDialog open={!!regenTarget} onOpenChange={(o) => { if (!o) { setRegenTarget(null); setRegenConfirm(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Regenerating the report link for <span className="font-medium text-foreground">{regenTarget?.name}</span> will
+              immediately invalidate the existing public link. Anyone using the old URL will lose access.
+              <br /><br />
+              Type <span className="font-mono font-semibold text-foreground">Yes</span> to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            autoFocus
+            value={regenConfirm}
+            onChange={(e) => setRegenConfirm(e.target.value)}
+            placeholder="Yes"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && regenConfirm.trim().toLowerCase() === "yes" && regenTarget) {
+                const p = regenTarget;
+                setRegenTarget(null);
+                setRegenConfirm("");
+                regenToken(p);
+              }
+            }}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={regenConfirm.trim().toLowerCase() !== "yes"}
+              onClick={() => {
+                if (!regenTarget) return;
+                const p = regenTarget;
+                setRegenTarget(null);
+                setRegenConfirm("");
+                regenToken(p);
+              }}
+            >
+              Regenerate link
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
