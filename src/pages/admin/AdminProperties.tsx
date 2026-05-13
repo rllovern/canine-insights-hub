@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link as LinkIcon, Copy, ExternalLink, Pencil, Phone, Plus, RefreshCw } from "lucide-react";
+import { Link as LinkIcon, Copy, ExternalLink, Pencil, Phone, Plus, RefreshCw, RotateCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property, DataSource, PropertyDataSource } from "@/lib/types";
 import { PageHeader } from "@/components/data/PageHeader";
@@ -133,6 +133,7 @@ export default function AdminProperties() {
   const [rows, setRows] = useState<Property[]>([]);
   const [sources, setSources] = useState<PropertyDataSource[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -194,6 +195,24 @@ export default function AdminProperties() {
     const url = `${window.location.origin}/report/${p.public_report_token}`;
     await navigator.clipboard.writeText(url);
     toast.success("Link copied to clipboard.");
+  };
+
+  const syncNow = async (p: Property) => {
+    setSyncingId(p.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-ctm", {
+        body: { property_id: p.id, days: 30 },
+      });
+      if (error) throw error;
+      const written = (data as any)?.calls_written ?? 0;
+      const fetched = (data as any)?.total_fetched ?? 0;
+      toast.success(`CTM synced — ${fetched} fetched, ${written} new.`);
+      load();
+    } catch (e: any) {
+      toast.error(`Sync failed: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setSyncingId(null);
+    }
   };
 
   return (
@@ -270,6 +289,18 @@ export default function AdminProperties() {
                           </Button>
                         }
                       />
+                      {ctmByProp.get(p.id)?.is_connected && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Sync CTM now (30d)"
+                          disabled={syncingId === p.id}
+                          onClick={() => syncNow(p)}
+                        >
+                          <RotateCw className={`h-3.5 w-3.5 ${syncingId === p.id ? "animate-spin" : ""}`} />
+                        </Button>
+                      )}
                       <PropertyDialog
                         initial={p}
                         onSaved={load}
