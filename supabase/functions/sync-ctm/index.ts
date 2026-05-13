@@ -16,7 +16,7 @@ function isoDaysAgo(n: number): string {
 }
 function isoToday(): string { return new Date().toISOString().slice(0, 10); }
 
-type Bucket = "admission" | "good" | "bad" | "spam" | "repeat" | "no_entry" | "ignore";
+type Bucket = "admission" | "good" | "bad" | "spam" | "repeat" | "no_entry" | "unmapped" | "ignore";
 
 function extractScoreLabels(call: any): string[] {
   const out: string[] = [];
@@ -57,7 +57,9 @@ function classifyCall(call: any, mapping: Map<string, { bucket: Bucket; priority
     if (!hit) continue;
     if (!best || hit.priority < best.priority) best = hit;
   }
-  return best ? best.bucket : "no_entry";
+  // Has at least one score label, but none of them mapped to a bucket.
+  // This is "scored, but uncategorized" — count it in records only, not in no_entry.
+  return best ? best.bucket : "unmapped";
 }
 
 const TRACKING_SOURCE_MAP: Record<string, string> = {
@@ -253,6 +255,7 @@ Deno.serve(async (req) => {
         case "bad":       b.bad_leads  += 1; b.leads += 1; break;
         case "no_entry":  b.no_entry   += 1; b.leads += 1; break;
         case "spam":      b.spam       += 1; break;
+        case "unmapped":  /* counted in record_count only */ break;
       }
       agg.set(key, b);
     }

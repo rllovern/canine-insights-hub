@@ -1,31 +1,34 @@
-# Revert Chart Colors to Bright Palette
-
-## Goal
-Restore bright, distinguishable chart line colors on dashboard cards while keeping the current cream background, navy sidebar, and all other branded UI elements exactly as they are.
+# Fix `no_entry` over-counting in CTM sync
 
 ## Problem
-The recent rebrand muted the `:root` (light mode) chart palette to navy/red/gold/cream/slate tones. On the cream card backgrounds, trend lines for impressions, calls, leads, and source data are now too similar and hard to distinguish.
 
-## Change
-Update only the 8 `--chart-*` CSS custom properties in the `:root` (light mode) block of `src/index.css` to bright, high-contrast colors spread across the hue wheel. The `.dark` mode chart values are already bright and will be left unchanged.
+`supabase/functions/sync-ctm/index.ts` → `classifyCall()` returns `"no_entry"` in two distinct cases:
 
-### New `:root` chart values
-| Token | Current (muted) | Reverted (bright) |
-|---|---|---|
-| `--chart-1` | `222 60% 22%` (navy) | `142 60% 45%` (green) |
-| `--chart-2` | `354 70% 48%` (red) | `217 85% 55%` (blue) |
-| `--chart-3` | `42 75% 55%` (gold) | `32 95% 50%` (orange) |
-| `--chart-4` | `36 35% 78%` (cream) | `280 65% 58%` (purple) |
-| `--chart-5` | `222 12% 50%` (slate) | `0 78% 55%` (red) |
-| `--chart-6` | `195 45% 42%` | `195 75% 55%` (teal) |
-| `--chart-7` | `320 35% 48%` | `340 70% 60%` (pink) |
-| `--chart-8` | `30 25% 55%` | `220 20% 50%` (slate-blue) |
+1. The call has **no score label at all** → genuinely unscored.
+2. The call **has a score label** but it isn't in `property_call_score_mappings` → "scored, but unmapped" (e.g., "Wrong Number" after we removed it from the spam mapping).
 
-## What stays the same
-- `--background`, `--foreground`, `--card`, `--primary`, `--accent`, `--sidebar-*`, `--gold`, `--border`, `--gradient-*`, `--shadow-*`, `--section-*`
-- All component code (`ChartCard.tsx`, `KpiCard.tsx`, `DualAxisChart.tsx`, `MultiLineChart.tsx`, etc.)
-- `tailwind.config.ts`
-- `.dark` theme values
+The aggregator then increments both `no_entry` and `leads` for each. Result: today's Source Performance card shows `no_entry = 4` when it should be `2`, because the two "Wrong Number" calls are being miscounted.
 
-## Result
-Dashboard charts will immediately show vivid green, blue, orange, purple, and red trend lines that are easy to tell apart at a glance.
+## Fix
+
+Change classification + aggregation so unmapped/scored calls are tracked separately from truly unscored calls.
+
+### 1. `supabase/functions/sync-ctm/index.ts`
+
+- Add a new bucket value `"unmapped"` to the `Bucket` union.
+- In `classifyCall`:
+  - Return `"no_entry"` only when there are zero score labels.
+  - Return `"unmapped"` when labels exist but none match a mapping.
+- In the aggregation loop:
+  - Continue to count `"unmapped"` toward `record_count` (so the records total stays at 7).
+  - Do **not** increment `leads`, `no_entry`, or any quality bucket for `"unmapped"`.
+  - `"no_entry"` keeps its current behavior (counts toward `record_count`, `leads`, and `no_entry`) — but only fires for actually unscored calls.
+
+### 2. Resync
+
+Trigger `sync-ctm` for Ridgeside K9 Ashtabula (30 days) so existing `daily_metrics` rows are recomputed. Expected outcome for May 11–13: total `record_count` unchanged (7), `no_entry` drops from 4 → 2.
+
+## Out of scope
+
+- No UI changes — the Source Performance card already reads `no_entry` from `daily_metrics`, so once the underlying number is correct the card is correct.
+- No new column/metric for "unmapped" surfaced in the UI; it's effectively absorbed into "records − sum of categorized buckets". If you later want a visible "uncategorized" tile we can add it as a follow-up.
