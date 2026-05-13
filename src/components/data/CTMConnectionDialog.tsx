@@ -246,7 +246,6 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger }: Pr
       ["Bad Lead", "bad"],
       ["Repeat Caller", "repeat"],
       ["Misc", "no_entry"],
-      ["Wrong Number", "spam"],
       ["SPAM / Dead Air / Hangup", "spam"],
     ];
     await supabase.from("property_call_score_mappings").insert(
