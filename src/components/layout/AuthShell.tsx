@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import logoUrl from "@/assets/ridgeside-logo-full.webp";
+import logoUrlWhite from "@/assets/ridgeside-logo-full-white.png";
 
 export function AuthShell({ children, title, subtitle }: { children: ReactNode; title: string; subtitle?: string }) {
   return (
@@ -15,9 +16,9 @@ export function AuthShell({ children, title, subtitle }: { children: ReactNode; 
         />
           <div className="relative">
             <img
-              src={logoUrl}
+              src={logoUrlWhite}
               alt="Ridgeside K9 — Professional Dog Training"
-              className="h-32 w-auto object-contain"
+              className="h-40 w-auto object-contain"
             />
           </div>
           <div className="relative max-w-lg">
