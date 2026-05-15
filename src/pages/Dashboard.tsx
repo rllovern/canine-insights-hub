@@ -3,9 +3,10 @@ import { SectionDivider } from "@/components/dashboard/SectionDivider";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { DualAxisChart } from "@/components/dashboard/DualAxisChart";
+import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLineChart";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useProperties } from "@/contexts/PropertyContext";
-import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fillDateRange } from "@/lib/metrics";
+import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fillDateRange, SOURCE_COLORS } from "@/lib/metrics";
 import { calc } from "@/lib/data-sources";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePropertyMetricConfig, type MetricKey } from "@/lib/property-labels";
@@ -22,12 +23,41 @@ export default function Dashboard() {
       ...r,
       cpm: calc.cpm(r.cost, r.impressions),
       ctr: calc.ctr(r.clicks, r.impressions),
+      cost_per_good_lead: calc.costPerGoodLead(r.cost, r.good_leads),
     }));
     return fillDateRange(raw, range.from, range.to, {
       cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0,
       leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0,
-      admissions: 0, sessions: 0, users: 0, cpm: 0, ctr: 0,
+      admissions: 0, sessions: 0, users: 0, cpm: 0, ctr: 0, cost_per_good_lead: 0,
     } as any);
+  }, [current, range]);
+
+  // Cost / Good Lead by source — always render the 4 reference series so
+  // missing connectors (Facebook / Direct / Organic) appear as flat $0 lines
+  // instead of disappearing entirely.
+  const REQUIRED_SOURCES = ["Facebook", "Direct", "Google PPC", "Organic"] as const;
+  const sourceSeries = useMemo(() => {
+    const byDateSource = new Map<string, Record<string, { cost: number; gl: number }>>();
+    for (const r of current as any[]) {
+      const bucket = byDateSource.get(r.date) ?? {};
+      const src = REQUIRED_SOURCES.includes(r.ad_source) ? r.ad_source : null;
+      if (!src) continue;
+      const cur = bucket[src] ?? { cost: 0, gl: 0 };
+      cur.cost += Number(r.cost ?? 0);
+      cur.gl += Number(r.good_leads ?? 0);
+      bucket[src] = cur;
+      byDateSource.set(r.date, bucket);
+    }
+    const raw = Array.from(byDateSource.entries()).map(([date, bucket]) => {
+      const row: any = { date };
+      for (const s of REQUIRED_SOURCES) {
+        const b = bucket[s] ?? { cost: 0, gl: 0 };
+        row[s] = b.gl ? b.cost / b.gl : 0;
+      }
+      return row;
+    });
+    const zeros = REQUIRED_SOURCES.reduce((a, s) => ({ ...a, [s]: 0 }), {} as Record<string, number>);
+    return fillDateRange(raw, range.from, range.to, zeros as any);
   }, [current, range]);
 
   if (!activeProperty) {
@@ -89,6 +119,26 @@ export default function Dashboard() {
             />
           </ChartCard>
         </div>
+      </div>
+
+      <SectionDivider title="Cost / Good Lead" subtitle="Cost efficiency per qualified lead, blended and broken out by source" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <ChartCard title="Cost / Good Lead" subtitle="Total trend">
+          <SingleLineChart
+            data={series}
+            dataKey="cost_per_good_lead"
+            label="Cost / Good Lead"
+            color="hsl(var(--chart-3))"
+            fmt={(v) => fmtCurrency(v, 2)}
+          />
+        </ChartCard>
+        <ChartCard title="Cost / Good Lead by Source" subtitle="Total trend">
+          <MultiLineChart
+            data={sourceSeries}
+            sources={[...REQUIRED_SOURCES]}
+            fmt={(v) => fmtCurrency(v, 2)}
+          />
+        </ChartCard>
       </div>
     </>
   );
