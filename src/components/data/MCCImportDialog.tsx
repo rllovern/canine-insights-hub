@@ -42,6 +42,7 @@ export function MCCImportDialog({
   const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set());
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [filter, setFilter] = useState("");
+  const [mccId, setMccId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -52,6 +53,7 @@ export function MCCImportDialog({
       ]);
       if (error) throw error;
       const list: MccCustomer[] = (data as any)?.customers ?? [];
+      setMccId((data as any)?.mcc_id ?? null);
       const linked = new Set<string>();
       (srcs.data ?? []).forEach((s: any) => {
         if (s.source === "google_ads" && s.external_account_id) linked.add(String(s.external_account_id));
@@ -130,7 +132,7 @@ export function MCCImportDialog({
               source: "google_ads",
               is_connected: true,
               external_account_id: c.customer_id,
-              login_customer_id: (data_or_null((rows as any)._mcc_id) ?? null),
+              login_customer_id: mccId,
               status: "connected",
             },
             { onConflict: "property_id,source" } as any,
@@ -257,8 +259,4 @@ export function MCCImportDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function data_or_null<T>(v: T | undefined): T | null {
-  return v === undefined ? null : v;
 }
