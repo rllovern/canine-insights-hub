@@ -49,18 +49,19 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { client_id, date_from, date_to } = body ?? {};
-    if (!client_id) {
-      return new Response(JSON.stringify({ error: "client_id required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const propertyId: string | undefined = body?.property_id ?? body?.client_id;
+    const { date_from, date_to } = body ?? {};
+    if (!propertyId) {
+      return new Response(JSON.stringify({ error: "property_id required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const from = date_from ?? isoDaysAgo(7);
     const to = date_to ?? isoYesterday();
 
     const { data: conn, error: connErr } = await admin
-      .from("client_data_sources")
+      .from("property_data_sources")
       .select("*")
-      .eq("client_id", client_id)
+      .eq("property_id", propertyId)
       .eq("source", "google_ads")
       .maybeSingle();
 
@@ -81,7 +82,7 @@ Deno.serve(async (req) => {
     try {
       accessToken = await getAccessToken(effectiveRefreshToken);
     } catch (e) {
-      await admin.from("client_data_sources").update({ status: "error", last_error: String(e) }).eq("id", conn.id);
+      await admin.from("property_data_sources").update({ status: "error", last_error: String(e) }).eq("id", conn.id);
       return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -108,7 +109,7 @@ Deno.serve(async (req) => {
     const adsRes = await fetch(url, { method: "POST", headers, body: JSON.stringify({ query: gaql }) });
     const adsJson = await adsRes.json();
     if (!adsRes.ok) {
-      await admin.from("client_data_sources").update({ status: "error", last_error: JSON.stringify(adsJson).slice(0, 1000) }).eq("id", conn.id);
+      await admin.from("property_data_sources").update({ status: "error", last_error: JSON.stringify(adsJson).slice(0, 1000) }).eq("id", conn.id);
       return new Response(JSON.stringify({ error: "google ads api error", detail: adsJson }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -144,7 +145,7 @@ Deno.serve(async (req) => {
     }
 
     const upsertRows = Array.from(agg.values()).map((r) => ({
-      client_id,
+      property_id: propertyId,
       date: r.date,
       ad_source: "Google PPC",
       campaign: r.campaign,
@@ -161,7 +162,7 @@ Deno.serve(async (req) => {
       const { data: existing } = await admin
         .from("daily_metrics")
         .select("date,campaign,record_count,leads,good_leads,bad_leads,medicaid,admissions,no_entry,spam,sessions,users")
-        .eq("client_id", client_id)
+        .eq("property_id", propertyId)
         .eq("ad_source", "Google PPC")
         .in("date", dates);
       const existingMap = new Map<string, any>();
@@ -186,16 +187,16 @@ Deno.serve(async (req) => {
       });
       const { error: insErr, count } = await admin
         .from("daily_metrics")
-        .upsert(merged, { onConflict: "client_id,date,ad_source,campaign", count: "exact" });
+        .upsert(merged, { onConflict: "property_id,date,ad_source,campaign", count: "exact" });
       if (insErr) {
-        await admin.from("client_data_sources").update({ status: "error", last_error: insErr.message }).eq("id", conn.id);
+        await admin.from("property_data_sources").update({ status: "error", last_error: insErr.message }).eq("id", conn.id);
         return new Response(JSON.stringify({ error: insErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       written = count ?? merged.length;
     }
 
     await admin
-      .from("client_data_sources")
+      .from("property_data_sources")
       .update({ status: "connected", last_synced_at: new Date().toISOString(), last_error: null })
       .eq("id", conn.id);
 
