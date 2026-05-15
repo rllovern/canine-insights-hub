@@ -6,7 +6,7 @@ import { DualAxisChart } from "@/components/dashboard/DualAxisChart";
 import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLineChart";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useProperties } from "@/contexts/PropertyContext";
-import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fillDateRange, SOURCE_COLORS } from "@/lib/metrics";
+import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fillDateRange } from "@/lib/metrics";
 import { calc } from "@/lib/data-sources";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePropertyMetricConfig, type MetricKey } from "@/lib/property-labels";
