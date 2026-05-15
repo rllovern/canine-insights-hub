@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link as LinkIcon, Copy, ExternalLink, Pencil, Phone, Plus, RefreshCw, RotateCw } from "lucide-react";
+import { Link as LinkIcon, Copy, Download, ExternalLink, Pencil, Phone, Plus, RefreshCw, RotateCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property, DataSource, PropertyDataSource } from "@/lib/types";
 import { PageHeader } from "@/components/data/PageHeader";
@@ -16,6 +16,7 @@ import { useProperties } from "@/contexts/PropertyContext";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/data/EmptyState";
 import { CTMConnectionDialog } from "@/components/data/CTMConnectionDialog";
+import { MCCImportDialog } from "@/components/data/MCCImportDialog";
 
 function PropertyDialog({
   initial,
@@ -224,15 +225,27 @@ export default function AdminProperties() {
         title="Properties"
         description="Manage every Ridgeside Canine location, its data sources, and public share links."
         actions={
-          <PropertyDialog
-            onSaved={load}
-            trigger={
-              <Button size="sm">
-                <Plus className="mr-1.5 h-4 w-4" />
-                Add property
-              </Button>
-            }
-          />
+          <div className="flex items-center gap-2">
+            <MCCImportDialog
+              properties={rows}
+              onImported={load}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Download className="mr-1.5 h-4 w-4" />
+                  Import from MCC
+                </Button>
+              }
+            />
+            <PropertyDialog
+              onSaved={load}
+              trigger={
+                <Button size="sm">
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Add property
+                </Button>
+              }
+            />
+          </div>
         }
       />
 
