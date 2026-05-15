@@ -11,6 +11,11 @@ import { calc } from "@/lib/data-sources";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePropertyMetricConfig, type MetricKey } from "@/lib/property-labels";
 
+// Cost / Good Lead by-source chart always renders these 4 series so missing
+// connectors (Facebook / Direct / Organic) appear as flat $0 lines instead of
+// disappearing from the legend.
+const REQUIRED_SOURCES = ["Facebook", "Direct", "Google PPC", "Organic"] as const;
+
 export default function Dashboard() {
   const { activeProperty } = useProperties();
   const { current, prior, isLoading, range } = useDashboard();
@@ -32,15 +37,11 @@ export default function Dashboard() {
     } as any);
   }, [current, range]);
 
-  // Cost / Good Lead by source — always render the 4 reference series so
-  // missing connectors (Facebook / Direct / Organic) appear as flat $0 lines
-  // instead of disappearing entirely.
-  const REQUIRED_SOURCES = ["Facebook", "Direct", "Google PPC", "Organic"] as const;
   const sourceSeries = useMemo(() => {
     const byDateSource = new Map<string, Record<string, { cost: number; gl: number }>>();
     for (const r of current as any[]) {
       const bucket = byDateSource.get(r.date) ?? {};
-      const src = REQUIRED_SOURCES.includes(r.ad_source) ? r.ad_source : null;
+      const src = (REQUIRED_SOURCES as readonly string[]).includes(r.ad_source) ? r.ad_source : null;
       if (!src) continue;
       const cur = bucket[src] ?? { cost: 0, gl: 0 };
       cur.cost += Number(r.cost ?? 0);
