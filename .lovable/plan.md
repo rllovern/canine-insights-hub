@@ -1,34 +1,50 @@
-# Fix `no_entry` over-counting in CTM sync
+# Internal Client Reports Browser
 
-## Problem
+An internal-only page that lets you flip through every active client's report — visually identical to what the client sees at `/report/:token`, but gated to internal users and never exposed to viewers or the public.
 
-`supabase/functions/sync-ctm/index.ts` → `classifyCall()` returns `"no_entry"` in two distinct cases:
+## What you get
 
-1. The call has **no score label at all** → genuinely unscored.
-2. The call **has a score label** but it isn't in `property_call_score_mappings` → "scored, but unmapped" (e.g., "Wrong Number" after we removed it from the spam mapping).
+- New sidebar entry under **Admin → Client Reports** (only renders for internal users, just like the existing Clients/Users/Settings items).
+- A new route `/admin/client-reports` protected by `RequireAuth requireRealRole="internal"`.
+- A top toolbar with:
+  - **Prev / Next arrows** to cycle through active properties (alphabetical by name).
+  - **Property dropdown** to jump directly to any client.
+  - The same **date range + compare** controls used in the public report.
+  - A small "Internal preview" badge so it's obvious this is not what the client sees.
+- The report body is the **exact same** `PublicShell + Dashboard + CallTracking` stack used by `/report/:token` — pixel-identical layout, header, branding, and footer.
+- Scope: **all active properties** (`is_active = true`), regardless of whether a public report token has been generated.
+- Selected property persists in `localStorage` so reopening the tab returns to the last one viewed.
 
-The aggregator then increments both `no_entry` and `leads` for each. Result: today's Source Performance card shows `no_entry = 4` when it should be `2`, because the two "Wrong Number" calls are being miscounted.
+## Why it's safe (not visible to clients)
 
-## Fix
+- The route lives under `/admin/*` and uses `requireRealRole="internal"` — viewers and unauthenticated users are redirected to `/dashboard` / `/login`.
+- The sidebar link is only rendered when `effectiveRole === "internal"`.
+- Data is fetched using the normal authenticated Supabase client (internal users already have full read access via the existing `Internal full access` RLS policies on `daily_metrics`, `ctm_calls`, `properties`, etc.). **No public RPCs and no report tokens are used**, so nothing about this page can leak through a client-shared link.
 
-Change classification + aggregation so unmapped/scored calls are tracked separately from truly unscored calls.
+## Technical details
 
-### 1. `supabase/functions/sync-ctm/index.ts`
+New files:
+- `src/pages/admin/AdminClientReports.tsx` — page component. Loads all active properties, manages a `currentIndex`, renders the toolbar (Prev / Select / Next + `PublicReportToolbar` controls) and the report body.
+- `src/components/layout/ClientReportPreview.tsx` (small wrapper) — given a `Property`, mounts `DashboardProvider` (using the standard internal fetcher already used by `Dashboard`) and renders `PublicShell` + `Dashboard` + `CallTracking`, mirroring `PublicReport.tsx`.
 
-- Add a new bucket value `"unmapped"` to the `Bucket` union.
-- In `classifyCall`:
-  - Return `"no_entry"` only when there are zero score labels.
-  - Return `"unmapped"` when labels exist but none match a mapping.
-- In the aggregation loop:
-  - Continue to count `"unmapped"` toward `record_count` (so the records total stays at 7).
-  - Do **not** increment `leads`, `no_entry`, or any quality bucket for `"unmapped"`.
-  - `"no_entry"` keeps its current behavior (counts toward `record_count`, `leads`, and `no_entry`) — but only fires for actually unscored calls.
+Edited files:
+- `src/App.tsx` — register the new route under the existing internal-guarded admin block:
+  ```text
+  <Route path="/admin/client-reports"
+         element={<RequireAuth requireRealRole="internal"><AdminClientReports /></RequireAuth>} />
+  ```
+- `src/components/layout/Sidebar.tsx` — add a `FileSearch` (or similar) nav item labelled "Client Reports" inside the existing `effectiveRole === "internal"` Admin block.
 
-### 2. Resync
+Data fetching:
+- Properties list: `supabase.from("properties").select("*").eq("is_active", true).order("name")`.
+- Metrics + calls: reuse the default authenticated fetchers already wired into `DashboardContext` / `CallTracking` — no new edge functions, no schema changes, no RLS changes.
 
-Trigger `sync-ctm` for Ridgeside K9 Ashtabula (30 days) so existing `daily_metrics` rows are recomputed. Expected outcome for May 11–13: total `record_count` unchanged (7), `no_entry` drops from 4 → 2.
+UX notes:
+- Prev/Next wrap around (last → first).
+- Keyboard shortcuts: `←` / `→` cycle properties while the page is focused.
+- A subtle banner above the report reads: "Internal preview — clients do not see this page."
 
-## Out of scope
-
-- No UI changes — the Source Performance card already reads `no_entry` from `daily_metrics`, so once the underlying number is correct the card is correct.
-- No new column/metric for "unmapped" surfaced in the UI; it's effectively absorbed into "records − sum of categorized buckets". If you later want a visible "uncategorized" tile we can add it as a follow-up.
+Out of scope (intentionally):
+- No changes to the public `/report/:token` flow.
+- No changes to viewer permissions or RLS.
+- No new backend functions or migrations.
