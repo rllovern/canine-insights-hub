@@ -1,45 +1,36 @@
-# Make Admin Client Reports Match the Token Report
+# Fix Client Reports Opening to Dashboard
 
-The internal Client Reports tab should open a standalone browser tab that is the same report experience as `/report/:token`. The only internal-only difference is a client navigation control in the report header.
+Clicking **Client Reports** should open the standalone internal report browser, not redirect to `/dashboard`.
 
 ## What will change
 
-- Keep **Admin → Client Reports** opening in a new tab.
-- Keep `/admin/client-reports` outside the dashboard shell, with no sidebar or app top bar.
-- Refactor the public token report into a shared report body used by both:
-  - `/report/:token`
-  - `/admin/client-reports`
-- Make the internal page fetch report data through the same token-based report path as the public report:
-  - selected property must have a `public_report_token`
-  - metrics use `get_daily_metrics_by_report_token`
-  - the report renders with viewer permissions, just like the client link
-- Remove the separate internal preview banner/bar that makes the page feel different from the public report.
-- Add the internal-only client switcher inside the existing public report header toolbar area:
-  - property dropdown
-  - previous / next arrows
-  - optional compact/hamburger-style menu on narrow screens if needed
-- Preserve the existing public report date range and compare controls exactly.
-- Persist the last selected client in `localStorage`.
-- Keep keyboard left/right navigation for cycling clients.
+- Keep the existing **Client Reports** sidebar link opening in a new tab.
+- Fix the route guard so `/admin/client-reports` waits for the user’s real role to finish loading before deciding whether to allow access.
+- Prevent the current false redirect where the new tab briefly sees the role as empty/null and sends the user to `/dashboard`.
+- Keep the current standalone report page experience:
+  - collapsible client/property sidebar
+  - property list only
+  - selected property opens the same token-style report the client sees
+  - back arrow returns to the internal dashboard
 
 ## Result
 
 ```text
-Admin sidebar link opens new tab
+Click Client Reports
         ↓
-/admin/client-reports
+New tab opens /admin/client-reports
         ↓
-Same header, layout, dashboard sections, data fetching, and viewer-only visibility as /report/:token
+Auth + role finish loading
         ↓
-Only extra UI: internal client navigation in the top toolbar
+Internal users stay on the client report browser
+        ↓
+Non-internal users are still blocked safely
 ```
 
 ## Technical details
 
 Edits:
-- `src/pages/PublicReport.tsx` — extract/reuse the token-report rendering logic so the public and internal versions cannot drift apart.
-- `src/pages/admin/AdminClientReports.tsx` — make it a thin internal wrapper that selects an active client token and renders the shared token report with an added navigation toolbar.
-- `src/components/layout/PublicReportToolbar.tsx` — allow an optional leading/trailing internal control slot while keeping the public toolbar unchanged for clients.
-- `src/App.tsx` and `src/components/layout/Sidebar.tsx` — keep the route standalone and the sidebar link opening in a new tab.
+- `src/contexts/AuthContext.tsx` — track role-loading state separately or keep auth loading active until the authenticated user’s role has resolved.
+- `src/components/RequireAuth.tsx` — when `requireRealRole` is set, show the loading state until the real role is known instead of redirecting while it is still `null`.
 
-No backend changes. No RLS changes. No new dependencies.
+No database changes. No sidebar redesign. No report layout changes.
