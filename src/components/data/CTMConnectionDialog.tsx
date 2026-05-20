@@ -13,7 +13,9 @@ interface Props {
   property: Property;
   source: PropertyDataSource | null;
   onChanged: () => void;
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 interface CTMConfig {
@@ -60,8 +62,10 @@ interface MappingRow {
   bucket: Bucket;
 }
 
-export function CTMConnectionDialog({ property, source, onChanged, trigger }: Props) {
-  const [open, setOpen] = useState(false);
+export function CTMConnectionDialog({ property, source, onChanged, trigger, open: controlledOpen, onOpenChange: setControlledOpen }: Props) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = setControlledOpen ?? setUncontrolledOpen;
   const cfg = (source?.config ?? {}) as CTMConfig;
 
   const [accountId, setAccountId] = useState(cfg.account_id ?? "");
@@ -288,7 +292,7 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger }: Pr
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
