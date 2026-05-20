@@ -42,6 +42,10 @@ const App = () => (
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/report/:token" element={<PublicReport />} />
+                  <Route
+                    path="/admin/client-reports"
+                    element={<RequireAuth requireRealRole="internal"><AdminClientReports /></RequireAuth>}
+                  />
 
                   <Route element={<RequireAuth><AppShell /></RequireAuth>}>
                     <Route path="/dashboard" element={<Dashboard />} />
@@ -53,10 +57,6 @@ const App = () => (
                     <Route
                       path="/admin/properties"
                       element={<RequireAuth requireRealRole="internal"><AdminProperties /></RequireAuth>}
-                    />
-                    <Route
-                      path="/admin/client-reports"
-                      element={<RequireAuth requireRealRole="internal"><AdminClientReports /></RequireAuth>}
                     />
                     <Route
                       path="/admin/users"
