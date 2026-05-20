@@ -50,9 +50,14 @@ export function Sidebar() {
             <NavLink to="/admin/properties" className={({isActive}) => cn("relative flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-sidebar-primary" : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground")}>
               <Users className="size-4" /> Clients
             </NavLink>
-            <NavLink to="/admin/client-reports" className={({isActive}) => cn("relative flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-sidebar-primary" : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground")}>
+            <a
+              href="/admin/client-reports"
+              target="_blank"
+              rel="noopener"
+              className={cn("relative flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground")}
+            >
               <FileSearch className="size-4" /> Client Reports
-            </NavLink>
+            </a>
             <NavLink to="/admin/users" className={({isActive}) => cn("relative flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-sidebar-primary" : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground")}>
               <Users className="size-4" /> Users
             </NavLink>
