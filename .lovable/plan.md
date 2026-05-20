@@ -1,30 +1,45 @@
-# Open Client Reports in a Standalone Window
+# Make Admin Client Reports Match the Token Report
 
-Move the internal Client Reports view out of the app shell so it opens in its own browser tab — same standalone chrome as the public `/report/:token` view — with a built-in property switcher at the top.
+The internal Client Reports tab should open a standalone browser tab that is the same report experience as `/report/:token`. The only internal-only difference is a client navigation control in the report header.
 
-## What changes
+## What will change
 
-- The **Admin → Client Reports** sidebar item becomes a link that opens `/admin/client-reports` in a **new tab** (`target="_blank"`).
-- `/admin/client-reports` is moved **out of `AppShell`** and rendered standalone (no Sidebar, no TopBar) — matching how `/report/:token` works today.
-- The page is still gated by `RequireAuth requireRealRole="internal"`. Anyone without an internal role lands on `/dashboard` or `/login`.
-- At the very top of the standalone window: a compact bar with
-  - **Property selector** (dropdown listing every active property, with the current one selected).
-  - **Prev / Next arrows** for quick cycling.
-  - The existing date range + compare controls.
-  - A small "Internal preview" label so it's obvious this isn't the client's view.
-- Below the bar: the exact `PublicShell + Dashboard + CallTracking` stack the client sees, with the inner subtree forced into viewer mode so it's pixel-identical to `/report/:token`.
-- Selected property persists in `localStorage` so reopening the window returns to the last one viewed.
-- Keyboard `←` / `→` continues to cycle.
+- Keep **Admin → Client Reports** opening in a new tab.
+- Keep `/admin/client-reports` outside the dashboard shell, with no sidebar or app top bar.
+- Refactor the public token report into a shared report body used by both:
+  - `/report/:token`
+  - `/admin/client-reports`
+- Make the internal page fetch report data through the same token-based report path as the public report:
+  - selected property must have a `public_report_token`
+  - metrics use `get_daily_metrics_by_report_token`
+  - the report renders with viewer permissions, just like the client link
+- Remove the separate internal preview banner/bar that makes the page feel different from the public report.
+- Add the internal-only client switcher inside the existing public report header toolbar area:
+  - property dropdown
+  - previous / next arrows
+  - optional compact/hamburger-style menu on narrow screens if needed
+- Preserve the existing public report date range and compare controls exactly.
+- Persist the last selected client in `localStorage`.
+- Keep keyboard left/right navigation for cycling clients.
 
-## Why this matches the public-report behavior
+## Result
 
-The public report at `/report/:token` is registered outside `AppShell` in `App.tsx`, which is why it renders without the dashboard sidebar/topbar. The internal version will be registered the same way so it gets the same full-window look when opened in a new tab.
+```text
+Admin sidebar link opens new tab
+        ↓
+/admin/client-reports
+        ↓
+Same header, layout, dashboard sections, data fetching, and viewer-only visibility as /report/:token
+        ↓
+Only extra UI: internal client navigation in the top toolbar
+```
 
 ## Technical details
 
 Edits:
-- `src/App.tsx` — move the `/admin/client-reports` route out of the `<RequireAuth><AppShell /></RequireAuth>` block and register it as a top-level standalone route (still wrapped in `RequireAuth requireRealRole="internal"`), next to `/report/:token`.
-- `src/components/layout/Sidebar.tsx` — change the "Client Reports" nav entry from a `NavLink` to a plain `<a href="/admin/client-reports" target="_blank" rel="noopener">` so it opens in a new window.
-- `src/pages/admin/AdminClientReports.tsx` — minor layout tweaks so the page works as full-window content (remove the rounded inner border that made sense inside the app shell; let `PublicShell` fill the viewport).
+- `src/pages/PublicReport.tsx` — extract/reuse the token-report rendering logic so the public and internal versions cannot drift apart.
+- `src/pages/admin/AdminClientReports.tsx` — make it a thin internal wrapper that selects an active client token and renders the shared token report with an added navigation toolbar.
+- `src/components/layout/PublicReportToolbar.tsx` — allow an optional leading/trailing internal control slot while keeping the public toolbar unchanged for clients.
+- `src/App.tsx` and `src/components/layout/Sidebar.tsx` — keep the route standalone and the sidebar link opening in a new tab.
 
 No backend changes. No RLS changes. No new dependencies.
