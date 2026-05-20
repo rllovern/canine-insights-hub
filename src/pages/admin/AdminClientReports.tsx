@@ -1,24 +1,17 @@
 import { useEffect, useState } from "react";
-import { NavLink, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, Building2 } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Loader2, Menu, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
 import { useProperties } from "@/contexts/PropertyContext";
 import { PreviewModeContext } from "@/contexts/PreviewModeContext";
 import { TokenReport } from "@/components/reports/TokenReport";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "adminClientReports.lastPropertyId";
@@ -38,6 +31,7 @@ export default function AdminClientReports() {
   const navigate = useNavigate();
   const { setActiveProperty } = useProperties();
   const [properties, setProperties] = useState<Property[] | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     supabase
@@ -56,7 +50,7 @@ export default function AdminClientReports() {
       });
   }, []);
 
-  // Default-select a property when arriving at /admin/client-reports.
+  // Default-select a property when arriving without one in the URL.
   useEffect(() => {
     if (!properties || properties.length === 0 || propertyId) return;
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -88,65 +82,74 @@ export default function AdminClientReports() {
     );
   }
 
-  return (
-    <SidebarProvider defaultOpen>
-      <div className="flex min-h-screen w-full">
-        <Sidebar collapsible="icon">
-          <SidebarHeader className="border-b border-sidebar-border">
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-              title="Back to internal dashboard"
-            >
-              <ArrowLeft className="size-4 shrink-0" />
-              <span className="group-data-[collapsible=icon]:hidden">Back to dashboard</span>
-            </button>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>Clients</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {properties.map((p) => {
-                    const active = p.id === propertyId;
-                    return (
-                      <SidebarMenuItem key={p.id}>
-                        <SidebarMenuButton asChild isActive={active} tooltip={p.name}>
-                          <NavLink
-                            to={`/admin/client-reports/${p.id}`}
-                            className={cn("flex items-center gap-2")}
-                          >
-                            <Building2 className="size-4 shrink-0" />
-                            <span className="truncate">{p.name}</span>
-                          </NavLink>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-        </Sidebar>
+  const selectProperty = (id: string) => {
+    setDrawerOpen(false);
+    if (id !== propertyId) navigate(`/admin/client-reports/${id}`);
+  };
 
-        <div className="relative flex-1 min-w-0">
-          {/* Floating trigger so the sidebar can be reopened when collapsed/offcanvas */}
-          <SidebarTrigger className="absolute left-2 top-2 z-40 bg-background/80 backdrop-blur" />
-          {current && current.public_report_token ? (
-            <PreviewModeContext.Provider value={VIEWER_PREVIEW_VALUE}>
-              <TokenReport
-                key={current.public_report_token}
-                token={current.public_report_token}
-                property={current}
-              />
-            </PreviewModeContext.Provider>
-          ) : (
-            <div className="grid min-h-screen place-items-center">
-              <Loader2 className="animate-spin text-muted-foreground" />
-            </div>
-          )}
-        </div>
+  return (
+    <div className="relative min-h-screen w-full">
+      {/* Floating top-left controls overlaid on the report */}
+      <div className="fixed left-3 top-3 z-50 flex items-center gap-1.5">
+        <button
+          onClick={() => setDrawerOpen(true)}
+          title="Open clients"
+          aria-label="Open clients"
+          className="grid h-9 w-9 place-items-center rounded-md border border-border bg-background/90 text-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-accent-foreground transition-colors"
+        >
+          <Menu className="size-4" />
+        </button>
+        <button
+          onClick={() => navigate("/dashboard")}
+          title="Back to dashboard"
+          aria-label="Back to dashboard"
+          className="grid h-9 w-9 place-items-center rounded-md border border-border bg-background/90 text-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-accent-foreground transition-colors"
+        >
+          <ArrowLeft className="size-4" />
+        </button>
       </div>
-    </SidebarProvider>
+
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent side="left" className="w-72 p-0">
+          <SheetHeader className="border-b px-4 py-4">
+            <SheetTitle>Clients</SheetTitle>
+          </SheetHeader>
+          <nav className="flex flex-col p-2 overflow-y-auto">
+            {properties.map((p) => {
+              const active = p.id === propertyId;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => selectProperty(p.id)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm text-left transition-colors",
+                    active
+                      ? "bg-accent text-accent-foreground font-medium"
+                      : "hover:bg-accent/60 hover:text-accent-foreground"
+                  )}
+                >
+                  <Building2 className="size-4 shrink-0" />
+                  <span className="truncate">{p.name}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </SheetContent>
+      </Sheet>
+
+      {current && current.public_report_token ? (
+        <PreviewModeContext.Provider value={VIEWER_PREVIEW_VALUE}>
+          <TokenReport
+            key={current.public_report_token}
+            token={current.public_report_token}
+            property={current}
+          />
+        </PreviewModeContext.Provider>
+      ) : (
+        <div className="grid min-h-screen place-items-center">
+          <Loader2 className="animate-spin text-muted-foreground" />
+        </div>
+      )}
+    </div>
   );
 }
