@@ -11,10 +11,10 @@ interface RequireAuthProps {
 }
 
 export function RequireAuth({ children, requireRealRole }: RequireAuthProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, roleLoading } = useAuth();
   const { realRole } = usePreviewMode();
 
-  if (loading) {
+  if (loading || (requireRealRole && user && roleLoading)) {
     return (
       <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">
         Loading…
