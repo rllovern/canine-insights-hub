@@ -46,6 +46,10 @@ const App = () => (
                     path="/admin/client-reports"
                     element={<RequireAuth requireRealRole="internal"><AdminClientReports /></RequireAuth>}
                   />
+                  <Route
+                    path="/admin/client-reports/:propertyId"
+                    element={<RequireAuth requireRealRole="internal"><AdminClientReports /></RequireAuth>}
+                  />
 
                   <Route element={<RequireAuth><AppShell /></RequireAuth>}>
                     <Route path="/dashboard" element={<Dashboard />} />
