@@ -17,7 +17,7 @@ export function PublicShell({
         <div className="flex w-full flex-col items-center gap-3 px-4 py-4 sm:px-6 md:grid md:grid-cols-3 md:items-center md:gap-4">
           <div className="flex w-full items-center justify-center md:justify-start">
             <img
-              src={ridgesideLogo}
+              src={property.logo_url || ridgesideLogo}
               alt={property.name}
               className="h-12 w-auto max-w-full object-contain sm:h-14"
             />
