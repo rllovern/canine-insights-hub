@@ -1,4 +1,3 @@
-import { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
 import { DashboardProvider } from "@/contexts/DashboardContext";
@@ -18,11 +17,9 @@ import CallTracking from "@/pages/CallTracking";
 export function TokenReport({
   token,
   property,
-  toolbarLeading,
 }: {
   token: string;
   property: Property;
-  toolbarLeading?: ReactNode;
 }) {
   const fetcher = async (from: string, to: string): Promise<MetricRow[]> => {
     const { data, error } = await supabase.rpc("get_daily_metrics_by_report_token", {
@@ -36,7 +33,7 @@ export function TokenReport({
 
   return (
     <DashboardProvider fetcher={fetcher} fetcherKey={`public:${token}`} enabled={true}>
-      <PublicShell property={property} toolbar={<PublicReportToolbar leading={toolbarLeading} />}>
+      <PublicShell property={property} toolbar={<PublicReportToolbar />}>
         <div className="space-y-8">
           <Dashboard />
           <CallTracking />
