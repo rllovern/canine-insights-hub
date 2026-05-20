@@ -12,7 +12,7 @@ interface PreviewModeContextValue {
   setPreviewing: (v: boolean) => void;
 }
 
-const PreviewModeContext = createContext<PreviewModeContextValue | undefined>(undefined);
+export const PreviewModeContext = createContext<PreviewModeContextValue | undefined>(undefined);
 
 export function PreviewModeProvider({ children }: { children: ReactNode }) {
   const { role } = useAuth();
