@@ -8,6 +8,7 @@ interface AuthCtx {
   session: Session | null;
   role: AppRole | null;
   loading: boolean;
+  roleLoading: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -18,6 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const [roleLoading, setRoleLoading] = useState(false);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
@@ -33,14 +35,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user) { setRole(null); return; }
+    if (!user) { setRole(null); setRoleLoading(false); return; }
+    setRoleLoading(true);
     supabase.from("user_roles").select("role").eq("user_id", user.id).then(({ data }) => {
       setRole(((data?.[0]?.role as AppRole) ?? null));
+      setRoleLoading(false);
     });
   }, [user]);
 
   return (
-    <Ctx.Provider value={{ user, session, role, loading, signOut: async () => { await supabase.auth.signOut(); } }}>
+    <Ctx.Provider value={{ user, session, role, loading, roleLoading, signOut: async () => { await supabase.auth.signOut(); } }}>
       {children}
     </Ctx.Provider>
   );
