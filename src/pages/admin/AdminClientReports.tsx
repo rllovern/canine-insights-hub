@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import Dashboard from "@/pages/Dashboard";
 import CallTracking from "@/pages/CallTracking";
+import { DashboardProvider } from "@/contexts/DashboardContext";
 
 const STORAGE_KEY = "adminClientReports.lastPropertyId";
 
@@ -95,15 +96,15 @@ export default function AdminClientReports() {
   const next = () => setIndex((i) => (i + 1) % properties.length);
 
   return (
-    <div className="space-y-4">
-      {/* Internal-only control bar */}
-      <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2.5">
+    <div className="min-h-screen bg-background">
+      {/* Internal-only control bar — sticky at the top of the standalone window */}
+      <div className="sticky top-0 z-30 border-b border-primary/30 bg-primary/5 backdrop-blur px-4 py-2 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-medium text-primary">
             <Eye className="size-3.5" />
             <span className="uppercase tracking-wider">Internal preview</span>
             <span className="text-muted-foreground normal-case tracking-normal">
-              · Clients do not see this page
+              · Clients do not see this window
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -140,14 +141,14 @@ export default function AdminClientReports() {
 
       {/* Pixel-identical public report view (forced viewer role) */}
       <PreviewModeContext.Provider value={VIEWER_PREVIEW_VALUE}>
-        <div className="rounded-lg border border-border overflow-hidden">
+        <DashboardProvider>
           <PublicShell property={current} toolbar={<PublicReportToolbar />}>
             <div className="space-y-8">
               <Dashboard />
               <CallTracking />
             </div>
           </PublicShell>
-        </div>
+        </DashboardProvider>
       </PreviewModeContext.Provider>
     </div>
   );
