@@ -1,53 +1,51 @@
-# Fix Client Reports Route + Add Drawer Shell
+# Tidy Property Actions + Add Sync Now, Delete, Cron Control
 
-## Step 1 — Fix the redirect bug
+## Goals
 
-Right now `/admin/client-reports` opens, auth finishes loading while the user's role is still `null`, and `RequireAuth` redirects to `/dashboard` before the role resolves.
+1. Declutter the Actions column on the Properties table.
+2. Add a "Sync now" action that triggers Google Ads (and CTM if connected) for that property on demand.
+3. Allow deleting a property from the Edit dialog.
+4. Expose the global sync cron schedule in Settings so it can be changed.
 
-- `src/contexts/AuthContext.tsx` — add a separate `roleLoading` flag. It starts `true` whenever there is a user and flips to `false` only after `user_roles` returns. While there is no user, `roleLoading` is `false`.
-- `src/components/RequireAuth.tsx` — when `requireRealRole` is set, keep showing the loading state while `roleLoading` is true. Only redirect after the real role is known.
+## Changes
 
-No other auth behavior changes.
+### Properties table — collapse Actions into a dropdown
 
-## Step 2 — Build the navigation shell around the existing token report
+Replace the row of inline icon buttons with a single overflow menu (three-dot button) per row. The menu contains:
 
-The main report area renders the **existing** `TokenReport` component unchanged — same component, same data path (`get_daily_metrics_by_report_token`), same look the client sees at `/report/:token`. The client-facing report files are not edited.
+- Open public report (new tab)
+- Copy share link
+- Regenerate share link
+- CTM connection
+- Sync now (runs Google Ads + CTM for that property)
+- Edit property
+- Delete property (red, with confirmation)
 
-New shell on top of it at `/admin/client-reports`:
+The token preview (`/report/xxxxxxxx…`) stays under the cell so it's still scannable.
 
-- Top bar (overlaid above the report):
-  - Hamburger button (left) — opens a left-side drawer
-  - Back arrow (next to hamburger) — navigates to `/dashboard`
-- Drawer (closed by default):
-  - Lists all properties from `properties` where `is_active = true` and `public_report_token IS NOT NULL`, ordered by name
-  - Clicking a property loads that property's token report in the main area and closes the drawer
-- Default selection: first property in the list (or last selected, persisted in `localStorage`)
-- Selected property is reflected in the URL: `/admin/client-reports/:propertyId`
+### Sync now (per property)
 
-```text
-+-----------------------------------------------+
-| [hamburger] [back to dashboard]               |
-+-----------------------------------------------+
-|                                               |
-|         TokenReport (unchanged)               |
-|                                               |
-+-----------------------------------------------+
+New handler: invoke `sync-google-ads` and, if CTM is connected, `sync-ctm` for the selected property over the last 30 days. Show a single toast summarising what was written. Spinner on the menu item while running.
 
-[hamburger click] ->
-+----------------+
-| Clients        |
-|  Ridgeside …   |
-|  Other client  |
-+----------------+
-```
+### Edit dialog — delete property
+
+Add a destructive "Delete property" button at the bottom-left of the Edit dialog footer. Confirmation step (type the property name to confirm). Deletes from `properties` (cascading rows are not changed here — same behavior as today's manual delete in the DB).
+
+### Settings — cron schedule
+
+Add a "Automatic sync schedule" card to `/admin/settings`:
+
+- Read the current cron expression and active state from `cron.job` for the `scheduled-sync-all` job via a new SECURITY DEFINER RPC (`get_sync_cron_schedule`) restricted to `internal` role.
+- Allow editing the expression with quick presets (Every hour, Every 3 hours, Every 6 hours — current, Every 12 hours, Every 24 hours, Custom) and an Active toggle.
+- Save via a new SECURITY DEFINER RPC (`set_sync_cron_schedule(_schedule text, _active boolean)`) that calls `cron.alter_job` and is restricted to `internal` role.
+
+No edit to the existing `scheduled-sync-all` function or to the cron command itself — only schedule/active flag are tunable from the UI.
 
 ## Technical details
 
-Source of truth: `public.properties` (column `public_report_token`). Same query already in `AdminClientReports.tsx`.
-
 Edits:
-- `src/contexts/AuthContext.tsx` — add `roleLoading` to context value.
-- `src/components/RequireAuth.tsx` — gate role-required redirects on `!roleLoading`.
-- `src/pages/admin/AdminClientReports.tsx` — replace current shadcn `Sidebar` shell with: a small top bar (hamburger + back-arrow buttons) and a shadcn `Sheet` (left side) acting as the drawer with the property list. Keep the existing `TokenReport` render block (and the `PreviewModeContext` viewer override) exactly as it is. Keep the `/admin/client-reports/:propertyId` route + `localStorage` persistence.
+- `src/pages/admin/AdminProperties.tsx` — replace inline action icons with a `DropdownMenu` per row; add `syncNow` (Google Ads + CTM) and delete confirmation handling.
+- `src/pages/admin/AdminSettings.tsx` — build the cron schedule card.
+- New migration: two SECURITY DEFINER functions (`get_sync_cron_schedule`, `set_sync_cron_schedule`) gated on `has_role(auth.uid(), 'internal')`, plus the `cron.alter_job` call inside the setter.
 
-No database changes. No edits to `TokenReport.tsx`, `PublicShell.tsx`, `PublicReportToolbar.tsx`, `Dashboard.tsx`, `CallTracking.tsx`, or any client-facing report code.
+No other backend or report-side changes.
