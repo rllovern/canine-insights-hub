@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { BrandMark } from "@/components/brand/BrandMark";
@@ -49,6 +49,9 @@ export function Sidebar() {
             <div className="px-2 mt-5 mb-2 text-[10px] uppercase tracking-wider text-sidebar-foreground/55 font-semibold">Admin</div>
             <NavLink to="/admin/properties" className={({isActive}) => cn("relative flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-sidebar-primary" : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground")}>
               <Users className="size-4" /> Clients
+            </NavLink>
+            <NavLink to="/admin/client-reports" className={({isActive}) => cn("relative flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-sidebar-primary" : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground")}>
+              <FileSearch className="size-4" /> Client Reports
             </NavLink>
             <NavLink to="/admin/users" className={({isActive}) => cn("relative flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-sidebar-primary" : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground")}>
               <Users className="size-4" /> Users
