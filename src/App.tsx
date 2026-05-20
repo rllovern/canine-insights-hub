@@ -17,6 +17,7 @@ import Assistant from "./pages/Assistant";
 import AdminProperties from "./pages/admin/AdminProperties";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminClientReports from "./pages/admin/AdminClientReports";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PreviewModeProvider } from "./contexts/PreviewModeContext";
 import { PropertyProvider } from "./contexts/PropertyContext";
@@ -52,6 +53,10 @@ const App = () => (
                     <Route
                       path="/admin/properties"
                       element={<RequireAuth requireRealRole="internal"><AdminProperties /></RequireAuth>}
+                    />
+                    <Route
+                      path="/admin/client-reports"
+                      element={<RequireAuth requireRealRole="internal"><AdminClientReports /></RequireAuth>}
                     />
                     <Route
                       path="/admin/users"
