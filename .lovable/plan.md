@@ -1,36 +1,53 @@
-# Fix Client Reports Opening to Dashboard
+# Fix Client Reports Route + Add Drawer Shell
 
-Clicking **Client Reports** should open the standalone internal report browser, not redirect to `/dashboard`.
+## Step 1 — Fix the redirect bug
 
-## What will change
+Right now `/admin/client-reports` opens, auth finishes loading while the user's role is still `null`, and `RequireAuth` redirects to `/dashboard` before the role resolves.
 
-- Keep the existing **Client Reports** sidebar link opening in a new tab.
-- Fix the route guard so `/admin/client-reports` waits for the user’s real role to finish loading before deciding whether to allow access.
-- Prevent the current false redirect where the new tab briefly sees the role as empty/null and sends the user to `/dashboard`.
-- Keep the current standalone report page experience:
-  - collapsible client/property sidebar
-  - property list only
-  - selected property opens the same token-style report the client sees
-  - back arrow returns to the internal dashboard
+- `src/contexts/AuthContext.tsx` — add a separate `roleLoading` flag. It starts `true` whenever there is a user and flips to `false` only after `user_roles` returns. While there is no user, `roleLoading` is `false`.
+- `src/components/RequireAuth.tsx` — when `requireRealRole` is set, keep showing the loading state while `roleLoading` is true. Only redirect after the real role is known.
 
-## Result
+No other auth behavior changes.
+
+## Step 2 — Build the navigation shell around the existing token report
+
+The main report area renders the **existing** `TokenReport` component unchanged — same component, same data path (`get_daily_metrics_by_report_token`), same look the client sees at `/report/:token`. The client-facing report files are not edited.
+
+New shell on top of it at `/admin/client-reports`:
+
+- Top bar (overlaid above the report):
+  - Hamburger button (left) — opens a left-side drawer
+  - Back arrow (next to hamburger) — navigates to `/dashboard`
+- Drawer (closed by default):
+  - Lists all properties from `properties` where `is_active = true` and `public_report_token IS NOT NULL`, ordered by name
+  - Clicking a property loads that property's token report in the main area and closes the drawer
+- Default selection: first property in the list (or last selected, persisted in `localStorage`)
+- Selected property is reflected in the URL: `/admin/client-reports/:propertyId`
 
 ```text
-Click Client Reports
-        ↓
-New tab opens /admin/client-reports
-        ↓
-Auth + role finish loading
-        ↓
-Internal users stay on the client report browser
-        ↓
-Non-internal users are still blocked safely
++-----------------------------------------------+
+| [hamburger] [back to dashboard]               |
++-----------------------------------------------+
+|                                               |
+|         TokenReport (unchanged)               |
+|                                               |
++-----------------------------------------------+
+
+[hamburger click] ->
++----------------+
+| Clients        |
+|  Ridgeside …   |
+|  Other client  |
++----------------+
 ```
 
 ## Technical details
 
-Edits:
-- `src/contexts/AuthContext.tsx` — track role-loading state separately or keep auth loading active until the authenticated user’s role has resolved.
-- `src/components/RequireAuth.tsx` — when `requireRealRole` is set, show the loading state until the real role is known instead of redirecting while it is still `null`.
+Source of truth: `public.properties` (column `public_report_token`). Same query already in `AdminClientReports.tsx`.
 
-No database changes. No sidebar redesign. No report layout changes.
+Edits:
+- `src/contexts/AuthContext.tsx` — add `roleLoading` to context value.
+- `src/components/RequireAuth.tsx` — gate role-required redirects on `!roleLoading`.
+- `src/pages/admin/AdminClientReports.tsx` — replace current shadcn `Sidebar` shell with: a small top bar (hamburger + back-arrow buttons) and a shadcn `Sheet` (left side) acting as the drawer with the property list. Keep the existing `TokenReport` render block (and the `PreviewModeContext` viewer override) exactly as it is. Keep the `/admin/client-reports/:propertyId` route + `localStorage` persistence.
+
+No database changes. No edits to `TokenReport.tsx`, `PublicShell.tsx`, `PublicReportToolbar.tsx`, `Dashboard.tsx`, `CallTracking.tsx`, or any client-facing report code.
