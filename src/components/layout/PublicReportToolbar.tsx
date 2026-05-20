@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "@/contexts/DashboardContext";
 
-export function PublicReportToolbar() {
+export function PublicReportToolbar({ leading }: { leading?: React.ReactNode } = {}) {
   const {
     range, setRange, rangePreset, setRangePreset,
     compareMode, setCompareMode, compareRange, setCompareRange,
@@ -20,6 +20,7 @@ export function PublicReportToolbar() {
 
   return (
     <div className="flex items-center gap-2">
+      {leading}
       <Select value={rangePreset} onValueChange={(v) => setRangePreset(v as any)}>
         <SelectTrigger className="h-9 w-36 text-xs">
           <SelectValue />
