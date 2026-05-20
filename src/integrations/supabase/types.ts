@@ -628,6 +628,14 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_sync_cron_schedule: {
+        Args: never
+        Returns: {
+          active: boolean
+          jobid: number
+          schedule: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -698,6 +706,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      set_sync_cron_schedule: {
+        Args: { _active: boolean; _schedule: string }
+        Returns: undefined
       }
       viewer_can_access: {
         Args: { _property_id: string; _user_id: string }
