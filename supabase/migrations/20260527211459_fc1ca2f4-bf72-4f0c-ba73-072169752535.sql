@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Self insert internal via invite (app-enforced)" ON public.user_roles;

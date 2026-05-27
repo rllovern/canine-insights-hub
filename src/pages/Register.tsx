@@ -7,8 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-const INVITE_CODE = "ridgeside-internal-2026";
-
 export default function Register() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -18,8 +16,8 @@ export default function Register() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.trim() !== INVITE_CODE) {
-      toast.error("Invalid invite code. Internal access requires a valid code.");
+    if (!code.trim()) {
+      toast.error("Invite code is required.");
       return;
     }
     setLoading(true);
@@ -34,15 +32,22 @@ export default function Register() {
       return;
     }
 
-    // Insert internal role for the new user
-    if (data.user) {
-      const { error: roleErr } = await supabase
-        .from("user_roles")
-        .insert({ user_id: data.user.id, role: "internal" });
-      if (roleErr) {
-        console.error(roleErr);
-        toast.error("Account created, but failed to assign internal role. Contact admin.");
+    // Validate invite code and assign role server-side (RLS no longer allows
+    // clients to self-grant internal access).
+    if (data.user && data.session) {
+      const { data: grantData, error: grantErr } = await supabase.functions.invoke(
+        "grant-internal-role",
+        { body: { invite_code: code.trim() } },
+      );
+      if (grantErr || (grantData as any)?.error) {
+        const msg = (grantData as any)?.error ?? grantErr?.message ?? "unknown";
+        setLoading(false);
+        toast.error(`Account created, but role grant failed: ${msg}`);
+        return;
       }
+    } else if (data.user && !data.session) {
+      // Email confirmation required — role grant must happen after first login.
+      toast.info("Check your email to confirm your address, then log in to finish setup.");
     }
 
     setLoading(false);
