@@ -1,40 +1,43 @@
-# Reuse MCC + CTM accounts across multiple properties
+## Security fixes
 
-## Goal
-Let the same Google Ads (MCC) customer **and** the same CTM sub-account be attached to more than one property — so spend / call data can be blended into multiple client reports.
+### 1. Disable public registration (replaces invite-code flow)
+- Delete `src/pages/Register.tsx` and remove its route from `src/App.tsx`.
+- Remove the "Create account" link from `src/pages/Login.tsx`.
+- Delete the `supabase/functions/grant-internal-role` edge function (no longer needed).
+- Call `configure_auth` with `disable_signup: true` so the API also refuses signups.
+- New internal users will be created by you directly (insert into `user_roles` via the admin UI or DB).
 
-## Today's behavior
-- DB already permits it: `property_data_sources` is unique on `(property_id, source)` only, not on `external_account_id`. So the same MCC customer can technically link to many properties.
-- The MCC Import dialog actively **blocks** it: rows that are already linked are auto-unchecked and labeled "already linked", with no way to attach the same customer to another property.
-- There is **no agency-style picker for CTM**. CTM is only configurable per-property by manually entering `account_id` + `api_token` + `api_secret` in `CTMConnectionDialog`. There's no "Import from CTM agency" flow even though `list-ctm-accounts` already exists.
+### 2. Drop the privilege-escalation RLS policy
+Migration:
+```sql
+DROP POLICY IF EXISTS "Self insert internal via invite (app-enforced)" ON public.user_roles;
+```
+(Already done in a prior migration — re-asserted defensively.)
 
-## Changes
+### 3. Add auth to `ai-assistant` edge function
+At the top of `supabase/functions/ai-assistant/index.ts`:
+- Require `Authorization: Bearer …` header.
+- Validate via `supabase.auth.getClaims(token)`; return 401 if invalid.
+- Keep CORS headers on all responses.
 
-### 1. MCC Import — allow reuse
-`src/components/data/MCCImportDialog.tsx`
-- Stop auto-unchecking already-linked rows. Default-checked stays `false` for linked rows (to avoid accidental dupes), but the checkbox is enabled.
-- Replace the "already linked" warning with the **list of property names** it's currently attached to (small muted text), so the user knows what they're blending with.
-- Keep the upsert as-is (`onConflict: "property_id,source"`) — that already permits the same `external_account_id` on a different property because the conflict key doesn't include it.
-- Adjust the loader to fetch `properties.name` joined to `property_data_sources` so we can show names per linked customer.
+### 4. Add auth to on-demand sync functions
+For `sync-google-ads`, `sync-ctm`, `sync-ga4`, `sync-keyword-com`:
+- Require Bearer JWT.
+- Verify user via anon-key user client.
+- Check `has_role(user.id, 'internal')` via RPC; return 403 if not internal.
+- Service-role client still used for the actual DB writes.
 
-### 2. CTM Import dialog (new) — parallel to MCC
-New file `src/components/data/CTMImportDialog.tsx`
-- Same UX shape as MCCImportDialog: list sub-accounts from `list-ctm-accounts`, allow "Create new property" or "Attach to existing" per row, multi-select, show which properties each sub-account is already linked to, and allow reuse across properties.
-- On import, upsert a `property_data_sources` row with `source: "ctm"`, `external_account_id: <ctm sub-account id>`, `is_connected: true`, `status: "connected"`, and `config: { account_id: <id>, account_name: <name>, use_agency_credentials: true }`.
+### 5. Protect `scheduled-sync-all`
+- Require `Authorization: Bearer $CRON_SECRET` header.
+- Add new secret `CRON_SECRET` (I'll prompt for it — generate any strong random string).
+- Update the pg_cron job command to send that header.
 
-`src/pages/admin/AdminProperties.tsx`
-- Add an "Import from CTM" trigger next to the existing "Import from MCC" button, wired to the new dialog.
+### 6. SECURITY DEFINER advisories
+- `get_public_report_token` / `get_public_report_token_url` and the `public_report_*` / `get_*_by_report_token` functions are intentionally callable by `anon` (that's how tokenized public reports work). Mark these two scanner findings as **ignored** with explanation, and update security memory to record the accepted risk.
 
-### 3. sync-ctm — fall back to agency credentials
-`supabase/functions/sync-ctm/index.ts`
-- When a property's CTM `config` lacks `api_token`/`api_secret` (or has `use_agency_credentials: true`), use the agency-level `CTM_API_ACCESS_KEY` + `CTM_API_SECRET_KEY` secrets (the same ones `list-ctm-accounts` already uses) and the `account_id` stored in `config.account_id` / `external_account_id`.
-- Per-property tokens, when present, still take precedence (don't break existing manually-configured properties).
+### 7. `property_data_sources` viewer-no-access warning
+- Confirmed intentional (refresh tokens must stay internal-only). Mark as ignored; note in security memory.
 
-### 4. CTM per-property dialog — small note
-`src/components/data/CTMConnectionDialog.tsx`
-- When the source was attached via the agency import (no per-property tokens, `use_agency_credentials: true`), show a small badge: "Using agency CTM credentials". Token/secret fields remain optional overrides.
-
-## Out of scope
-- No schema migration (the existing unique constraint already allows reuse).
-- No change to `sync-google-ads` — it already uses the agency MCC refresh token + `external_account_id` from the row, so multi-property attach works as-is.
-- No change to billing/spend math — each property gets its own daily_metrics rows keyed on `(property_id, date, ad_source, campaign)`, so attaching the same customer to two properties produces duplicate metrics in each report, which is the intended "blend" behavior.
+### Technical notes
+- `disable_signup: true` blocks `auth.signUp` API calls platform-wide. To add a new internal user afterwards: create the auth user from the Cloud Users panel, then insert `(user_id, 'internal')` into `user_roles`.
+- `CRON_SECRET` will be stored as a Supabase secret; the cron job SQL will be updated via migration to include `headers := '{"Authorization":"Bearer …"}'::jsonb` in the `net.http_post` call.
