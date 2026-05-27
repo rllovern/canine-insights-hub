@@ -306,6 +306,11 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger, open
             <div className="flex items-center gap-1.5 font-medium">
               <CheckCircle2 className="h-3.5 w-3.5 text-success" />
               Connected{cfg.account_name ? ` to ${cfg.account_name}` : ""}
+              {(cfg as any).use_agency_credentials && (
+                <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                  Agency credentials
+                </span>
+              )}
             </div>
             <div className="mt-1 text-muted-foreground">
               Last synced {new Date(source.last_synced_at).toLocaleString()}
@@ -320,11 +325,22 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger, open
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ctm-token">API Token (Access Key)</Label>
-            <Input id="ctm-token" value={apiToken} onChange={(e) => setApiToken(e.target.value)} />
+            <Input
+              id="ctm-token"
+              value={apiToken}
+              onChange={(e) => setApiToken(e.target.value)}
+              placeholder={(cfg as any).use_agency_credentials ? "Using agency credentials (override here)" : ""}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ctm-secret">API Secret</Label>
-            <Input id="ctm-secret" type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} />
+            <Input
+              id="ctm-secret"
+              type="password"
+              value={apiSecret}
+              onChange={(e) => setApiSecret(e.target.value)}
+              placeholder={(cfg as any).use_agency_credentials ? "Using agency credentials (override here)" : ""}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ctm-filter">Tracking number filter (optional)</Label>
