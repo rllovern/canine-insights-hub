@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/data/EmptyState";
 import { CTMConnectionDialog } from "@/components/data/CTMConnectionDialog";
 import { MCCImportDialog } from "@/components/data/MCCImportDialog";
+import { CTMImportDialog } from "@/components/data/CTMImportDialog";
 
 function PropertyDialog({
   initial,
@@ -374,6 +375,16 @@ export default function AdminProperties() {
                 <Button variant="outline" size="sm">
                   <Download className="mr-1.5 h-4 w-4" />
                   Import from MCC
+                </Button>
+              }
+            />
+            <CTMImportDialog
+              properties={rows}
+              onImported={load}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Download className="mr-1.5 h-4 w-4" />
+                  Import from CTM
                 </Button>
               }
             />

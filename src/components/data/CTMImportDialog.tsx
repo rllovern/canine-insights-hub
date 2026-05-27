@@ -11,22 +11,20 @@ import { Property } from "@/lib/types";
 import { generateReportToken, slugify } from "@/lib/tokens";
 import { toast } from "sonner";
 
-type MccCustomer = {
-  customer_id: string;
+type CtmAccount = {
+  account_id: string;
   name: string;
-  currency: string;
   status: string;
 };
 
 type RowState = {
   selected: boolean;
-  // "new" => create a fresh property, otherwise an existing property id to attach to
-  target: string;
+  target: string; // "new" or property id
   slug: string;
   name: string;
 };
 
-export function MCCImportDialog({
+export function CTMImportDialog({
   properties,
   onImported,
   trigger,
@@ -38,27 +36,25 @@ export function MCCImportDialog({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [customers, setCustomers] = useState<MccCustomer[]>([]);
+  const [accounts, setAccounts] = useState<CtmAccount[]>([]);
   const [linkedMap, setLinkedMap] = useState<Map<string, string[]>>(new Map());
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [filter, setFilter] = useState("");
-  const [mccId, setMccId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const [{ data, error }, srcs] = await Promise.all([
-        supabase.functions.invoke("list-mcc-customers", { body: {} }),
+        supabase.functions.invoke("list-ctm-accounts", { body: {} }),
         supabase
           .from("property_data_sources")
           .select("property_id, source, external_account_id, is_connected, properties(name)"),
       ]);
       if (error) throw error;
-      const list: MccCustomer[] = (data as any)?.customers ?? [];
-      setMccId((data as any)?.mcc_id ?? null);
+      const list: CtmAccount[] = (data as any)?.accounts ?? [];
       const linked = new Map<string, string[]>();
       (srcs.data ?? []).forEach((s: any) => {
-        if (s.source !== "google_ads" || !s.external_account_id) return;
+        if (s.source !== "ctm" || !s.external_account_id) return;
         const key = String(s.external_account_id);
         const name = s.properties?.name ?? "(unknown)";
         const arr = linked.get(key) ?? [];
@@ -66,22 +62,22 @@ export function MCCImportDialog({
         linked.set(key, arr);
       });
       setLinkedMap(linked);
-      setCustomers(list);
+      setAccounts(list);
       const init: Record<string, RowState> = {};
       list.forEach((c) => {
         const existing = properties.find(
           (p) => slugify(p.name) === slugify(c.name) || p.slug === slugify(c.name),
         );
-        init[c.customer_id] = {
-          selected: !linked.has(c.customer_id),
+        init[c.account_id] = {
+          selected: !linked.has(c.account_id),
           target: existing ? existing.id : "new",
-          slug: slugify(c.name).slice(0, 60) || `mcc-${c.customer_id}`,
+          slug: slugify(c.name).slice(0, 60) || `ctm-${c.account_id}`,
           name: c.name,
         };
       });
       setRows(init);
     } catch (e: any) {
-      toast.error(`Failed to load MCC customers: ${e?.message ?? "unknown"}`);
+      toast.error(`Failed to load CTM accounts: ${e?.message ?? "unknown"}`);
     } finally {
       setLoading(false);
     }
@@ -95,10 +91,10 @@ export function MCCImportDialog({
   const updateRow = (id: string, patch: Partial<RowState>) =>
     setRows((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
 
-  const visible = customers.filter((c) => {
+  const visible = accounts.filter((c) => {
     if (!filter.trim()) return true;
     const q = filter.toLowerCase();
-    return c.name.toLowerCase().includes(q) || c.customer_id.includes(q);
+    return c.name.toLowerCase().includes(q) || c.account_id.includes(q);
   });
 
   const selectedCount = Object.values(rows).filter((r) => r.selected).length;
@@ -108,8 +104,8 @@ export function MCCImportDialog({
     let created = 0;
     let attached = 0;
     let failed = 0;
-    for (const c of customers) {
-      const r = rows[c.customer_id];
+    for (const c of accounts) {
+      const r = rows[c.account_id];
       if (!r?.selected) continue;
       try {
         let propertyId: string;
@@ -136,17 +132,21 @@ export function MCCImportDialog({
           .upsert(
             {
               property_id: propertyId,
-              source: "google_ads",
+              source: "ctm",
               is_connected: true,
-              external_account_id: c.customer_id,
-              login_customer_id: mccId,
+              external_account_id: c.account_id,
               status: "connected",
+              config: {
+                account_id: c.account_id,
+                account_name: c.name,
+                use_agency_credentials: true,
+              } as never,
             },
             { onConflict: "property_id,source" } as any,
           );
         if (srcErr) throw srcErr;
       } catch (e: any) {
-        console.error("MCC import row failed", c, e);
+        console.error("CTM import row failed", c, e);
         failed++;
       }
     }
@@ -162,18 +162,18 @@ export function MCCImportDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Import from MCC</DialogTitle>
+          <DialogTitle>Import from CTM</DialogTitle>
         </DialogHeader>
 
         <div className="flex items-center justify-between gap-2">
           <Input
-            placeholder="Filter by name or customer ID…"
+            placeholder="Filter by name or account ID…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="max-w-xs"
           />
           <div className="text-xs text-muted-foreground">
-            {loading ? "Loading…" : `${customers.length} customers · ${selectedCount} selected`}
+            {loading ? "Loading…" : `${accounts.length} accounts · ${selectedCount} selected`}
           </div>
         </div>
 
@@ -182,29 +182,29 @@ export function MCCImportDialog({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8"></TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Customer ID</TableHead>
+                <TableHead>Account</TableHead>
+                <TableHead>Account ID</TableHead>
                 <TableHead>Action</TableHead>
                 <TableHead>Slug</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visible.map((c) => {
-                const r = rows[c.customer_id];
+                const r = rows[c.account_id];
                 if (!r) return null;
-                const linkedTo = linkedMap.get(c.customer_id) ?? [];
+                const linkedTo = linkedMap.get(c.account_id) ?? [];
                 return (
-                  <TableRow key={c.customer_id}>
+                  <TableRow key={c.account_id}>
                     <TableCell>
                       <Checkbox
                         checked={r.selected}
-                        onCheckedChange={(v) => updateRow(c.customer_id, { selected: !!v })}
+                        onCheckedChange={(v) => updateRow(c.account_id, { selected: !!v })}
                       />
                     </TableCell>
                     <TableCell>
                       <div className="text-sm font-medium">{c.name}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        {c.currency} · {c.status}
+                        {c.status}
                         {linkedTo.length > 0 && (
                           <span className="ml-1 text-warning">
                             · linked to: {linkedTo.join(", ")}
@@ -212,11 +212,11 @@ export function MCCImportDialog({
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{c.customer_id}</TableCell>
+                    <TableCell className="font-mono text-xs">{c.account_id}</TableCell>
                     <TableCell>
                       <Select
                         value={r.target}
-                        onValueChange={(v) => updateRow(c.customer_id, { target: v })}
+                        onValueChange={(v) => updateRow(c.account_id, { target: v })}
                       >
                         <SelectTrigger className="h-8 w-[220px] text-xs">
                           <SelectValue />
@@ -235,7 +235,7 @@ export function MCCImportDialog({
                       {r.target === "new" ? (
                         <Input
                           value={r.slug}
-                          onChange={(e) => updateRow(c.customer_id, { slug: slugify(e.target.value) })}
+                          onChange={(e) => updateRow(c.account_id, { slug: slugify(e.target.value) })}
                           className="h-8 w-[180px] text-xs"
                         />
                       ) : (
@@ -262,7 +262,7 @@ export function MCCImportDialog({
             ) : (
               <>
                 <Download className="mr-1.5 h-4 w-4" />
-                Import {selectedCount} customer{selectedCount === 1 ? "" : "s"}
+                Import {selectedCount} account{selectedCount === 1 ? "" : "s"}
               </>
             )}
           </Button>

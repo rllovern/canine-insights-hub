@@ -135,13 +135,18 @@ Deno.serve(async (req) => {
     }
 
     const cfg = (conn.config ?? {}) as Record<string, any>;
-    const accountId = cfg.account_id;
-    const apiToken = cfg.api_token;
-    const apiSecret = cfg.api_secret;
+    const agencyToken = Deno.env.get("CTM_API_ACCESS_KEY") ?? "";
+    const agencySecret = Deno.env.get("CTM_API_SECRET_KEY") ?? "";
+    const useAgency = cfg.use_agency_credentials === true || (!cfg.api_token && !cfg.api_secret);
+    const accountId = cfg.account_id ?? conn.external_account_id;
+    const apiToken = useAgency ? agencyToken : cfg.api_token;
+    const apiSecret = useAgency ? agencySecret : cfg.api_secret;
     const numberFilter: string[] = Array.isArray(cfg.number_filter) ? cfg.number_filter : [];
 
     if (!accountId || !apiToken || !apiSecret) {
-      const msg = "CTM connection missing account_id / api_token / api_secret in config";
+      const msg = useAgency
+        ? "CTM connection missing account_id (or agency CTM_API_ACCESS_KEY/CTM_API_SECRET_KEY not configured)"
+        : "CTM connection missing account_id / api_token / api_secret in config";
       await admin.from("property_data_sources").update({ status: "error", last_error: msg }).eq("id", conn.id);
       return finish("failure", { error: msg }, 400, msg);
     }
