@@ -39,7 +39,7 @@ export function MCCImportDialog({
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [customers, setCustomers] = useState<MccCustomer[]>([]);
-  const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set());
+  const [linkedMap, setLinkedMap] = useState<Map<string, string[]>>(new Map());
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [filter, setFilter] = useState("");
   const [mccId, setMccId] = useState<string | null>(null);
@@ -49,16 +49,23 @@ export function MCCImportDialog({
     try {
       const [{ data, error }, srcs] = await Promise.all([
         supabase.functions.invoke("list-mcc-customers", { body: {} }),
-        supabase.from("property_data_sources").select("property_id, source, external_account_id, is_connected"),
+        supabase
+          .from("property_data_sources")
+          .select("property_id, source, external_account_id, is_connected, properties(name)"),
       ]);
       if (error) throw error;
       const list: MccCustomer[] = (data as any)?.customers ?? [];
       setMccId((data as any)?.mcc_id ?? null);
-      const linked = new Set<string>();
+      const linked = new Map<string, string[]>();
       (srcs.data ?? []).forEach((s: any) => {
-        if (s.source === "google_ads" && s.external_account_id) linked.add(String(s.external_account_id));
+        if (s.source !== "google_ads" || !s.external_account_id) return;
+        const key = String(s.external_account_id);
+        const name = s.properties?.name ?? "(unknown)";
+        const arr = linked.get(key) ?? [];
+        arr.push(name);
+        linked.set(key, arr);
       });
-      setLinkedIds(linked);
+      setLinkedMap(linked);
       setCustomers(list);
       const init: Record<string, RowState> = {};
       list.forEach((c) => {
@@ -185,7 +192,7 @@ export function MCCImportDialog({
               {visible.map((c) => {
                 const r = rows[c.customer_id];
                 if (!r) return null;
-                const alreadyLinked = linkedIds.has(c.customer_id);
+                const linkedTo = linkedMap.get(c.customer_id) ?? [];
                 return (
                   <TableRow key={c.customer_id}>
                     <TableCell>
@@ -198,7 +205,11 @@ export function MCCImportDialog({
                       <div className="text-sm font-medium">{c.name}</div>
                       <div className="text-[11px] text-muted-foreground">
                         {c.currency} · {c.status}
-                        {alreadyLinked && <span className="ml-1 text-warning">· already linked</span>}
+                        {linkedTo.length > 0 && (
+                          <span className="ml-1 text-warning">
+                            · linked to: {linkedTo.join(", ")}
+                          </span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs">{c.customer_id}</TableCell>
