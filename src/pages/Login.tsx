@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { Button } from "@/components/ui/button";
@@ -39,12 +39,6 @@ export default function Login() {
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </Button>
-        <p className="text-center text-xs text-muted-foreground">
-          Have an invite code?{" "}
-          <Link to="/register" className="font-medium text-primary hover:underline">
-            Register
-          </Link>
-        </p>
       </form>
     </AuthShell>
   );
