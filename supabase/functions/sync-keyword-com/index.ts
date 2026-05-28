@@ -34,6 +34,26 @@ Deno.serve(async (req) => {
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
+  // Auth guard: allow service role / CRON_SECRET / internal user JWT
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+  let authorized = false;
+  if (token && (token === SERVICE_KEY || (CRON_SECRET && token === CRON_SECRET))) {
+    authorized = true;
+  } else if (token) {
+    const anon = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!);
+    const { data: claims } = await anon.auth.getClaims(token);
+    const uid = claims?.claims?.sub as string | undefined;
+    if (uid) {
+      const { data: roleRow } = await admin.from("user_roles").select("role").eq("user_id", uid).eq("role", "internal").maybeSingle();
+      if (roleRow) authorized = true;
+    }
+  }
+  if (!authorized) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const { client_id } = body ?? {};
