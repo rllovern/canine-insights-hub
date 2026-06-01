@@ -100,8 +100,8 @@ Deno.serve(async (req) => {
     authorized = true;
   } else if (token) {
     const anon = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!);
-    const { data: claims } = await anon.auth.getClaims(token);
-    const uid = claims?.claims?.sub as string | undefined;
+    const { data: userData } = await anon.auth.getUser(token);
+    const uid = userData?.user?.id as string | undefined;
     if (uid) {
       const { data: roleRow } = await admin.from("user_roles").select("role").eq("user_id", uid).eq("role", "internal").maybeSingle();
       if (roleRow) authorized = true;
