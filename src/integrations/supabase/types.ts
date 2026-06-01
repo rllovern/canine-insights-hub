@@ -509,6 +509,7 @@ export type Database = {
         Args: { _from: string; _property_id: string; _to: string }
         Returns: Json
       }
+      get_cron_secret_v2: { Args: never; Returns: string }
       get_ctm_calls_by_report_token: {
         Args: { _from: string; _to: string; _token: string }
         Returns: {
