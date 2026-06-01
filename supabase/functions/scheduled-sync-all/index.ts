@@ -38,13 +38,8 @@ Deno.serve(async (req) => {
   const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
   let vaultCronSecret = "";
   try {
-    const { data: vaultRow } = await admin
-      .schema("vault" as never)
-      .from("decrypted_secrets" as never)
-      .select("decrypted_secret")
-      .eq("name", "cron_secret_v2")
-      .maybeSingle();
-    vaultCronSecret = (vaultRow as { decrypted_secret?: string } | null)?.decrypted_secret ?? "";
+    const { data: vaultVal } = await admin.rpc("get_cron_secret_v2");
+    vaultCronSecret = typeof vaultVal === "string" ? vaultVal : "";
   } catch (_e) { /* vault lookup optional */ }
   const matchesEnvSecret = !!CRON_SECRET && token === CRON_SECRET;
   const matchesVaultSecret = !!vaultCronSecret && token === vaultCronSecret;
