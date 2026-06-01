@@ -36,7 +36,19 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get("Authorization") ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
-  if (!token || (token !== SERVICE_KEY && (!CRON_SECRET || token !== CRON_SECRET))) {
+  let vaultCronSecret = "";
+  try {
+    const { data: vaultRow } = await admin
+      .schema("vault" as never)
+      .from("decrypted_secrets" as never)
+      .select("decrypted_secret")
+      .eq("name", "cron_secret_v2")
+      .maybeSingle();
+    vaultCronSecret = (vaultRow as { decrypted_secret?: string } | null)?.decrypted_secret ?? "";
+  } catch (_e) { /* vault lookup optional */ }
+  const matchesEnvSecret = !!CRON_SECRET && token === CRON_SECRET;
+  const matchesVaultSecret = !!vaultCronSecret && token === vaultCronSecret;
+  if (!token || (token !== SERVICE_KEY && !matchesEnvSecret && !matchesVaultSecret)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
