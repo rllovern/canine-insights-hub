@@ -1,48 +1,47 @@
-## Problem
+## Diagnosis
 
-RidgesideK9 Winchester and RidgesideK9 NoVA both connect to the same Google Ads customer ID (`9627559898`). Today `sync-google-ads` pulls every campaign's cost into both properties, so cost is duplicated and incorrect. Campaigns in that account are tagged with Google Ads **labels** (e.g. "Winchester", "NoVA") that already identify which property each campaign belongs to.
+The label-filter column is set correctly (`Winchester` / `NoVA`), but the sync still wrote every campaign — both NOVA-named and Winchester-named campaigns landed in both properties. That tells us the GAQL `label.name = '<filter>'` lookup is not narrowing the campaign list. Most likely root cause: the Google Ads labels in customer `9627559898` are not literally spelled `Winchester` / `NoVA`. GAQL label-name matching is exact and case-sensitive, so a label spelled `WIN`, `Win-Property`, `RSK9 Winchester`, `nova`, etc. won't match.
 
-## Goal
+We need to (1) see what labels actually exist on that account, (2) set the correct filter strings, and (3) make the sync fail loudly when a filter matches zero campaigns so this can't silently fall back to pulling everything.
 
-Each property's Google Ads sync should only ingest cost/impressions/clicks from campaigns whose Google Ads labels match a configured value for that property.
+## Step 1 — Add a labels lookup edge function
 
-- Winchester property → campaigns labeled `Winchester`
-- NoVA property → campaigns labeled `NoVA`
-- Properties without a label filter keep current behavior (pull all campaigns).
+New function `supabase/functions/list-google-ads-labels/index.ts` (internal-only, JWT-validated like `list-mcc-customers`). Takes `{ property_id }`, uses that connection's refresh token + customer id, runs:
 
-## Changes
+```
+SELECT label.id, label.name, label.resource_name
+FROM label
+```
 
-### 1. Store the label filter per connection
-Add a `campaign_label_filter text` column to `public.property_data_sources` (nullable). Backfill the two RidgesideK9 rows:
+and
 
-- Winchester (`property_data_sources.id` where property = RidgesideK9 Winchester) → `Winchester`
-- NoVA (property = RidgesideK9 - NoVA) → `NoVA`
+```
+SELECT label.name, campaign.id, campaign.name
+FROM campaign_label
+```
 
-### 2. Update `supabase/functions/sync-google-ads/index.ts`
+Returns a JSON list of labels and the campaigns each one is attached to. This is read-only.
 
-- Read `conn.campaign_label_filter`.
-- If set, fetch the matching campaign IDs first via GAQL on the `campaign_label` resource:
+## Step 2 — Surface the result so you can pick
 
-  ```
-  SELECT campaign.id, label.name
-  FROM campaign_label
-  WHERE label.name = '<filter>'
-  ```
+Call the new function from the Admin → Properties page for the two RidgesideK9 connections (a small "View labels" button next to the Google Ads row, internal-only). It opens a dialog showing every label name and the campaigns under it so you can confirm the exact spelling.
 
-  Build an allowlist of campaign IDs.
-- Modify the existing metrics GAQL to add `AND campaign.id IN (<ids>)` when an allowlist exists. If the allowlist is empty, skip the metrics call and write zero rows (and log a warning into `last_error` so it's visible in Settings).
-- Aggregation/upsert logic stays the same. The non-destructive merge with CTM/GA4 columns is unchanged.
+## Step 3 — Update the stored filter values
 
-### 3. Admin UI (Settings → property data sources)
-Add an optional "Campaign label filter" text input to the Google Ads connection row so internal users can set/change the value without a DB edit. Saving updates `property_data_sources.campaign_label_filter`. Empty = no filter (current behavior).
+Once we know the exact label names, update `property_data_sources.campaign_label_filter` for both properties.
 
-### 4. Backfill historical data
-After deploy, trigger a manual re-sync for both Winchester and NoVA over the affected date range (May 28 → today). The merge-upsert path will overwrite the bad cost values with the label-scoped totals while preserving call/lead columns.
+## Step 4 — Harden the sync to never silently pull everything
+
+In `sync-google-ads/index.ts`:
+
+- If `campaign_label_filter` is set but the label query returns zero campaigns, mark the connection `status='error'` with `last_error='label "<x>" matched 0 campaigns'`, write nothing, and return 400. (Today it returns 200 with 0 rows, which looks like success.)
+- Also write `last_error='label filter active: <n> campaigns'` (as info) on success so we can confirm the filter applied. Or log the matched IDs to function logs so they're visible in `edge_function_logs`.
+- Defensive: trim whitespace on the filter before sending to GAQL.
+
+## Step 5 — Re-run the backfill
+
+Delete the bad Google PPC rows for the two properties from `2026-05-28` onward, then re-trigger `sync-google-ads` for each over that date range with the corrected filter. The merge-upsert preserves CTM/GA4 columns.
 
 ## Out of scope
-- No changes to GA4, CTM, or Keyword.com syncs.
-- No schema change to `daily_metrics`.
-
-## Technical notes
-- GAQL label filter uses the `campaign_label` resource, not a `WHERE label.name` clause on `campaign` (Google Ads API rejects that). Two-query approach (labels → ids → metrics) is the standard pattern.
-- `campaign.id` values are returned as strings; cast/serialize as quoted list in the `IN (...)` clause.
+- No schema changes; the column already exists.
+- No changes to other sync functions, dashboards, or report views.
