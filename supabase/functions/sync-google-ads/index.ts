@@ -106,6 +106,48 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      "developer-token": Deno.env.get("GOOGLE_ADS_DEVELOPER_TOKEN")!,
+      "Content-Type": "application/json",
+    };
+    if (conn.login_customer_id) headers["login-customer-id"] = conn.login_customer_id;
+
+    const url = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${conn.external_account_id}/googleAds:searchStream`;
+
+    // If this connection is scoped to a Google Ads label (e.g. for shared
+    // ad accounts), resolve matching campaign IDs first and restrict the
+    // metrics query to those campaigns only.
+    let campaignIdAllowlist: string[] | null = null;
+    const labelFilter: string | null = (conn as any).campaign_label_filter ?? null;
+    if (labelFilter && labelFilter.trim()) {
+      const escaped = labelFilter.replace(/'/g, "\\'");
+      const labelGaql = `SELECT campaign.id, label.name FROM campaign_label WHERE label.name = '${escaped}'`;
+      const labelRes = await fetch(url, { method: "POST", headers, body: JSON.stringify({ query: labelGaql }) });
+      const labelJson = await labelRes.json();
+      if (!labelRes.ok) {
+        await admin.from("property_data_sources").update({ status: "error", last_error: JSON.stringify(labelJson).slice(0, 1000) }).eq("id", conn.id);
+        return new Response(JSON.stringify({ error: "google ads label query error", detail: labelJson }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const labelChunks = Array.isArray(labelJson) ? labelJson : [labelJson];
+      const ids = new Set<string>();
+      for (const chunk of labelChunks) {
+        for (const r of chunk.results ?? []) {
+          const cid = r.campaign?.id;
+          if (cid) ids.add(String(cid));
+        }
+      }
+      campaignIdAllowlist = Array.from(ids);
+      if (campaignIdAllowlist.length === 0) {
+        await admin.from("property_data_sources").update({
+          status: "connected",
+          last_synced_at: new Date().toISOString(),
+          last_error: `no campaigns found for label "${labelFilter}"`,
+        }).eq("id", conn.id);
+        return new Response(JSON.stringify({ ok: true, written: 0, range: { from, to }, note: `no campaigns matched label ${labelFilter}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
     const gaql = `
       SELECT
         segments.date,
@@ -116,16 +158,9 @@ Deno.serve(async (req) => {
         metrics.conversions
       FROM campaign
       WHERE segments.date BETWEEN '${from}' AND '${to}'
+      ${campaignIdAllowlist ? `AND campaign.id IN (${campaignIdAllowlist.join(",")})` : ""}
     `;
 
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${accessToken}`,
-      "developer-token": Deno.env.get("GOOGLE_ADS_DEVELOPER_TOKEN")!,
-      "Content-Type": "application/json",
-    };
-    if (conn.login_customer_id) headers["login-customer-id"] = conn.login_customer_id;
-
-    const url = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${conn.external_account_id}/googleAds:searchStream`;
     const adsRes = await fetch(url, { method: "POST", headers, body: JSON.stringify({ query: gaql }) });
     const adsJson = await adsRes.json();
     if (!adsRes.ok) {
