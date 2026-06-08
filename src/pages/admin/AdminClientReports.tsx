@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, Menu, Building2 } from "lucide-react";
+import { ArrowLeft, Loader2, Menu, Building2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
 import { useProperties } from "@/contexts/PropertyContext";
 import { PreviewModeContext } from "@/contexts/PreviewModeContext";
 import { TokenReport } from "@/components/reports/TokenReport";
+import { exportNodeToPdf } from "@/lib/exportPdf";
+import { toast } from "sonner";
+import { format } from "date-fns";
 import {
   Sheet,
   SheetContent,
@@ -32,6 +35,8 @@ export default function AdminClientReports() {
   const { setActiveProperty } = useProperties();
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const captureRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     supabase
@@ -87,6 +92,22 @@ export default function AdminClientReports() {
     if (id !== propertyId) navigate(`/admin/client-reports/${id}`);
   };
 
+  const handleDownload = async () => {
+    if (!captureRef.current || !current) return;
+    setDownloading(true);
+    try {
+      const safeName = current.name.replace(/[^a-z0-9-_ ]/gi, "").trim();
+      const filename = `${safeName} - Performance Report - ${format(new Date(), "yyyy-MM-dd")}.pdf`;
+      await exportNodeToPdf(captureRef.current, filename);
+      toast.success("PDF downloaded");
+    } catch (err) {
+      console.error("PDF export failed", err);
+      toast.error("Failed to generate PDF");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="relative min-h-screen w-full">
       {/* Floating top-left controls overlaid on the report */}
@@ -106,6 +127,24 @@ export default function AdminClientReports() {
           className="grid h-9 w-9 place-items-center rounded-md border border-border bg-background/90 text-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-accent-foreground transition-colors"
         >
           <ArrowLeft className="size-4" />
+        </button>
+      </div>
+
+      {/* Floating top-right download button */}
+      <div className="fixed right-3 top-3 z-50">
+        <button
+          onClick={handleDownload}
+          disabled={downloading || !current}
+          title="Download PDF"
+          aria-label="Download PDF"
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background/90 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {downloading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Download className="size-4" />
+          )}
+          <span>{downloading ? "Generating…" : "Download PDF"}</span>
         </button>
       </div>
 
@@ -140,6 +179,7 @@ export default function AdminClientReports() {
       {current && current.public_report_token ? (
         <PreviewModeContext.Provider value={VIEWER_PREVIEW_VALUE}>
           <TokenReport
+            ref={captureRef}
             key={current.public_report_token}
             token={current.public_report_token}
             property={current}
