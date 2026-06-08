@@ -130,24 +130,6 @@ export default function AdminClientReports() {
         </button>
       </div>
 
-      {/* Floating top-right download button */}
-      <div className="fixed right-3 top-3 z-50">
-        <button
-          onClick={handleDownload}
-          disabled={downloading || !current}
-          title="Download PDF"
-          aria-label="Download PDF"
-          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background/90 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {downloading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Download className="size-4" />
-          )}
-          <span>{downloading ? "Generating…" : "Download PDF"}</span>
-        </button>
-      </div>
-
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
         <SheetContent side="left" className="w-72 p-0">
           <SheetHeader className="border-b px-4 py-4">
@@ -183,6 +165,23 @@ export default function AdminClientReports() {
             key={current.public_report_token}
             token={current.public_report_token}
             property={current}
+            toolbarExtras={
+              <button
+                onClick={handleDownload}
+                disabled={downloading}
+                title="Download PDF"
+                aria-label="Download PDF"
+                data-html2canvas-ignore="true"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {downloading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+                <span>{downloading ? "Generating…" : "Download PDF"}</span>
+              </button>
+            }
           />
         </PreviewModeContext.Provider>
       ) : (
