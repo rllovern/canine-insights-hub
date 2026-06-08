@@ -323,6 +323,7 @@ export type Database = {
       }
       property_data_sources: {
         Row: {
+          campaign_label_filter: string | null
           config: Json | null
           external_account_id: string | null
           id: string
@@ -337,6 +338,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          campaign_label_filter?: string | null
           config?: Json | null
           external_account_id?: string | null
           id?: string
@@ -351,6 +353,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          campaign_label_filter?: string | null
           config?: Json | null
           external_account_id?: string | null
           id?: string

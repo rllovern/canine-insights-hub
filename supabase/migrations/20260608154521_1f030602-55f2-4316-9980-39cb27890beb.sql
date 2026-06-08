@@ -1,0 +1,1 @@
+ALTER TABLE public.property_data_sources ADD COLUMN IF NOT EXISTS campaign_label_filter text;

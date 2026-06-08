@@ -1,46 +1,48 @@
+## Problem
+
+RidgesideK9 Winchester and RidgesideK9 NoVA both connect to the same Google Ads customer ID (`9627559898`). Today `sync-google-ads` pulls every campaign's cost into both properties, so cost is duplicated and incorrect. Campaigns in that account are tagged with Google Ads **labels** (e.g. "Winchester", "NoVA") that already identify which property each campaign belongs to.
+
 ## Goal
 
-Add a "Download PDF" button at the top of the admin-side client report view (`/admin/client-reports/:propertyId`) that, when clicked, generates and downloads a PDF of the currently rendered report (header + dashboard + call tracking) for the active date range.
+Each property's Google Ads sync should only ingest cost/impressions/clicks from campaigns whose Google Ads labels match a configured value for that property.
 
-## Where the button goes
+- Winchester property → campaigns labeled `Winchester`
+- NoVA property → campaigns labeled `NoVA`
+- Properties without a label filter keep current behavior (pull all campaigns).
 
-The admin view already renders a floating top-left toolbar (hamburger + back). We'll add a third floating button on the top-right of the screen labeled "Download PDF" (icon + text), visible only on the admin route — not on the public `/report/:token` view. The button stays out of the captured area so it doesn't appear in the PDF.
+## Changes
 
-## How the PDF is generated
+### 1. Store the label filter per connection
+Add a `campaign_label_filter text` column to `public.property_data_sources` (nullable). Backfill the two RidgesideK9 rows:
 
-Client-side capture, no backend changes:
+- Winchester (`property_data_sources.id` where property = RidgesideK9 Winchester) → `Winchester`
+- NoVA (property = RidgesideK9 - NoVA) → `NoVA`
 
-1. Install `html2canvas` and `jspdf`.
-2. Wrap the report content (`PublicShell` subtree inside `TokenReport`) in a ref-targeted container so we can capture it.
-3. On click:
-   - Show a small "Generating…" toast / spinner state on the button (disabled during capture).
-   - Temporarily ensure the container is fully expanded (the report is already a normal scroll page — html2canvas captures the full element height regardless of viewport).
-   - `html2canvas(node, { scale: 2, backgroundColor: <bg from theme>, useCORS: true })`.
-   - Slice the resulting canvas into letter-size pages and add each as an image to a `jsPDF` (portrait, letter, with small margins).
-   - Save as `{property.name} - Performance Report - {fromDate}_{toDate}.pdf`.
+### 2. Update `supabase/functions/sync-google-ads/index.ts`
 
-## Implementation steps
+- Read `conn.campaign_label_filter`.
+- If set, fetch the matching campaign IDs first via GAQL on the `campaign_label` resource:
 
-1. **Dependencies**: `bun add html2canvas jspdf`.
-2. **New util** `src/lib/exportPdf.ts` — `exportNodeToPdf(node: HTMLElement, filename: string)` containing the html2canvas + jsPDF logic and page slicing.
-3. **TokenReport**: accept an optional `captureRef?: React.RefObject<HTMLDivElement>` prop and attach it to a wrapper `<div ref={captureRef}>` around the `PublicShell`. Default behavior unchanged for the public route.
-4. **AdminClientReports**:
-   - Create a `captureRef` and pass it to `TokenReport`.
-   - Add a floating top-right "Download PDF" button (same styling family as the existing floating controls) with `Download` lucide icon.
-   - On click: read the active date range from the dashboard context — to keep this simple, the filename will use today's date plus the property name; the PDF content always reflects whatever range is currently selected because we capture the live DOM.
-   - Disable the button while generating; show a sonner toast on success/failure.
+  ```
+  SELECT campaign.id, label.name
+  FROM campaign_label
+  WHERE label.name = '<filter>'
+  ```
+
+  Build an allowlist of campaign IDs.
+- Modify the existing metrics GAQL to add `AND campaign.id IN (<ids>)` when an allowlist exists. If the allowlist is empty, skip the metrics call and write zero rows (and log a warning into `last_error` so it's visible in Settings).
+- Aggregation/upsert logic stays the same. The non-destructive merge with CTM/GA4 columns is unchanged.
+
+### 3. Admin UI (Settings → property data sources)
+Add an optional "Campaign label filter" text input to the Google Ads connection row so internal users can set/change the value without a DB edit. Saving updates `property_data_sources.campaign_label_filter`. Empty = no filter (current behavior).
+
+### 4. Backfill historical data
+After deploy, trigger a manual re-sync for both Winchester and NoVA over the affected date range (May 28 → today). The merge-upsert path will overwrite the bad cost values with the label-scoped totals while preserving call/lead columns.
+
+## Out of scope
+- No changes to GA4, CTM, or Keyword.com syncs.
+- No schema change to `daily_metrics`.
 
 ## Technical notes
-
-- The report uses dark theme tokens — pass `backgroundColor: getComputedStyle(document.body).backgroundColor` to html2canvas to avoid transparent gaps.
-- Charts are rendered with Recharts (SVG) — html2canvas handles SVG; we'll set `scale: 2` for sharper output.
-- Page slicing: compute `pageHeightPx = (canvas.width * 11) / 8.5`, then loop adding cropped slices to jsPDF pages.
-- Button is rendered outside the captured node, so it won't appear in the PDF.
-- No changes to the public `/report/:token` page.
-
-## Files touched
-
-- `package.json` (deps)
-- `src/lib/exportPdf.ts` (new)
-- `src/components/reports/TokenReport.tsx` (forward capture ref)
-- `src/pages/admin/AdminClientReports.tsx` (button + ref + handler)
+- GAQL label filter uses the `campaign_label` resource, not a `WHERE label.name` clause on `campaign` (Google Ads API rejects that). Two-query approach (labels → ids → metrics) is the standard pattern.
+- `campaign.id` values are returned as strings; cast/serialize as quoted list in the `IN (...)` clause.
