@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
 import { DashboardProvider } from "@/contexts/DashboardContext";
@@ -15,8 +15,10 @@ import CallTracking from "@/pages/CallTracking";
  *  - /admin/client-reports  (internal, with a client switcher injected
  *    via the toolbar `leading` slot)
  */
-export const TokenReport = forwardRef<HTMLDivElement, { token: string; property: Property }>(
-  function TokenReport({ token, property }, ref) {
+export const TokenReport = forwardRef<
+  HTMLDivElement,
+  { token: string; property: Property; toolbarExtras?: ReactNode }
+>(function TokenReport({ token, property, toolbarExtras }, ref) {
   const fetcher = async (from: string, to: string): Promise<MetricRow[]> => {
     const { data, error } = await supabase.rpc("get_daily_metrics_by_report_token", {
       _token: token,
@@ -30,7 +32,15 @@ export const TokenReport = forwardRef<HTMLDivElement, { token: string; property:
   return (
     <DashboardProvider fetcher={fetcher} fetcherKey={`public:${token}`} enabled={true}>
       <div ref={ref}>
-        <PublicShell property={property} toolbar={<PublicReportToolbar />}>
+        <PublicShell
+          property={property}
+          toolbar={
+            <>
+              <PublicReportToolbar />
+              {toolbarExtras}
+            </>
+          }
+        >
           <div className="space-y-8">
             <Dashboard />
             <CallTracking />
