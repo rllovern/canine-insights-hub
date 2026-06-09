@@ -29,7 +29,7 @@ export function PublicReportToolbar() {
           <SelectItem value="7">Last 7 days</SelectItem>
           <SelectItem value="30">Last 30 days</SelectItem>
           <SelectItem value="90">Last 90 days</SelectItem>
-          {rangePreset === "custom" && <SelectItem value="custom">Custom</SelectItem>}
+          <SelectItem value="custom">Custom</SelectItem>
         </SelectContent>
       </Select>
 
@@ -48,9 +48,13 @@ export function PublicReportToolbar() {
             defaultMonth={range.from}
             selected={{ from: range.from, to: range.to }}
             onSelect={(r) => {
-              if (r?.from && r?.to) {
+              if (!r?.from) return;
+              if (r.from && r.to && r.from.getTime() !== r.to.getTime()) {
                 setRange({ from: r.from, to: r.to });
                 setOpenRange(false);
+              } else if (r.from) {
+                // first click: stage the start date but keep the popover open
+                setRange({ from: r.from, to: r.from });
               }
             }}
             numberOfMonths={2}
