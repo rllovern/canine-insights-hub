@@ -1,4 +1,5 @@
-import { forwardRef, type ReactNode } from "react";
+import { forwardRef, useMemo, type ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
 import { DashboardProvider } from "@/contexts/DashboardContext";
@@ -29,8 +30,27 @@ export const TokenReport = forwardRef<
     return (data ?? []) as unknown as MetricRow[];
   };
 
+  // Local QueryClient so the tokenized report view does NOT auto-refetch on
+  // window focus / reconnect. The toolbar state lives in DashboardProvider and
+  // is preserved across the user's session — we don't want the page to feel
+  // like it's "refreshing" while a client is reviewing.
+  const queryClient = useMemo(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
+            staleTime: 5 * 60 * 1000,
+          },
+        },
+      }),
+    [token]
+  );
+
   return (
-    <DashboardProvider fetcher={fetcher} fetcherKey={`public:${token}`} enabled={true}>
+    <QueryClientProvider client={queryClient}>
+      <DashboardProvider fetcher={fetcher} fetcherKey={`public:${token}`} enabled={true}>
       <div ref={ref}>
         <PublicShell
           property={property}
@@ -47,6 +67,7 @@ export const TokenReport = forwardRef<
           </div>
         </PublicShell>
       </div>
-    </DashboardProvider>
+      </DashboardProvider>
+    </QueryClientProvider>
   );
 });

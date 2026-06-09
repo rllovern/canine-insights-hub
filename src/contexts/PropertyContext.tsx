@@ -21,10 +21,10 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [activeProperty, setActivePropertyState] = useState<Property | null>(null);
 
-  const setActiveProperty = (p: Property | null) => {
+  const setActiveProperty = useCallback((p: Property | null) => {
     setActivePropertyState(p);
     if (p) localStorage.setItem("activePropertyId", p.id);
-  };
+  }, []);
 
   const load = useCallback(async () => {
     if (!user) {
