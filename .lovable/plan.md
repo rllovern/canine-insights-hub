@@ -1,47 +1,46 @@
-## Diagnosis
+# Fix: tokenized report resets to "This month" while viewing
 
-The label-filter column is set correctly (`Winchester` / `NoVA`), but the sync still wrote every campaign — both NOVA-named and Winchester-named campaigns landed in both properties. That tells us the GAQL `label.name = '<filter>'` lookup is not narrowing the campaign list. Most likely root cause: the Google Ads labels in customer `9627559898` are not literally spelled `Winchester` / `NoVA`. GAQL label-name matching is exact and case-sensitive, so a label spelled `WIN`, `Win-Property`, `RSK9 Winchester`, `nova`, etc. won't match.
+## Problem
 
-We need to (1) see what labels actually exist on that account, (2) set the correct filter strings, and (3) make the sync fail loudly when a filter matches zero campaigns so this can't silently fall back to pulling everything.
+While the user is on `/report/:token` (or `/admin/client-reports/:propertyId`), the page periodically re-renders and the date range selector snaps back to **This Month** (the default), losing any custom range the user picked. This makes longer review sessions impossible.
 
-## Step 1 — Add a labels lookup edge function
+## Root cause
 
-New function `supabase/functions/list-google-ads-labels/index.ts` (internal-only, JWT-validated like `list-mcc-customers`). Takes `{ property_id }`, uses that connection's refresh token + customer id, runs:
+Two overlapping issues cause `DashboardProvider` to either re-mount or be perceived to reset:
 
-```
-SELECT label.id, label.name, label.resource_name
-FROM label
-```
+1. **`PublicReport.tsx`** re-runs its property-loading `useEffect` whenever `setActiveProperty` changes identity. `PropertyProvider` does not memoize `setActiveProperty`, so every render of `PropertyProvider` creates a new function reference. Anything that re-renders `PropertyProvider` (Supabase auth token auto-refresh firing `onAuthStateChange`, `user` state churn, role loads, etc.) re-runs the effect → re-fetches the property → calls `setProperty(new object)` → flips the active property in `PropertyContext` → cascades another render.
 
-and
+2. **React Query** defaults to `refetchOnWindowFocus: true` and `refetchOnReconnect: true`. When the tab regains focus or network blips, queries refetch — visually appearing as a "refresh" even when state is preserved.
 
-```
-SELECT label.name, campaign.id, campaign.name
-FROM campaign_label
-```
+In combination, on the token-gated pages where the user expects a stable view, the toolbar visibly reverts and data re-flashes.
 
-Returns a JSON list of labels and the campaigns each one is attached to. This is read-only.
+## Fix
 
-## Step 2 — Surface the result so you can pick
+### 1. Stabilize `PropertyContext` callbacks
+File: `src/contexts/PropertyContext.tsx`
+- Wrap `setActiveProperty` in `useCallback` so its identity is stable.
+- (Already `useCallback` for `load`, keep as-is.)
 
-Call the new function from the Admin → Properties page for the two RidgesideK9 connections (a small "View labels" button next to the Google Ads row, internal-only). It opens a dialog showing every label name and the campaigns under it so you can confirm the exact spelling.
+### 2. Stop re-fetching the property on identity churn
+File: `src/pages/PublicReport.tsx`
+- Drop `setActiveProperty` from the `useEffect` dep array (or rely on the now-stable ref). Keep `[token]` only. The property only needs to load when the token changes.
 
-## Step 3 — Update the stored filter values
+### 3. Make the public/token report query stable across focus
+File: `src/components/reports/TokenReport.tsx` (preferred — scope the change to the public/admin token view, don't touch the global QueryClient)
+- Wrap the rendered subtree in a `<QueryClientProvider>` with a local client configured with `refetchOnWindowFocus: false`, `refetchOnReconnect: false`, and a generous `staleTime` (e.g. 5 min). This keeps the rest of the app's refetch behavior unchanged.
 
-Once we know the exact label names, update `property_data_sources.campaign_label_filter` for both properties.
+Alternative (simpler, broader): set those defaults on the shared `queryClient` in `src/App.tsx`. Open question below.
 
-## Step 4 — Harden the sync to never silently pull everything
+### 4. Defensive: ensure `DashboardProvider` never resets state from a prop change
+File: `src/contexts/DashboardContext.tsx`
+- Confirm the only place `setRangePresetState("mtd")` is called is the initial `useState`. No effect resets it. (Current code is fine — no change required, just verifying as part of the fix.)
 
-In `sync-google-ads/index.ts`:
+## Files touched
 
-- If `campaign_label_filter` is set but the label query returns zero campaigns, mark the connection `status='error'` with `last_error='label "<x>" matched 0 campaigns'`, write nothing, and return 400. (Today it returns 200 with 0 rows, which looks like success.)
-- Also write `last_error='label filter active: <n> campaigns'` (as info) on success so we can confirm the filter applied. Or log the matched IDs to function logs so they're visible in `edge_function_logs`.
-- Defensive: trim whitespace on the filter before sending to GAQL.
+- `src/contexts/PropertyContext.tsx` — memoize `setActiveProperty`
+- `src/pages/PublicReport.tsx` — narrow effect deps to `[token]`
+- `src/components/reports/TokenReport.tsx` — local `QueryClient` with focus/reconnect refetch disabled and a longer `staleTime`
 
-## Step 5 — Re-run the backfill
+## Open question
 
-Delete the bad Google PPC rows for the two properties from `2026-05-28` onward, then re-trigger `sync-google-ads` for each over that date range with the corrected filter. The merge-upsert preserves CTM/GA4 columns.
-
-## Out of scope
-- No schema changes; the column already exists.
-- No changes to other sync functions, dashboards, or report views.
+Do you want the "no auto-refresh while viewing" behavior to apply **only to the tokenized report pages** (recommended — keeps internal dashboards fresh), or **everywhere in the app**?

@@ -23,7 +23,11 @@ export default function PublicReport() {
         setActiveProperty(p);
       }
     });
-  }, [token, setActiveProperty]);
+    // Intentionally only re-run when the token changes. setActiveProperty
+    // identity is stable, and we don't want auth/role re-renders to refetch
+    // the property and cascade resets into the dashboard state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   if (error) return <div className="min-h-screen grid place-items-center text-muted-foreground">{error}</div>;
   if (!property || !token) return <div className="min-h-screen grid place-items-center"><Loader2 className="animate-spin" /></div>;
