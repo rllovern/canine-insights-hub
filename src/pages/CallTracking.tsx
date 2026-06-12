@@ -79,15 +79,6 @@ export default function CallTracking() {
 
       <SectionDivider title="Lead Quality" subtitle="Cost-per-acquisition trends by source" />
       <Row>
-        <ChartCard title="Cost / Good Lead" subtitle="Total trend">
-          <SingleLineChart data={series} dataKey="cost_per_good_lead" label="Cost / Good Lead" color="hsl(var(--chart-3))" fmt={(v) => fmtCurrency(v, 0)} />
-        </ChartCard>
-        <ChartCard title="Cost / Good Lead by Source">
-          <MultiLineChart data={cpglBySource.series} sources={cpglBySource.sources} fmt={(v) => fmtCurrency(v, 0)} />
-        </ChartCard>
-      </Row>
-
-      <Row>
         <ChartCard title="Total Good Leads" subtitle="All sources, daily">
           <SingleLineChart data={series} dataKey="good_leads" label="Good Leads" color="hsl(var(--chart-2))" fmt={fmtNumber} />
         </ChartCard>
