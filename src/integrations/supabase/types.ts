@@ -90,6 +90,35 @@ export type Database = {
           },
         ]
       }
+      campaign_labels: {
+        Row: {
+          campaign: string
+          label_name: string
+          property_id: string
+          synced_at: string
+        }
+        Insert: {
+          campaign: string
+          label_name: string
+          property_id: string
+          synced_at?: string
+        }
+        Update: {
+          campaign?: string
+          label_name?: string
+          property_id?: string
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_labels_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ctm_calls: {
         Row: {
           ad_group: string | null

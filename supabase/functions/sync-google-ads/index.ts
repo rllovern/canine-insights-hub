@@ -292,6 +292,40 @@ Deno.serve(async (req) => {
       console.error("campaign_budgets snapshot failed", e);
     }
 
+    // Refresh campaign↔label mapping for Budget Pacing label filtering.
+    try {
+      const labelMapGaql = `
+        SELECT campaign.name, label.name
+        FROM campaign_label
+        WHERE campaign.status != 'REMOVED'
+        ${campaignIdAllowlist ? `AND campaign.id IN (${campaignIdAllowlist.join(",")})` : ""}
+      `;
+      const lmRes = await fetch(url, { method: "POST", headers, body: JSON.stringify({ query: labelMapGaql }) });
+      const lmJson = await lmRes.json();
+      if (lmRes.ok) {
+        const lmChunks = Array.isArray(lmJson) ? lmJson : [lmJson];
+        const labelRows: Array<{ property_id: string; campaign: string; label_name: string }> = [];
+        const seen = new Set<string>();
+        for (const chunk of lmChunks) {
+          for (const r of chunk.results ?? []) {
+            const c = r.campaign?.name;
+            const l = r.label?.name;
+            if (!c || !l) continue;
+            const key = `${c}::${l}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            labelRows.push({ property_id: propertyId, campaign: c, label_name: l });
+          }
+        }
+        await admin.from("campaign_labels").delete().eq("property_id", propertyId);
+        if (labelRows.length) {
+          await admin.from("campaign_labels").insert(labelRows.map((r) => ({ ...r, synced_at: new Date().toISOString() })));
+        }
+      }
+    } catch (e) {
+      console.error("campaign_labels snapshot failed", e);
+    }
+
     return new Response(JSON.stringify({ ok: true, written, range: { from, to } }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
