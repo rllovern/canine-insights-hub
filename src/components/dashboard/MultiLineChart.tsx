@@ -21,6 +21,21 @@ const tooltipStyle = {
 };
 const cursorStyle = { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.6 };
 
+const legendFilter = (payload: any[] = []) => payload.filter((p) => !String(p?.value ?? "").includes("(prev)"));
+const filteredLegendContent = (props: any) => {
+  const items = legendFilter(props?.payload ?? []);
+  return (
+    <ul style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 12, margin: 0, padding: "4px 0 0", listStyle: "none", fontSize: 11, color: "hsl(var(--muted-foreground))" }}>
+      {items.map((it: any, i: number) => (
+        <li key={`${it.value}-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: it.color, display: "inline-block" }} />
+          {it.value}
+        </li>
+      ))}
+    </ul>
+  );
+};
+
 export function MultiLineChart({ data, sources, fmt = (n) => String(n), height = 220, showCompare = false, prevSuffix = "_prev" }: Props) {
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -35,7 +50,7 @@ export function MultiLineChart({ data, sources, fmt = (n) => String(n), height =
           labelFormatter={(l) => fmtDate(l as string)}
           formatter={(v: any, name: any) => [fmt(Number(v)), name]}
         />
-        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} iconType="circle" />
+        <Legend content={filteredLegendContent} />
         {showCompare && sources.map((s) => (
           <Line key={`${s}-prev`} type="monotone" dataKey={`${s}${prevSuffix}`} name={`${s} (prev)`} stroke={SOURCE_COLORS[s] ?? "hsl(var(--chart-7))"} strokeOpacity={0.35} strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={false} legendType="none" isAnimationActive={false} />
         ))}
@@ -65,6 +80,7 @@ export function SingleLineChart({ data, dataKey, label, color = "hsl(var(--chart
           labelFormatter={(l) => fmtDate(l as string)}
           formatter={(v: any, name: any) => [fmt(Number(v)), name === prevLabel ? prevLabel : label]}
         />
+        <Legend content={filteredLegendContent} />
         {showPrev && (
           <Line type="monotone" dataKey={prevKey!} name={prevLabel} stroke={color} strokeOpacity={0.35} strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={false} legendType="none" isAnimationActive={false} />
         )}
