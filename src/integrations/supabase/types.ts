@@ -252,6 +252,118 @@ export type Database = {
           },
         ]
       }
+      ghl_contacts: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          email: string | null
+          first_name: string | null
+          first_response_at: string | null
+          ghl_contact_id: string
+          ghl_created_at: string | null
+          ghl_location_id: string
+          id: string
+          last_name: string | null
+          phone: string | null
+          pipeline_stage: string | null
+          property_id: string
+          raw: Json
+          source: string | null
+          speed_to_lead_seconds: number | null
+          tags: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          email?: string | null
+          first_name?: string | null
+          first_response_at?: string | null
+          ghl_contact_id: string
+          ghl_created_at?: string | null
+          ghl_location_id: string
+          id?: string
+          last_name?: string | null
+          phone?: string | null
+          pipeline_stage?: string | null
+          property_id: string
+          raw?: Json
+          source?: string | null
+          speed_to_lead_seconds?: number | null
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          email?: string | null
+          first_name?: string | null
+          first_response_at?: string | null
+          ghl_contact_id?: string
+          ghl_created_at?: string | null
+          ghl_location_id?: string
+          id?: string
+          last_name?: string | null
+          phone?: string | null
+          pipeline_stage?: string | null
+          property_id?: string
+          raw?: Json
+          source?: string | null
+          speed_to_lead_seconds?: number | null
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_contacts_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ghl_events_raw: {
+        Row: {
+          ghl_location_id: string
+          ghl_object_id: string
+          id: string
+          ingested_at: string
+          object_type: string
+          occurred_at: string | null
+          property_id: string
+          raw: Json
+        }
+        Insert: {
+          ghl_location_id: string
+          ghl_object_id: string
+          id?: string
+          ingested_at?: string
+          object_type: string
+          occurred_at?: string | null
+          property_id: string
+          raw: Json
+        }
+        Update: {
+          ghl_location_id?: string
+          ghl_object_id?: string
+          id?: string
+          ingested_at?: string
+          object_type?: string
+          occurred_at?: string | null
+          property_id?: string
+          raw?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_events_raw_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       keyword_rankings: {
         Row: {
           captured_at: string
@@ -634,6 +746,20 @@ export type Database = {
       ai_assistant_context: {
         Args: { _from: string; _property_id: string; _to: string }
         Returns: Json
+      }
+      get_api_health_summary: {
+        Args: never
+        Returns: {
+          is_connected: boolean
+          last_error_message: string
+          last_failure_at: string
+          last_run_at: string
+          last_run_status: string
+          last_success_at: string
+          property_id: string
+          property_name: string
+          source: string
+        }[]
       }
       get_cron_secret_v2: { Args: never; Returns: string }
       get_ctm_calls_by_report_token: {
