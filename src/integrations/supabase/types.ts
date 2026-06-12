@@ -1712,6 +1712,35 @@ export type Database = {
         Args: { _property_ids: string[] }
         Returns: undefined
       }
+      lead_perf_drill: {
+        Args: {
+          _from: string
+          _issue_type: string
+          _limit?: number
+          _property_ids: string[]
+          _to: string
+        }
+        Returns: {
+          agent_name: string
+          assigned_user_id: string
+          canonical_stage: Database["public"]["Enums"]["ghl_canonical_stage"]
+          contact_id: string
+          contact_name: string
+          email: string
+          first_human_response_at: string
+          ghl_deep_link: string
+          human_attempt_count: number
+          issue_type: string
+          last_activity_at: string
+          lead_created_at: string
+          phone: string
+          property_id: string
+          property_name: string
+          speed_to_lead_seconds: number
+          stage_id: string
+          stage_name: string
+        }[]
+      }
       lead_perf_handling: {
         Args: { _from: string; _property_ids: string[]; _to: string }
         Returns: Json
