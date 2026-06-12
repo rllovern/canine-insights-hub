@@ -108,4 +108,11 @@ Realtime websockets, per-user OAuth, CSV export, lost-reason taxonomy editor, we
 
 ## Status
 
-Directionally approved. Implementation will begin only after the nine-item approval gate above is satisfied.
+Migrations A, B, C are landed.
+- **A** — all new tables + enums + RLS + GRANTs + indexes; `ghl_contacts` extended.
+- **B** — five `lead_perf_*` aggregation functions (speed, handling, pipeline, agents, quality), `anon`-locked.
+- **C** — single `lead_perf_drill(_issue_type, ...)` dispatcher for all 13 drill-in lists.
+
+Next up: backend phase 1 — expand `sync-ghl` to populate users, pipelines+stages, messages (with `response_source` classified at write time), opportunities (+ stage-diff history), appointments (with `appointment_status_raw` + `status_is_derived`), and `ghl_lead_facts`. AI stays bucketed under `automation` for v1. Per-property task sync gated by a toggle, off by default.
+
+Deferred (separate cleanup pass, not blocking this build): tighten the pre-existing `SECURITY DEFINER` linter warnings on legacy public-report and auth helpers.
