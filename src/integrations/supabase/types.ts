@@ -1681,9 +1681,52 @@ export type Database = {
         }
         Returns: boolean
       }
+      lead_perf_agents: {
+        Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: {
+          agent_name: string
+          assigned: number
+          avg_human_attempts: number
+          booked: number
+          booking_rate: number
+          contact_rate: number
+          contacted: number
+          critical_stale_count: number
+          ghl_user_id: string
+          low_sample: boolean
+          median_human_business_seconds: number
+          median_human_raw_seconds: number
+          property_count: number
+          show_rate: number
+          showed: number
+          stale_count: number
+          win_rate: number
+          won: number
+        }[]
+      }
       lead_perf_can_read: {
         Args: { _property_id: string; _user_id: string }
         Returns: boolean
+      }
+      lead_perf_check_access: {
+        Args: { _property_ids: string[] }
+        Returns: undefined
+      }
+      lead_perf_handling: {
+        Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: Json
+      }
+      lead_perf_pipeline: {
+        Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: Json
+      }
+      lead_perf_quality: {
+        Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: Json
+      }
+      lead_perf_speed: {
+        Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: Json
       }
       public_ai_assistant_context: {
         Args: { _from: string; _to: string; _token: string }
