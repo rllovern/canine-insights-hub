@@ -1,87 +1,103 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { KpiTile } from "./KpiTile";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatNum, DrillIssue, WINDOW_TOOLTIP } from "@/lib/leadPerf";
+import { formatNum, formatPct, DrillIssue, WINDOW_TOOLTIP, pctOf, ofDenom } from "@/lib/leadPerf";
+import { SpeedData, HandlingData } from "./hooks";
 
-type Handling = {
-  new: number; assigned: number; contacted: number; engaged: number;
-  avg_human_attempts: number; avg_automation_touches: number; avg_ai_touches: number; avg_total_touches: number;
-  leads_zero_human_attempts: number; leads_one_human_attempt: number; leads_three_plus_attempts: number;
-  stale_count: number; critical_stale_count: number;
-  stale_after_hours: number; critical_stale_after_hours: number;
-};
-
-export function LeadHandling({
-  propertyIds, from, to, onDrill,
-}: {
-  propertyIds: string[] | null; from: Date; to: Date;
-  onDrill: (issue: DrillIssue) => void;
-}) {
-  const [data, setData] = useState<Handling | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    (async () => {
-      const { data } = await supabase.rpc("lead_perf_handling", {
-        _property_ids: propertyIds, _from: from.toISOString(), _to: to.toISOString(),
-      });
-      setData((data ?? null) as unknown as Handling | null);
-      setLoading(false);
-    })();
-  }, [propertyIds, from, to]);
-
-  if (loading) return <Skel />;
-  if (!data) return null;
-
+function SubGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <KpiTile label="New leads" value={formatNum(data.new)} tooltip={WINDOW_TOOLTIP} />
-      <KpiTile
-        label="Unassigned"
-        value={formatNum(data.new - data.assigned)}
-        sub={`${formatNum(data.assigned)} assigned`}
-        tone={data.new - data.assigned > 0 ? "warn" : "good"}
-        onClick={() => onDrill("unassigned")}
-      />
-      <KpiTile
-        label="Zero human attempts"
-        value={formatNum(data.leads_zero_human_attempts)}
-        sub={`${formatNum(data.leads_one_human_attempt)} with one attempt`}
-        tone={data.leads_zero_human_attempts > 0 ? "warn" : "good"}
-        onClick={() => onDrill("never_responded")}
-      />
-      <KpiTile
-        label="3+ attempts"
-        value={formatNum(data.leads_three_plus_attempts)}
-        sub="leads worked persistently"
-        tone="good"
-      />
-      <KpiTile label="Avg human attempts" value={data.avg_human_attempts.toFixed(2)} />
-      <KpiTile label="Avg automation touches" value={data.avg_automation_touches.toFixed(2)} />
-      <KpiTile
-        label="Stale"
-        value={formatNum(data.stale_count)}
-        sub={`no human activity > ${data.stale_after_hours}h`}
-        tone={data.stale_count > 0 ? "warn" : "good"}
-        onClick={() => onDrill("stale")}
-      />
-      <KpiTile
-        label="Critical stale"
-        value={formatNum(data.critical_stale_count)}
-        sub={`> ${data.critical_stale_after_hours}h`}
-        tone={data.critical_stale_count > 0 ? "bad" : "good"}
-        onClick={() => onDrill("critical_stale")}
-      />
+    <div className="space-y-2">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80 pl-1">{title}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{children}</div>
     </div>
   );
 }
 
-function Skel() {
+export function LeadHandling({
+  speed, handling, loading, onDrill,
+}: {
+  speed: SpeedData | null;
+  handling: HandlingData | null;
+  loading: boolean;
+  onDrill: (issue: DrillIssue) => void;
+}) {
+  if (loading || !handling || !speed) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {Array.from({ length: 9 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}
+      </div>
+    );
+  }
+
+  const total = handling.new || 0;
+  const unassigned = Math.max(0, total - handling.assigned);
+  const zero = handling.leads_zero_human_attempts;
+  const one = handling.leads_one_human_attempt;
+  const threePlus = handling.leads_three_plus_attempts;
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}
+    <div className="space-y-4">
+      <SubGroup title="Lead Ownership">
+        <KpiTile label="New Leads" value={formatNum(total)} sub="In selected window" tooltip={WINDOW_TOOLTIP} />
+        <KpiTile
+          label="Assigned Leads"
+          value={formatNum(handling.assigned)}
+          sub={`${formatPct(pctOf(handling.assigned, total))} of new leads`}
+          tone={handling.assigned === total ? "good" : "default"}
+        />
+        <KpiTile
+          label="Unassigned Leads"
+          value={formatNum(unassigned)}
+          sub={`${formatPct(pctOf(unassigned, total))} of new leads`}
+          tone={unassigned === 0 ? "good" : unassigned > total * 0.5 ? "bad" : "warn"}
+          onClick={() => onDrill("unassigned")}
+        />
+      </SubGroup>
+
+      <SubGroup title="Human Follow-Up">
+        <KpiTile
+          label="Zero Human Attempts"
+          value={formatNum(zero)}
+          sub={`${formatPct(pctOf(zero, total))} of leads — ${formatNum(one)} got one attempt`}
+          tone={zero === 0 ? "good" : zero > total * 0.5 ? "bad" : "warn"}
+          onClick={() => onDrill("never_responded")}
+        />
+        <KpiTile
+          label="Avg Human Attempts"
+          value={Number(handling.avg_human_attempts).toFixed(2)}
+          sub="Outbound human messages per lead"
+        />
+        <KpiTile
+          label="Worked 3+ Times"
+          value={formatNum(threePlus)}
+          sub={`${formatPct(pctOf(threePlus, total))} of leads worked persistently`}
+          tone={threePlus > 0 ? "good" : "default"}
+        />
+      </SubGroup>
+
+      <SubGroup title="Stale Leads">
+        <KpiTile
+          label={`Stale >${handling.stale_after_hours}h`}
+          value={formatNum(handling.stale_count)}
+          sub={`${formatPct(pctOf(handling.stale_count, total))} of leads — no human activity`}
+          tone={handling.stale_count === 0 ? "good" : "warn"}
+          onClick={() => onDrill("stale")}
+        />
+        <KpiTile
+          label={`Critical Stale >${handling.critical_stale_after_hours}h`}
+          value={formatNum(handling.critical_stale_count)}
+          sub={`${formatPct(pctOf(handling.critical_stale_count, total))} of leads — escalate`}
+          tone={handling.critical_stale_count === 0 ? "good" : "bad"}
+          onClick={() => onDrill("critical_stale")}
+        />
+        <KpiTile
+          label="Currently Waiting"
+          value={formatNum(speed.currently_waiting)}
+          sub={`Open leads, last ${speed.active_window_days}d, no human reply yet`}
+          tone={speed.currently_waiting === 0 ? "good" : "warn"}
+          onClick={() => onDrill("currently_waiting")}
+          tooltip="Operational queue: leads currently sitting unanswered by a human."
+        />
+      </SubGroup>
     </div>
   );
 }
