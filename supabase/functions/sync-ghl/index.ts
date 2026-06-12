@@ -60,6 +60,26 @@ async function ghl(path: string, token: string, params: Record<string, string | 
   return (await res.json()) as Json;
 }
 
+async function ghlPostJson(path: string, token: string, body: Json) {
+  const res = await fetch(GHL_BASE + path, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Version: GHL_VERSION,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new GhlError(path, res.status, text);
+  try { return JSON.parse(text) as Json; } catch { return {}; }
+}
+
+function contactList(payload: Json) {
+  return ((payload.contacts ?? payload.results ?? payload.data ?? []) as Json[]);
+}
+
 async function ghlPostForm(path: string, token: string, body: Record<string, string>) {
   const res = await fetch(GHL_BASE + path, {
     method: "POST",
@@ -181,7 +201,7 @@ Deno.serve(async (req) => {
 
   // ---- Preflight: confirm token + scope + location access ----
   try {
-    await ghl("/contacts/", locationToken, { locationId, limit: 1 });
+    await ghlPostJson("/contacts/search", locationToken, { locationId, pageLimit: 1 });
   } catch (e) {
     const msg = e instanceof GhlError ? friendlyGhlError(e) : (e instanceof Error ? e.message : String(e));
     console.error("sync-ghl preflight failed", msg);
@@ -203,12 +223,12 @@ Deno.serve(async (req) => {
   try {
     let page = 1;
     while (page < 50) {
-      const res = await ghl("/contacts/", locationToken, {
+      const res = await ghlPostJson("/contacts/search", locationToken, {
         locationId,
-        limit: 100,
+        pageLimit: 100,
         page,
       });
-      const list = (res.contacts as Json[]) ?? [];
+      const list = contactList(res);
       if (!list.length) break;
       contacts.push(...list);
       if (list.length < 100) break;
