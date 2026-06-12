@@ -74,7 +74,7 @@ async function ghlFetch(method: string, path: string, token: string, body?: Json
 // ---------- Classification ------------------------------------------
 // Returns one of: human | automation | system | unknown.
 // AI is bucketed under 'automation' for v1.
-function classifyMessage(m: Json): "human" | "automation" | "system" | "unknown" {
+function classifyMessage(m: Json): "human" | "automation" | "system" | "customer" | "unknown" {
   const dir = String(m.direction ?? "").toLowerCase();
   const mt = String(m.messageType ?? "").toUpperCase();
   const src = String(m.source ?? "").toLowerCase();
@@ -83,9 +83,10 @@ function classifyMessage(m: Json): "human" | "automation" | "system" | "unknown"
   // Activity rows (created/assigned/note system events) are system, not a response.
   if (mt.startsWith("TYPE_ACTIVITY")) return "system";
 
-  // Inbound messages are not a response — leave classification as 'unknown'
-  // (aggregations only count outbound rows for KPIs).
-  if (dir && dir !== "outbound") return "unknown";
+  // Inbound messages come from the lead/customer themselves.
+  // KPI aggregations only count outbound rows, but classifying these as
+  // 'customer' (instead of 'unknown') keeps the drift signal clean.
+  if (dir && dir !== "outbound") return "customer";
 
   // Outbound automation surfaces
   if (src === "workflow" || src === "campaign" || src === "bulk_actions") return "automation";
