@@ -84,7 +84,9 @@ export function OperationsBreakdown({
                   {showCat ? r.category : ""}
                 </td>
                 <td className="px-2 py-1.5 text-muted-foreground">{r.metric}</td>
-                <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{formatNum(typeof r.value === "number" ? r.value : Number(r.value))}{typeof r.value === "string" && r.value.includes(".") ? "" : ""}</td>
+                <td className="px-2 py-1.5 text-right font-semibold tabular-nums">
+                  {typeof r.value === "number" ? formatNum(r.value) : r.value}
+                </td>
                 <td className="px-3 py-1.5 text-right">
                   <StatusPill status={r.status} />
                 </td>
