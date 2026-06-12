@@ -18,6 +18,9 @@ import AdminProperties from "./pages/admin/AdminProperties";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminClientReports from "./pages/admin/AdminClientReports";
+import AdminPipelineMapping from "./pages/admin/AdminPipelineMapping";
+import AdminSlaSettings from "./pages/admin/AdminSlaSettings";
+import LeadPerformance from "./pages/LeadPerformance";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PreviewModeProvider } from "./contexts/PreviewModeContext";
 import { PropertyProvider } from "./contexts/PropertyContext";
@@ -58,9 +61,18 @@ const App = () => (
                     <Route path="/assistant" element={<Assistant />} />
                     <Route path="/reports" element={<Reports />} />
                     <Route path="/budget" element={<RequireAuth requireRealRole="internal"><BudgetPacing /></RequireAuth>} />
+                    <Route path="/lead-performance" element={<LeadPerformance />} />
                     <Route
                       path="/admin/properties"
                       element={<RequireAuth requireRealRole="internal"><AdminProperties /></RequireAuth>}
+                    />
+                    <Route
+                      path="/admin/pipeline-mapping"
+                      element={<RequireAuth requireRealRole="internal"><AdminPipelineMapping /></RequireAuth>}
+                    />
+                    <Route
+                      path="/admin/sla-settings"
+                      element={<RequireAuth requireRealRole="internal"><AdminSlaSettings /></RequireAuth>}
                     />
                     <Route
                       path="/admin/users"
