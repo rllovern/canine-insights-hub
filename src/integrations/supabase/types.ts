@@ -558,6 +558,24 @@ export type Database = {
           },
         ]
       }
+      user_nav_preferences: {
+        Row: {
+          order_keys: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          order_keys?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          order_keys?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

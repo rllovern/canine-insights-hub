@@ -1,38 +1,45 @@
-## Two fixes for Budget Pacing
+## Drag-to-reorder sidebar nav
 
-### 1. Inline cells should look like plain text
+Make every nav link in the sidebar draggable so each user can arrange them in any order. Order persists per user in the database and follows them across devices. Analytics and Admin items can be mixed into one combined list.
 
-Remove the bordered input look on Budget, Campaign Label, and Notes cells. They should render as normal table text. Clicking a cell turns it into an editable input; blurring (or pressing Enter) saves and reverts to plain text. Same behavior, cleaner look — no more colored boxes around every cell.
+### Behavior
+- Click-and-hold on any nav item → drag to a new slot → release to drop.
+- A subtle drop indicator (1px line in `--sidebar-primary`) shows where the item will land.
+- The active route highlight, icons, and labels stay the same — only position changes.
+- Sign-out, brand mark, and user card are not draggable.
+- Section headers ("Analytics" / "Admin") are removed since items can now mix freely; only internal users still see Admin-only items, but they appear inline in the user's chosen order.
 
-Implementation: small `EditableCell` / `EditableNumberCell` component that toggles between a `<span>` and an `<Input>` on click. Uses `bg-transparent border-0 px-0 focus-visible:ring-0` for the in-edit state so it blends with the table.
+### Persistence
+- New table `user_nav_preferences`: one row per user holding their ordered list of nav keys.
+- On first load, if no preference exists, use the current default order.
+- Reorder writes the new order back immediately (optimistic UI; revert + toast on failure).
+- Nav items the user doesn't have access to (e.g. Admin items for viewers) are filtered out at render time, but their position is preserved in storage in case the role changes later.
 
-### 2. Campaign Label should match real Google Ads labels
+### Technical details
 
-Today the page does a substring match on `daily_metrics.campaign` name. Switch to using actual Google Ads labels attached to campaigns.
-
-Schema:
-
+Schema (one migration):
 ```sql
-CREATE TABLE public.campaign_labels (
-  property_id uuid NOT NULL REFERENCES public.properties(id) ON DELETE CASCADE,
-  campaign text NOT NULL,        -- campaign name (matches daily_metrics.campaign / campaign_budgets.campaign)
-  label_name text NOT NULL,
-  synced_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (property_id, campaign, label_name)
+CREATE TABLE public.user_nav_preferences (
+  user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  order_keys text[] NOT NULL DEFAULT '{}',
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
--- GRANT + RLS: internal-only read, service role full access.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_nav_preferences TO authenticated;
+GRANT ALL ON public.user_nav_preferences TO service_role;
+ALTER TABLE public.user_nav_preferences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "own row select" ON public.user_nav_preferences FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "own row write"  ON public.user_nav_preferences FOR ALL    TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE TRIGGER user_nav_prefs_updated BEFORE UPDATE ON public.user_nav_preferences FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 ```
 
-`sync-google-ads` extension: after the metrics + budget queries, run
-`SELECT campaign.name, label.name FROM campaign_label WHERE campaign.status != 'REMOVED'`,
-delete + re-insert that property's rows in `campaign_labels`.
+Frontend (`src/components/layout/Sidebar.tsx`):
+- Define a single `NAV_ITEMS` array with `{ key, to, label, icon, requiresInternal }`.
+- Keys: `dashboard`, `calls`, `reports`, `budget`, `clients`, `client-reports`, `users`, `settings`.
+- Load `user_nav_preferences.order_keys` for `auth.uid()` on mount; merge with defaults (any new keys not in saved order go to the end).
+- Filter out items the user can't see based on `effectiveRole`.
+- Use native HTML5 drag-and-drop (`draggable`, `onDragStart/Over/End/Drop`) — no new dependency. Add `cursor-grab` / `active:cursor-grabbing`, and a thin top/bottom indicator on hover during drag.
+- On drop: compute new full key order (including hidden-but-stored keys), `upsert` into `user_nav_preferences`, then update local state.
 
-Frontend:
-- `BudgetPacing.tsx` loads `campaign_labels`, builds a `Map<property_id, Map<label_name_lower, Set<campaign_name>>>`.
-- New helper `matchesLabel(propertyId, campaign, label)`:
-  - If `label` is empty → include all campaigns (unchanged).
-  - Else → include only campaigns in that property's label set. If the label exists in Google Ads but matches nothing, sum is `0`. If we have no label data for the property yet (sync hasn't run), fall back to substring match so existing rows don't break.
-- Use the same logic for `daily_metrics` (Spends, Yesterday, Last 5) and `campaign_budgets` (Active Budget).
-- Help text in the Add dialog updated: "Match Google Ads campaigns that carry this label."
-
-Out of scope: a dropdown of known labels (free text for now); editing labels in Google Ads from this UI.
+Out of scope:
+- A reset-to-default button (can add later if asked).
+- Touch reorder on mobile (mobile uses a separate menu; we'll keep its order linked to the same preference but without drag for now).
