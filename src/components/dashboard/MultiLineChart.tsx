@@ -6,6 +6,8 @@ interface Props {
   sources: string[];
   fmt?: (n: number) => string;
   height?: number;
+  showCompare?: boolean;
+  prevSuffix?: string;
 }
 
 const tickStyle = { fill: "hsl(var(--muted-foreground))", fontSize: 11 };
@@ -19,7 +21,7 @@ const tooltipStyle = {
 };
 const cursorStyle = { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.6 };
 
-export function MultiLineChart({ data, sources, fmt = (n) => String(n), height = 220 }: Props) {
+export function MultiLineChart({ data, sources, fmt = (n) => String(n), height = 220, showCompare = false, prevSuffix = "_prev" }: Props) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
@@ -34,6 +36,9 @@ export function MultiLineChart({ data, sources, fmt = (n) => String(n), height =
           formatter={(v: any, name: any) => [fmt(Number(v)), name]}
         />
         <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} iconType="circle" />
+        {showCompare && sources.map((s) => (
+          <Line key={`${s}-prev`} type="monotone" dataKey={`${s}${prevSuffix}`} name={`${s} (prev)`} stroke={SOURCE_COLORS[s] ?? "hsl(var(--chart-7))"} strokeOpacity={0.35} strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={false} legendType="none" isAnimationActive={false} />
+        ))}
         {sources.map((s) => (
           <Line key={s} type="monotone" dataKey={s} name={s} stroke={SOURCE_COLORS[s] ?? "hsl(var(--chart-7))"} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
         ))}
@@ -42,9 +47,11 @@ export function MultiLineChart({ data, sources, fmt = (n) => String(n), height =
   );
 }
 
-export function SingleLineChart({ data, dataKey, label, color = "hsl(var(--chart-1))", fmt = (n) => String(n), height = 220 }: {
-  data: any[]; dataKey: string; label: string; color?: string; fmt?: (n: number) => string; height?: number;
+export function SingleLineChart({ data, dataKey, label, color = "hsl(var(--chart-1))", fmt = (n) => String(n), height = 220, prevKey, showCompare = false }: {
+  data: any[]; dataKey: string; label: string; color?: string; fmt?: (n: number) => string; height?: number; prevKey?: string; showCompare?: boolean;
 }) {
+  const showPrev = showCompare && !!prevKey;
+  const prevLabel = `${label} (prev)`;
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
@@ -56,8 +63,11 @@ export function SingleLineChart({ data, dataKey, label, color = "hsl(var(--chart
           contentStyle={tooltipStyle}
           labelStyle={{ fontWeight: 600, marginBottom: 2 }}
           labelFormatter={(l) => fmtDate(l as string)}
-          formatter={(v: any) => [fmt(Number(v)), label]}
+          formatter={(v: any, name: any) => [fmt(Number(v)), name === prevLabel ? prevLabel : label]}
         />
+        {showPrev && (
+          <Line type="monotone" dataKey={prevKey!} name={prevLabel} stroke={color} strokeOpacity={0.35} strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={false} legendType="none" isAnimationActive={false} />
+        )}
         <Line type="monotone" dataKey={dataKey} name={label} stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
       </LineChart>
     </ResponsiveContainer>
