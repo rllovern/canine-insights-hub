@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useProperties } from "@/contexts/PropertyContext";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ type BudgetRow = {
 
 type MetricRow = { date: string; campaign: string; cost: number; property_id: string };
 type BudgetSnap = { property_id: string; campaign: string; daily_budget: number; status: string };
+type LabelRow = { property_id: string; campaign: string; label_name: string };
 
 const fmtUSD = (n: number | null | undefined) =>
   n == null || !isFinite(n) ? "—" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n >= 100 ? 0 : 2 });
@@ -73,6 +74,7 @@ export default function BudgetPacing() {
   const [rows, setRows] = useState<BudgetRow[]>([]);
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
   const [budgets, setBudgets] = useState<BudgetSnap[]>([]);
+  const [labels, setLabels] = useState<LabelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -114,8 +116,38 @@ export default function BudgetPacing() {
     })();
   }, []);
 
-  const matchesLabel = (campaign: string, label: string | null) => {
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("campaign_labels").select("property_id, campaign, label_name");
+      setLabels((data ?? []) as LabelRow[]);
+    })();
+  }, []);
+
+  // property_id -> lower(label_name) -> Set<campaign>
+  const labelIndex = useMemo(() => {
+    const m = new Map<string, Map<string, Set<string>>>();
+    const havePropLabels = new Set<string>();
+    for (const l of labels) {
+      havePropLabels.add(l.property_id);
+      let byLabel = m.get(l.property_id);
+      if (!byLabel) { byLabel = new Map(); m.set(l.property_id, byLabel); }
+      const key = l.label_name.toLowerCase();
+      let set = byLabel.get(key);
+      if (!set) { set = new Set(); byLabel.set(key, set); }
+      set.add(l.campaign);
+    }
+    return { m, havePropLabels };
+  }, [labels]);
+
+  const matchesLabel = (propertyId: string, campaign: string, label: string | null) => {
     if (!label || !label.trim()) return true;
+    const byLabel = labelIndex.m.get(propertyId);
+    if (byLabel) {
+      const set = byLabel.get(label.toLowerCase());
+      if (set) return set.has(campaign);
+      return false; // label known scope, no match
+    }
+    // No label data synced yet for this property — fall back to substring match.
     return campaign.toLowerCase().includes(label.toLowerCase());
   };
 
@@ -131,7 +163,7 @@ export default function BudgetPacing() {
 
     return rows.map((r) => {
       const inScope = metrics.filter(
-        (m) => m.property_id === r.property_id && matchesLabel(m.campaign, r.campaign_label),
+        (m) => m.property_id === r.property_id && matchesLabel(r.property_id, m.campaign, r.campaign_label),
       );
       const inMonth = inScope.filter((m) => m.date >= fromISO && m.date <= toIso);
       const spends = inMonth.reduce((a, m) => a + Number(m.cost || 0), 0);
@@ -141,7 +173,7 @@ export default function BudgetPacing() {
       const avgLast5 = last5Total / 5;
 
       const activeBudgetRows = budgets.filter(
-        (b) => b.property_id === r.property_id && b.status === "ENABLED" && matchesLabel(b.campaign, r.campaign_label),
+        (b) => b.property_id === r.property_id && b.status === "ENABLED" && matchesLabel(r.property_id, b.campaign, r.campaign_label),
       );
       const activeBudget = activeBudgetRows.length ? activeBudgetRows.reduce((a, b) => a + Number(b.daily_budget || 0), 0) : null;
 
@@ -152,7 +184,7 @@ export default function BudgetPacing() {
 
       return { row: r, spends, pctSpend, yesterday, activeBudget, targetDaily, projection, projRunRate };
     });
-  }, [rows, metrics, budgets, range]);
+  }, [rows, metrics, budgets, labelIndex, range]);
 
   const updateRow = async (id: string, patch: Partial<BudgetRow>) => {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } as BudgetRow : r)));
@@ -179,6 +211,8 @@ export default function BudgetPacing() {
     }
     const { data } = await supabase.from("campaign_budgets").select("property_id, campaign, daily_budget, status");
     setBudgets((data ?? []) as BudgetSnap[]);
+    const { data: lbl } = await supabase.from("campaign_labels").select("property_id, campaign, label_name");
+    setLabels((lbl ?? []) as LabelRow[]);
     setSyncing(false);
     toast({ title: "Synced", description: `Refreshed budgets for ${ok}/${propsWithGoogle.length} accounts.` });
   };
@@ -237,35 +271,26 @@ export default function BudgetPacing() {
                   <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                   <TableCell className="font-medium">{prop?.name ?? "—"}</TableCell>
                   <TableCell>
-                    <Input
-                      defaultValue={c.row.campaign_label ?? ""}
-                      placeholder="—"
-                      className="h-8"
-                      onBlur={(e) => {
-                        const v = e.target.value.trim() || null;
-                        if (v !== c.row.campaign_label) updateRow(c.row.id, { campaign_label: v });
-                      }}
+                    <EditableText
+                      value={c.row.campaign_label ?? ""}
+                      onSave={(v) => updateRow(c.row.id, { campaign_label: v.trim() || null })}
                     />
                   </TableCell>
                   <TableCell>
-                    <Input
-                      defaultValue={c.row.notes ?? ""}
-                      placeholder="—"
-                      className="h-8"
-                      onBlur={(e) => {
-                        const v = e.target.value.trim() || null;
-                        if (v !== c.row.notes) updateRow(c.row.id, { notes: v });
-                      }}
+                    <EditableText
+                      value={c.row.notes ?? ""}
+                      onSave={(v) => updateRow(c.row.id, { notes: v.trim() || null })}
                     />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      defaultValue={c.row.monthly_budget}
-                      className="h-8 w-28 ml-auto text-right"
-                      onBlur={(e) => {
-                        const v = Number(e.target.value);
-                        if (v !== Number(c.row.monthly_budget)) updateRow(c.row.id, { monthly_budget: v });
+                    <EditableText
+                      value={String(c.row.monthly_budget)}
+                      align="right"
+                      number
+                      display={fmtUSD(Number(c.row.monthly_budget))}
+                      onSave={(v) => {
+                        const n = Number(v);
+                        if (!isNaN(n) && n !== Number(c.row.monthly_budget)) updateRow(c.row.id, { monthly_budget: n });
                       }}
                     />
                   </TableCell>
@@ -301,9 +326,65 @@ export default function BudgetPacing() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Projection = month-to-date spend + average of last 5 days × days remaining in month. Active Budget reflects currently enabled Google Ads campaigns (last sync).
+        Projection = month-to-date spend + average of last 5 days × days remaining in month. Active Budget and Campaign Label filter use enabled Google Ads campaigns and their labels (last sync).
       </p>
     </div>
+  );
+}
+
+function EditableText({
+  value, onSave, align = "left", number = false, display,
+}: { value: string; onSave: (v: string) => void; align?: "left" | "right"; number?: boolean; display?: string }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setDraft(value); }, [value]);
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    setEditing(false);
+    if (draft !== value) onSave(draft);
+  };
+
+  if (editing) {
+    return (
+      <Input
+        ref={inputRef}
+        type={number ? "number" : "text"}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          else if (e.key === "Escape") { setDraft(value); setEditing(false); }
+        }}
+        className={cn(
+          "h-7 px-1 py-0 bg-transparent border-0 shadow-none rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-b focus-visible:border-input",
+          align === "right" && "text-right",
+        )}
+      />
+    );
+  }
+
+  const shown = display ?? (value || "—");
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className={cn(
+        "w-full min-h-[1.75rem] px-1 py-0.5 rounded text-sm cursor-text hover:bg-muted/40 focus:outline-none focus:bg-muted/50",
+        align === "right" && "text-right tabular-nums",
+        !value && "text-muted-foreground",
+      )}
+    >
+      {shown}
+    </button>
   );
 }
 
