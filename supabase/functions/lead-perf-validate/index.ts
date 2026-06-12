@@ -99,10 +99,17 @@ Deno.serve(async (req) => {
 
   // Message classification breakdown
   const sources: Json = {};
-  for (const s of ["human", "automation", "system", "unknown"]) {
+  for (const s of ["human", "automation", "system", "customer", "unknown"]) {
     sources[s] = await count("ghl_messages", (q) => (q as ReturnType<typeof admin.from>).eq("response_source", s).gte("sent_at", from.toISOString()).lte("sent_at", to.toISOString()));
   }
   db.messages_by_source = sources;
+  // Outbound-only unknown (the actionable drift signal)
+  db.outbound_unknown = await count("ghl_messages", (q) => (q as ReturnType<typeof admin.from>)
+    .eq("response_source", "unknown").eq("direction", "outbound")
+    .gte("sent_at", from.toISOString()).lte("sent_at", to.toISOString()));
+
+  // Stage-diff history rows written by sync
+  db.stage_history_rows = await count("ghl_opportunity_stage_history");
 
   // Appointment status distribution
   const apptStatus: Json = {};
