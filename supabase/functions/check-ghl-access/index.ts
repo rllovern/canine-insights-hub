@@ -52,14 +52,6 @@ Deno.serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const TOKEN = Deno.env.get("GHL_PRIVATE_INTEGRATION_TOKEN") ?? "";
-  if (!TOKEN) {
-    return new Response(JSON.stringify({ error: "GHL_PRIVATE_INTEGRATION_TOKEN missing" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   const authHeader = req.headers.get("Authorization") ?? "";
   const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   const userClient = createClient(SUPABASE_URL, SERVICE_KEY, {
@@ -94,7 +86,7 @@ Deno.serve(async (req) => {
 
   const { data: pds, error } = await admin
     .from("property_data_sources")
-    .select("config")
+    .select("config, secret_token")
     .eq("property_id", propertyId)
     .eq("source", "ghl")
     .maybeSingle();
@@ -112,9 +104,16 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+  const TOKEN = (pds?.secret_token as string | undefined) ?? "";
+  if (!TOKEN) {
+    return new Response(JSON.stringify({ error: "No Private Integration token saved for this property." }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   const results = await Promise.all([
-    check("Locations read", "/locations/search?limit=1", TOKEN),
+    check("Location read", `/locations/${encodeURIComponent(locationId)}`, TOKEN),
     check("Contacts read", "/contacts/search", TOKEN, {
       method: "POST",
       body: JSON.stringify({ locationId, pageLimit: 1 }),
