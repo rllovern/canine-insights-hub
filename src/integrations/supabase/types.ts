@@ -1821,6 +1821,11 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      rebuild_lead_facts: { Args: { _property_id: string }; Returns: Json }
+      seed_pipeline_mapping_suggestions: {
+        Args: { _property_id: string }
+        Returns: number
+      }
       set_sync_cron_schedule: {
         Args: { _active: boolean; _schedule: string }
         Returns: undefined
