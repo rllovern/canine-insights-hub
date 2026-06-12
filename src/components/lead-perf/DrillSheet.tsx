@@ -49,19 +49,18 @@ export function DrillSheet({
     if (!issue) return;
     setLoading(true);
     setError(null);
-    supabase
-      .rpc("lead_perf_drill", {
+    (async () => {
+      const { data, error } = await supabase.rpc("lead_perf_drill", {
         _issue_type: issue,
         _property_ids: propertyIds,
         _from: from.toISOString(),
         _to: to.toISOString(),
         _limit: 500,
-      })
-      .then(({ data, error }) => {
-        if (error) setError(error.message);
-        else setRows((data ?? []) as unknown as Row[]);
-      })
-      .finally(() => setLoading(false));
+      });
+      if (error) setError(error.message);
+      else setRows((data ?? []) as unknown as Row[]);
+      setLoading(false);
+    })();
   }, [issue, propertyIds, from, to]);
 
   const showAgent = propertyIds === null || (propertyIds?.length ?? 0) > 1;
