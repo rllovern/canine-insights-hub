@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      agency_sla_defaults: {
+        Row: {
+          active_window_days: number
+          after_hours_mode: string
+          attempts_24h: number
+          attempts_7d: number
+          business_hours_only: boolean
+          critical_stale_after_hours: number
+          first_response_seconds: number
+          id: boolean
+          stale_after_hours: number
+          updated_at: string
+        }
+        Insert: {
+          active_window_days?: number
+          after_hours_mode?: string
+          attempts_24h?: number
+          attempts_7d?: number
+          business_hours_only?: boolean
+          critical_stale_after_hours?: number
+          first_response_seconds?: number
+          id?: boolean
+          stale_after_hours?: number
+          updated_at?: string
+        }
+        Update: {
+          active_window_days?: number
+          after_hours_mode?: string
+          attempts_24h?: number
+          attempts_7d?: number
+          business_hours_only?: boolean
+          critical_stale_after_hours?: number
+          first_response_seconds?: number
+          id?: boolean
+          stale_after_hours?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       budget_accounts: {
         Row: {
           campaign_label: string | null
@@ -252,18 +291,86 @@ export type Database = {
           },
         ]
       }
+      ghl_appointments: {
+        Row: {
+          appointment_status: Database["public"]["Enums"]["ghl_appointment_status"]
+          appointment_status_raw: string | null
+          assigned_user_id: string | null
+          calendar_id: string | null
+          contact_id: string | null
+          created_at: string
+          ends_at: string | null
+          ghl_event_id: string
+          id: string
+          opportunity_id: string | null
+          property_id: string
+          raw: Json | null
+          starts_at: string | null
+          status_is_derived: boolean
+          updated_at: string
+        }
+        Insert: {
+          appointment_status?: Database["public"]["Enums"]["ghl_appointment_status"]
+          appointment_status_raw?: string | null
+          assigned_user_id?: string | null
+          calendar_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          ends_at?: string | null
+          ghl_event_id: string
+          id?: string
+          opportunity_id?: string | null
+          property_id: string
+          raw?: Json | null
+          starts_at?: string | null
+          status_is_derived?: boolean
+          updated_at?: string
+        }
+        Update: {
+          appointment_status?: Database["public"]["Enums"]["ghl_appointment_status"]
+          appointment_status_raw?: string | null
+          assigned_user_id?: string | null
+          calendar_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          ends_at?: string | null
+          ghl_event_id?: string
+          id?: string
+          opportunity_id?: string | null
+          property_id?: string
+          raw?: Json | null
+          starts_at?: string | null
+          status_is_derived?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_appointments_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ghl_contacts: {
         Row: {
           assigned_to: string | null
+          assigned_user_id: string | null
           created_at: string
+          duplicate_group_id: string | null
           email: string | null
+          first_human_response_at: string | null
           first_name: string | null
           first_response_at: string | null
           ghl_contact_id: string
           ghl_created_at: string | null
           ghl_location_id: string
+          has_opportunity: boolean
           id: string
           last_name: string | null
+          latest_human_response_at: string | null
+          latest_opportunity_id: string | null
           phone: string | null
           pipeline_stage: string | null
           property_id: string
@@ -275,15 +382,21 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          assigned_user_id?: string | null
           created_at?: string
+          duplicate_group_id?: string | null
           email?: string | null
+          first_human_response_at?: string | null
           first_name?: string | null
           first_response_at?: string | null
           ghl_contact_id: string
           ghl_created_at?: string | null
           ghl_location_id: string
+          has_opportunity?: boolean
           id?: string
           last_name?: string | null
+          latest_human_response_at?: string | null
+          latest_opportunity_id?: string | null
           phone?: string | null
           pipeline_stage?: string | null
           property_id: string
@@ -295,15 +408,21 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          assigned_user_id?: string | null
           created_at?: string
+          duplicate_group_id?: string | null
           email?: string | null
+          first_human_response_at?: string | null
           first_name?: string | null
           first_response_at?: string | null
           ghl_contact_id?: string
           ghl_created_at?: string | null
           ghl_location_id?: string
+          has_opportunity?: boolean
           id?: string
           last_name?: string | null
+          latest_human_response_at?: string | null
+          latest_opportunity_id?: string | null
           phone?: string | null
           pipeline_stage?: string | null
           property_id?: string
@@ -357,6 +476,519 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "ghl_events_raw_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ghl_lead_facts: {
+        Row: {
+          ai_touch_count: number
+          appointment_booked_at: string | null
+          appointment_no_show_at: string | null
+          appointment_showed_at: string | null
+          assigned_user_id: string | null
+          automation_touch_count: number
+          canonical_stage:
+            | Database["public"]["Enums"]["ghl_canonical_stage"]
+            | null
+          contact_id: string
+          created_at: string
+          first_ai_response_at: string | null
+          first_any_response_at: string | null
+          first_automation_response_at: string | null
+          first_human_response_at: string | null
+          first_human_response_channel: string | null
+          human_attempt_count: number
+          human_speed_to_lead_seconds_business: number | null
+          human_speed_to_lead_seconds_raw: number | null
+          id: string
+          is_open: boolean
+          is_stale: boolean
+          last_activity_at: string | null
+          last_human_activity_at: string | null
+          lead_created_at: string
+          lost_at: string | null
+          lost_reason_normalized: string | null
+          lost_reason_raw: string | null
+          monetary_value: number | null
+          opportunity_id: string | null
+          pipeline_id: string | null
+          property_id: string
+          stage_id: string | null
+          total_touch_count: number
+          updated_at: string
+          won_at: string | null
+        }
+        Insert: {
+          ai_touch_count?: number
+          appointment_booked_at?: string | null
+          appointment_no_show_at?: string | null
+          appointment_showed_at?: string | null
+          assigned_user_id?: string | null
+          automation_touch_count?: number
+          canonical_stage?:
+            | Database["public"]["Enums"]["ghl_canonical_stage"]
+            | null
+          contact_id: string
+          created_at?: string
+          first_ai_response_at?: string | null
+          first_any_response_at?: string | null
+          first_automation_response_at?: string | null
+          first_human_response_at?: string | null
+          first_human_response_channel?: string | null
+          human_attempt_count?: number
+          human_speed_to_lead_seconds_business?: number | null
+          human_speed_to_lead_seconds_raw?: number | null
+          id?: string
+          is_open?: boolean
+          is_stale?: boolean
+          last_activity_at?: string | null
+          last_human_activity_at?: string | null
+          lead_created_at: string
+          lost_at?: string | null
+          lost_reason_normalized?: string | null
+          lost_reason_raw?: string | null
+          monetary_value?: number | null
+          opportunity_id?: string | null
+          pipeline_id?: string | null
+          property_id: string
+          stage_id?: string | null
+          total_touch_count?: number
+          updated_at?: string
+          won_at?: string | null
+        }
+        Update: {
+          ai_touch_count?: number
+          appointment_booked_at?: string | null
+          appointment_no_show_at?: string | null
+          appointment_showed_at?: string | null
+          assigned_user_id?: string | null
+          automation_touch_count?: number
+          canonical_stage?:
+            | Database["public"]["Enums"]["ghl_canonical_stage"]
+            | null
+          contact_id?: string
+          created_at?: string
+          first_ai_response_at?: string | null
+          first_any_response_at?: string | null
+          first_automation_response_at?: string | null
+          first_human_response_at?: string | null
+          first_human_response_channel?: string | null
+          human_attempt_count?: number
+          human_speed_to_lead_seconds_business?: number | null
+          human_speed_to_lead_seconds_raw?: number | null
+          id?: string
+          is_open?: boolean
+          is_stale?: boolean
+          last_activity_at?: string | null
+          last_human_activity_at?: string | null
+          lead_created_at?: string
+          lost_at?: string | null
+          lost_reason_normalized?: string | null
+          lost_reason_raw?: string | null
+          monetary_value?: number | null
+          opportunity_id?: string | null
+          pipeline_id?: string | null
+          property_id?: string
+          stage_id?: string | null
+          total_touch_count?: number
+          updated_at?: string
+          won_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_lead_facts_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ghl_messages: {
+        Row: {
+          body_preview: string | null
+          channel: string | null
+          contact_id: string | null
+          conversation_id: string | null
+          created_at: string
+          direction: string | null
+          ghl_message_id: string
+          ghl_user_id: string | null
+          id: string
+          message_type: string | null
+          meta: Json | null
+          property_id: string
+          raw: Json | null
+          response_source: Database["public"]["Enums"]["ghl_response_source"]
+          sent_at: string | null
+          source_raw: string | null
+          updated_at: string
+        }
+        Insert: {
+          body_preview?: string | null
+          channel?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          direction?: string | null
+          ghl_message_id: string
+          ghl_user_id?: string | null
+          id?: string
+          message_type?: string | null
+          meta?: Json | null
+          property_id: string
+          raw?: Json | null
+          response_source?: Database["public"]["Enums"]["ghl_response_source"]
+          sent_at?: string | null
+          source_raw?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body_preview?: string | null
+          channel?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          direction?: string | null
+          ghl_message_id?: string
+          ghl_user_id?: string | null
+          id?: string
+          message_type?: string | null
+          meta?: Json | null
+          property_id?: string
+          raw?: Json | null
+          response_source?: Database["public"]["Enums"]["ghl_response_source"]
+          sent_at?: string | null
+          source_raw?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_messages_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ghl_opportunities: {
+        Row: {
+          assigned_to: string | null
+          contact_id: string | null
+          created_at: string
+          ghl_created_at: string | null
+          ghl_opportunity_id: string
+          ghl_updated_at: string | null
+          id: string
+          lost_at: string | null
+          lost_reason_normalized: string | null
+          lost_reason_raw: string | null
+          monetary_value: number | null
+          pipeline_id: string | null
+          property_id: string
+          raw: Json | null
+          stage_id: string | null
+          status: Database["public"]["Enums"]["ghl_opportunity_status"]
+          status_raw: string | null
+          updated_at: string
+          won_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          contact_id?: string | null
+          created_at?: string
+          ghl_created_at?: string | null
+          ghl_opportunity_id: string
+          ghl_updated_at?: string | null
+          id?: string
+          lost_at?: string | null
+          lost_reason_normalized?: string | null
+          lost_reason_raw?: string | null
+          monetary_value?: number | null
+          pipeline_id?: string | null
+          property_id: string
+          raw?: Json | null
+          stage_id?: string | null
+          status?: Database["public"]["Enums"]["ghl_opportunity_status"]
+          status_raw?: string | null
+          updated_at?: string
+          won_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          contact_id?: string | null
+          created_at?: string
+          ghl_created_at?: string | null
+          ghl_opportunity_id?: string
+          ghl_updated_at?: string | null
+          id?: string
+          lost_at?: string | null
+          lost_reason_normalized?: string | null
+          lost_reason_raw?: string | null
+          monetary_value?: number | null
+          pipeline_id?: string | null
+          property_id?: string
+          raw?: Json | null
+          stage_id?: string | null
+          status?: Database["public"]["Enums"]["ghl_opportunity_status"]
+          status_raw?: string | null
+          updated_at?: string
+          won_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_opportunities_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ghl_opportunity_stage_history: {
+        Row: {
+          changed_at: string
+          created_at: string
+          from_stage_id: string | null
+          id: string
+          opportunity_id: string
+          property_id: string
+          source: Database["public"]["Enums"]["ghl_stage_history_source"]
+          to_stage_id: string | null
+        }
+        Insert: {
+          changed_at?: string
+          created_at?: string
+          from_stage_id?: string | null
+          id?: string
+          opportunity_id: string
+          property_id: string
+          source?: Database["public"]["Enums"]["ghl_stage_history_source"]
+          to_stage_id?: string | null
+        }
+        Update: {
+          changed_at?: string
+          created_at?: string
+          from_stage_id?: string | null
+          id?: string
+          opportunity_id?: string
+          property_id?: string
+          source?: Database["public"]["Enums"]["ghl_stage_history_source"]
+          to_stage_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_opportunity_stage_history_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "ghl_opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ghl_opportunity_stage_history_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ghl_pipeline_stages: {
+        Row: {
+          created_at: string
+          ghl_pipeline_id: string
+          ghl_stage_id: string
+          id: string
+          name: string | null
+          pipeline_id: string
+          position: number | null
+          property_id: string
+          raw: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          ghl_pipeline_id: string
+          ghl_stage_id: string
+          id?: string
+          name?: string | null
+          pipeline_id: string
+          position?: number | null
+          property_id: string
+          raw?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          ghl_pipeline_id?: string
+          ghl_stage_id?: string
+          id?: string
+          name?: string | null
+          pipeline_id?: string
+          position?: number | null
+          property_id?: string
+          raw?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_pipeline_stages_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "ghl_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ghl_pipeline_stages_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ghl_pipelines: {
+        Row: {
+          created_at: string
+          ghl_pipeline_id: string
+          id: string
+          name: string | null
+          property_id: string
+          raw: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          ghl_pipeline_id: string
+          id?: string
+          name?: string | null
+          property_id: string
+          raw?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          ghl_pipeline_id?: string
+          id?: string
+          name?: string | null
+          property_id?: string
+          raw?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_pipelines_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ghl_tasks: {
+        Row: {
+          assigned_user_id: string | null
+          completed_at: string | null
+          contact_id: string | null
+          counts_as_attempt: boolean
+          created_at: string
+          due_at: string | null
+          ghl_task_id: string
+          id: string
+          property_id: string
+          raw: Json | null
+          status: string | null
+          task_type: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_user_id?: string | null
+          completed_at?: string | null
+          contact_id?: string | null
+          counts_as_attempt?: boolean
+          created_at?: string
+          due_at?: string | null
+          ghl_task_id: string
+          id?: string
+          property_id: string
+          raw?: Json | null
+          status?: string | null
+          task_type?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_user_id?: string | null
+          completed_at?: string | null
+          contact_id?: string | null
+          counts_as_attempt?: boolean
+          created_at?: string
+          due_at?: string | null
+          ghl_task_id?: string
+          id?: string
+          property_id?: string
+          raw?: Json | null
+          status?: string | null
+          task_type?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_tasks_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ghl_users: {
+        Row: {
+          created_at: string
+          email: string | null
+          ghl_user_id: string
+          id: string
+          is_active: boolean
+          name: string | null
+          property_id: string
+          raw: Json | null
+          role: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          ghl_user_id: string
+          id?: string
+          is_active?: boolean
+          name?: string | null
+          property_id: string
+          raw?: Json | null
+          role?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          ghl_user_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string | null
+          property_id?: string
+          raw?: Json | null
+          role?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_users_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
@@ -500,6 +1132,47 @@ export type Database = {
         }
         Relationships: []
       }
+      property_business_hours: {
+        Row: {
+          closes_at: string | null
+          created_at: string
+          day_of_week: number
+          id: string
+          is_closed: boolean
+          opens_at: string | null
+          property_id: string
+          updated_at: string
+        }
+        Insert: {
+          closes_at?: string | null
+          created_at?: string
+          day_of_week: number
+          id?: string
+          is_closed?: boolean
+          opens_at?: string | null
+          property_id: string
+          updated_at?: string
+        }
+        Update: {
+          closes_at?: string | null
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          is_closed?: boolean
+          opens_at?: string | null
+          property_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_business_hours_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       property_call_score_mappings: {
         Row: {
           bucket: string
@@ -597,6 +1270,62 @@ export type Database = {
           },
         ]
       }
+      property_pipeline_mapping: {
+        Row: {
+          canonical_stage: Database["public"]["Enums"]["ghl_canonical_stage"]
+          confirmed_at: string | null
+          confirmed_by: string | null
+          confirmed_by_user: boolean
+          created_at: string
+          ghl_pipeline_id: string | null
+          ghl_stage_id: string
+          id: string
+          property_id: string
+          suggested_canonical_stage:
+            | Database["public"]["Enums"]["ghl_canonical_stage"]
+            | null
+          updated_at: string
+        }
+        Insert: {
+          canonical_stage: Database["public"]["Enums"]["ghl_canonical_stage"]
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          confirmed_by_user?: boolean
+          created_at?: string
+          ghl_pipeline_id?: string | null
+          ghl_stage_id: string
+          id?: string
+          property_id: string
+          suggested_canonical_stage?:
+            | Database["public"]["Enums"]["ghl_canonical_stage"]
+            | null
+          updated_at?: string
+        }
+        Update: {
+          canonical_stage?: Database["public"]["Enums"]["ghl_canonical_stage"]
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          confirmed_by_user?: boolean
+          created_at?: string
+          ghl_pipeline_id?: string | null
+          ghl_stage_id?: string
+          id?: string
+          property_id?: string
+          suggested_canonical_stage?:
+            | Database["public"]["Enums"]["ghl_canonical_stage"]
+            | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_pipeline_mapping_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       property_settings: {
         Row: {
           data_sources: Json
@@ -619,6 +1348,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "property_settings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: true
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      property_sla_settings: {
+        Row: {
+          active_window_days: number | null
+          after_hours_mode: string | null
+          attempts_24h: number | null
+          attempts_7d: number | null
+          business_hours_only: boolean | null
+          created_at: string
+          critical_stale_after_hours: number | null
+          first_response_seconds: number | null
+          property_id: string
+          stale_after_hours: number | null
+          timezone: string | null
+          updated_at: string
+        }
+        Insert: {
+          active_window_days?: number | null
+          after_hours_mode?: string | null
+          attempts_24h?: number | null
+          attempts_7d?: number | null
+          business_hours_only?: boolean | null
+          created_at?: string
+          critical_stale_after_hours?: number | null
+          first_response_seconds?: number | null
+          property_id: string
+          stale_after_hours?: number | null
+          timezone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active_window_days?: number | null
+          after_hours_mode?: string | null
+          attempts_24h?: number | null
+          attempts_7d?: number | null
+          business_hours_only?: boolean | null
+          created_at?: string
+          critical_stale_after_hours?: number | null
+          first_response_seconds?: number | null
+          property_id?: string
+          stale_after_hours?: number | null
+          timezone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_sla_settings_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: true
             referencedRelation: "properties"
@@ -899,6 +1681,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      lead_perf_can_read: {
+        Args: { _property_id: string; _user_id: string }
+        Returns: boolean
+      }
       public_ai_assistant_context: {
         Args: { _from: string; _to: string; _token: string }
         Returns: Json
@@ -974,6 +1760,26 @@ export type Database = {
     }
     Enums: {
       app_role: "internal" | "viewer"
+      ghl_appointment_status:
+        | "booked"
+        | "confirmed"
+        | "showed"
+        | "no_show"
+        | "cancelled"
+        | "rescheduled"
+        | "unknown"
+      ghl_canonical_stage:
+        | "new"
+        | "contacted"
+        | "engaged"
+        | "appointment"
+        | "showed"
+        | "won"
+        | "lost"
+        | "ignore"
+      ghl_opportunity_status: "open" | "won" | "lost" | "abandoned" | "unknown"
+      ghl_response_source: "human" | "automation" | "ai" | "system" | "unknown"
+      ghl_stage_history_source: "sync_diff" | "webhook" | "manual_backfill"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1102,6 +1908,28 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["internal", "viewer"],
+      ghl_appointment_status: [
+        "booked",
+        "confirmed",
+        "showed",
+        "no_show",
+        "cancelled",
+        "rescheduled",
+        "unknown",
+      ],
+      ghl_canonical_stage: [
+        "new",
+        "contacted",
+        "engaged",
+        "appointment",
+        "showed",
+        "won",
+        "lost",
+        "ignore",
+      ],
+      ghl_opportunity_status: ["open", "won", "lost", "abandoned", "unknown"],
+      ghl_response_source: ["human", "automation", "ai", "system", "unknown"],
+      ghl_stage_history_source: ["sync_diff", "webhook", "manual_backfill"],
     },
   },
 } as const
