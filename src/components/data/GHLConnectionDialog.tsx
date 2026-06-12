@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Loader2, RefreshCw, Unplug, CheckCircle2 } from "lucide-react";
+import { Loader2, RefreshCw, Unplug, CheckCircle2, ShieldCheck, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Property, PropertyDataSource } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -17,7 +17,7 @@ interface Props {
   onOpenChange?: (open: boolean) => void;
 }
 
-interface GhlLocation { id: string; name: string; address: string | null; companyId?: string | null; }
+interface ScopeResult { label: string; path: string; ok: boolean; status: number; message: string; }
 
 export function GHLConnectionDialog({ property, source, onChanged, trigger, open: ctlOpen, onOpenChange: setCtlOpen }: Props) {
   const [uOpen, setUOpen] = useState(false);
@@ -26,50 +26,48 @@ export function GHLConnectionDialog({ property, source, onChanged, trigger, open
 
   const initialLocation = ((source?.config as Record<string, unknown> | null)?.location_id as string | undefined) ?? "";
   const [locationId, setLocationId] = useState(initialLocation);
-  const [locations, setLocations] = useState<GhlLocation[]>([]);
-  const [loadingLocs, setLoadingLocs] = useState(false);
+  const [token, setToken] = useState("");
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [scopeResults, setScopeResults] = useState<ScopeResult[] | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setLocationId(initialLocation);
-    void loadLocations();
+    setToken("");
+    setScopeResults(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const loadLocations = async () => {
-    setLoadingLocs(true);
-    const { data, error } = await supabase.functions.invoke("list-ghl-locations", { body: {} });
-    setLoadingLocs(false);
-    if (error) { toast.error(`Could not load GHL locations: ${error.message}`); return; }
-    const payload = data as { locations?: GhlLocation[]; error?: string } | null;
-    if (payload?.error) toast.error(payload.error);
-    setLocations(payload?.locations ?? []);
-  };
-
   const handleSave = async () => {
-    if (!locationId) { toast.error("Pick a GHL location"); return; }
-    const location = locations.find((l) => l.id === locationId);
+    if (!locationId.trim()) { toast.error("Enter the GHL Location ID"); return; }
+    if (!token.trim()) { toast.error("Paste the sub-account Private Integration token"); return; }
     setSaving(true);
-    const { error } = await supabase
-      .from("property_data_sources")
-      .upsert(
-        {
-          property_id: property.id,
-          source: "ghl",
-          is_connected: true,
-          status: "connected",
-          config: { location_id: locationId, company_id: location?.companyId ?? null },
-          last_error: null,
-        },
-        { onConflict: "property_id,source" },
-      );
+    const { data, error } = await supabase.functions.invoke("save-ghl-connection", {
+      body: { property_id: property.id, location_id: locationId.trim(), token: token.trim() },
+    });
     setSaving(false);
     if (error) { toast.error(`Save failed: ${error.message}`); return; }
+    const payload = data as { ok?: boolean; error?: string } | null;
+    if (!payload?.ok) { toast.error(payload?.error ?? "Save failed"); return; }
     toast.success("Go High Level connected");
+    setToken("");
     onChanged();
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setScopeResults(null);
+    const { data, error } = await supabase.functions.invoke("check-ghl-access", {
+      body: { property_id: property.id },
+    });
+    setTesting(false);
+    if (error) { toast.error(`Test failed: ${error.message}`); return; }
+    const payload = data as { results?: ScopeResult[]; error?: string } | null;
+    if (payload?.error) { toast.error(payload.error); return; }
+    setScopeResults(payload?.results ?? []);
   };
 
   const handleSync = async () => {
@@ -90,7 +88,7 @@ export function GHLConnectionDialog({ property, source, onChanged, trigger, open
     setDisconnecting(true);
     const { error } = await supabase
       .from("property_data_sources")
-      .update({ is_connected: false, status: "disconnected", config: null })
+      .update({ is_connected: false, status: "disconnected", config: null, secret_token: null })
       .eq("property_id", property.id)
       .eq("source", "ghl");
     setDisconnecting(false);
@@ -100,53 +98,85 @@ export function GHLConnectionDialog({ property, source, onChanged, trigger, open
     setOpen(false);
   };
 
+  const isConnected = !!source?.is_connected;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Go High Level — {property.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1.5">
+            <p className="font-medium text-foreground">Per sub-account setup</p>
+            <ol className="list-decimal pl-4 space-y-0.5">
+              <li>In GHL, open this client's sub-account.</li>
+              <li>Settings → Private Integrations → <span className="font-medium">Create new</span>.</li>
+              <li>Enable read scopes: <span className="font-medium">Contacts, Conversations, Conversation Messages, Opportunities, Locations</span>.</li>
+              <li>Copy the generated <span className="font-mono">pit-…</span> token and the Location ID from Settings → Business Profile.</li>
+            </ol>
+          </div>
+
           <div className="space-y-1.5">
-            <Label>GHL Location</Label>
-            {loadingLocs ? (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading locations…
-              </div>
-            ) : (
-              <Select value={locationId} onValueChange={setLocationId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a location" />
-                </SelectTrigger>
-                <SelectContent>
-                  {locations.map((l) => (
-                    <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
-                  ))}
-                  {!locations.length && (
-                    <div className="p-2 text-xs text-muted-foreground">No locations returned.</div>
-                  )}
-                </SelectContent>
-              </Select>
-            )}
+            <Label htmlFor="ghl-location-id">GHL Location ID</Label>
+            <Input
+              id="ghl-location-id"
+              value={locationId}
+              onChange={(e) => setLocationId(e.target.value)}
+              placeholder="e.g. abc123XYZ"
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ghl-token">Private Integration Token</Label>
+            <Input
+              id="ghl-token"
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={isConnected ? "Leave blank to keep the saved token" : "pit-..."}
+              autoComplete="off"
+            />
             <p className="text-[11px] text-muted-foreground">
-              Uses the agency-wide GHL Private Integration token.
+              Stored encrypted at rest. Required to (re)save the connection.
             </p>
           </div>
 
-          {source?.is_connected && (
+          {isConnected && (
             <div className="flex items-center gap-2 rounded-md border border-success/20 bg-success/5 px-3 py-2 text-xs text-success">
               <CheckCircle2 className="h-3.5 w-3.5" /> Connected. Last sync:{" "}
               {source.last_synced_at ? new Date(source.last_synced_at).toLocaleString() : "never"}
             </div>
           )}
+
+          {scopeResults && (
+            <div className="rounded-md border border-border p-2 space-y-1 text-xs">
+              {scopeResults.map((r) => (
+                <div key={r.label} className="flex items-start gap-2">
+                  {r.ok
+                    ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-success shrink-0" />
+                    : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 text-destructive shrink-0" />}
+                  <div className="flex-1">
+                    <div className="font-medium">{r.label} <span className="text-muted-foreground">({r.status})</span></div>
+                    {!r.ok && <div className="text-muted-foreground">{r.message}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
-          {source?.is_connected && (
+          {isConnected && (
             <>
               <Button variant="outline" onClick={handleDisconnect} disabled={disconnecting}>
                 {disconnecting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Unplug className="mr-1.5 h-4 w-4" />}
                 Disconnect
+              </Button>
+              <Button variant="outline" onClick={handleTest} disabled={testing}>
+                {testing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-1.5 h-4 w-4" />}
+                Test access
               </Button>
               <Button variant="outline" onClick={handleSync} disabled={syncing}>
                 {syncing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
@@ -154,7 +184,7 @@ export function GHLConnectionDialog({ property, source, onChanged, trigger, open
               </Button>
             </>
           )}
-          <Button onClick={handleSave} disabled={saving || !locationId}>
+          <Button onClick={handleSave} disabled={saving || !locationId.trim() || !token.trim()}>
             {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />} Save
           </Button>
         </DialogFooter>
