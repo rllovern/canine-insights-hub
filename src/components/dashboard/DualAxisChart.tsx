@@ -28,6 +28,20 @@ const tooltipStyle = {
 };
 const cursorStyle = { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.6 };
 
+const filteredLegendContent = (props: any) => {
+  const items = (props?.payload ?? []).filter((p: any) => !String(p?.value ?? "").includes("(prev)"));
+  return (
+    <ul style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 12, margin: 0, padding: "4px 0 0", listStyle: "none", fontSize: 11, color: "hsl(var(--muted-foreground))" }}>
+      {items.map((it: any, i: number) => (
+        <li key={`${it.value}-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: it.color, display: "inline-block" }} />
+          {it.value}
+        </li>
+      ))}
+    </ul>
+  );
+};
+
 export function DualAxisChart({
   data, leftKey, leftLabel, leftColor = "hsl(var(--chart-2))", leftFmt = (n) => String(n),
   rightKey, rightLabel, rightColor = "hsl(var(--chart-1))", rightFmt = (n) => String(n),
@@ -57,7 +71,7 @@ export function DualAxisChart({
             return [v, name];
           }}
         />
-        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} iconType="circle" />
+        <Legend content={filteredLegendContent} />
         {showLeftPrev && (
           <Line yAxisId="left" type="monotone" dataKey={leftPrevKey!} name={leftPrevLabel} stroke={leftColor} strokeOpacity={0.35} strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={false} legendType="none" isAnimationActive={false} />
         )}
