@@ -174,8 +174,8 @@ Deno.serve(async (req) => {
   if (typeof live.stages_total === "number" && typeof db.stages === "number" && live.stages_total !== db.stages) {
     drift.push(`stages: live ${live.stages_total} vs db ${db.stages}`);
   }
-  if ((db.messages_by_source as Json)?.unknown && (db.messages_by_source as Json).unknown as number > 0) {
-    drift.push(`messages with response_source=unknown: ${(db.messages_by_source as Json).unknown} (review source_raw values)`);
+  if ((db.outbound_unknown as number) > 0) {
+    drift.push(`outbound messages with response_source=unknown: ${db.outbound_unknown} (review source_raw values)`);
   }
   const unmapped = (mapping ?? []).filter((m) => !(m as Json).confirmed_by_user).length;
   if (unmapped) drift.push(`pipeline mapping: ${unmapped} stages still unconfirmed (suggestions only)`);
