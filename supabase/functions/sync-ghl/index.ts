@@ -80,37 +80,6 @@ function contactList(payload: Json) {
   return ((payload.contacts ?? payload.results ?? payload.data ?? []) as Json[]);
 }
 
-async function ghlPostForm(path: string, token: string, body: Record<string, string>) {
-  const res = await fetch(GHL_BASE + path, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Version: "v3",
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams(body),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new GhlError(path, res.status, text);
-  try { return JSON.parse(text) as Json; } catch { return {}; }
-}
-
-async function resolveCompanyId(token: string, locationId: string) {
-  const res = await ghl("/locations/search", token, { limit: 200 });
-  const locations = (res.locations as Json[]) ?? [];
-  const location = locations.find((l) => String((l as any).id) === locationId) as any;
-  return (location?.companyId ?? location?.company_id ?? location?.company?.id) as string | undefined;
-}
-
-async function getLocationToken(agencyToken: string, locationId: string, companyId: string) {
-  const res = await ghlPostForm("/oauth/location-token", agencyToken, { companyId, locationId });
-  const token = (res.accessToken ?? res.access_token) as string | undefined;
-  if (!token) throw new Error("Go High Level did not return a location access token.");
-  console.log("sync-ghl location token", tokenFingerprint(token));
-  return token;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
