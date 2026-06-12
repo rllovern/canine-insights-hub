@@ -1,59 +1,49 @@
-Do I know what the issue is? Yes.
+## Switch GHL to per-location Private Integration tokens
 
-The app is successfully reaching the `sync-ghl` edge function and the function is successfully reading the stored `GHL_PRIVATE_INTEGRATION_TOKEN`. The failure is coming back from Go High Level on this exact request:
+GHL Private Integrations created at the agency level can't grant `contacts.readonly`, `conversations.readonly`, or `opportunities.readonly`. Those scopes only exist on Private Integrations created **inside each sub-account (location)**. So each property must bring its own token instead of sharing the agency-wide `GHL_PRIVATE_INTEGRATION_TOKEN`.
 
-```text
-GET https://services.leadconnectorhq.com/contacts/?locationId=...
-401: The token is not authorized for this scope.
+### UX changes
+
+In `GHLConnectionDialog.tsx`:
+- Replace the "Select a location from agency list" flow with a simple per-property setup:
+  - **Location ID** text input (user pastes it from GHL sub-account settings)
+  - **Private Integration Token** password input (user pastes the `pit-...` token created inside that sub-account)
+  - Helper text with step-by-step instructions: "In GHL, open the sub-account → Settings → Private Integrations → Create new → check Contacts, Conversations, Conversation Messages, Opportunities (read) → copy token."
+- Remove `list-ghl-locations` call and dropdown.
+- On Save: call a new edge function `save-ghl-connection` that validates the token (calls `/locations/{id}` and one scope-gated endpoint), then stores it.
+- Keep Sync now / Disconnect buttons. Add a **Test access** button that calls `check-ghl-access` for this property and shows per-scope results inline.
+
+### Storage
+
+Tokens are sensitive, so don't put them in `config` JSON (which is readable by anyone with row access). Two options:
+- **(chosen)** Add a `secret_token` text column to `property_data_sources`, store the token there, and tighten RLS so only internal/admin roles can `SELECT` that column. Easiest, keeps everything per-property.
+- Alternative: store one secret per property via the secrets API. Heavier and requires admin tooling.
+
+Migration:
+```sql
+ALTER TABLE public.property_data_sources
+  ADD COLUMN IF NOT EXISTS secret_token text;
+-- existing RLS already restricts table to internal role; no policy change needed
 ```
 
-That means the token exists, but Go High Level is refusing the Contacts endpoint for one of these reasons:
+### Edge function changes
 
-1. The Private Integration token does not include the Contacts read scope.
-2. The token is agency/company-level but does not have access to the selected sub-account/location.
-3. The location selected for the property does not belong to the same GHL account/token.
-4. The token was regenerated in GHL but the saved backend secret is still the older token.
+- **New `save-ghl-connection`**: accepts `{ property_id, location_id, token }`, calls GHL `/locations/{location_id}` and `/contacts/search` (pageLimit 1) with that token to verify both reachability and required scopes, then upserts into `property_data_sources` with `config = { location_id }`, `secret_token = token`, `status = 'connected'`. Returns `{ ok, scope_results }`.
+- **`sync-ghl`**: stop reading `GHL_PRIVATE_INTEGRATION_TOKEN`. Load `secret_token` and `config.location_id` from the row for the property. If missing → friendly error. Drop the `pit-` OAuth branch logic — every token is now a location-scoped PIT.
+- **`check-ghl-access`**: accept `property_id`, load that property's token, test the same 4 endpoints, return per-scope pass/fail.
+- **`list-ghl-locations`**: delete. No longer used.
+- **`scheduled-sync-all`**: still calls `sync-ghl` per property; just verify it doesn't pass any global token assumption.
 
-Files involved:
+Existing `GHL_PRIVATE_INTEGRATION_TOKEN` secret can be left in place but is unused; we can delete it once everything is migrated.
 
-- `supabase/functions/sync-ghl/index.ts` — calls `/contacts/`, `/conversations/search`, `/conversations/{id}/messages`, and `/opportunities/search`.
-- `supabase/functions/list-ghl-locations/index.ts` — lists available locations from the saved token.
-- `src/components/data/GHLConnectionDialog.tsx` — lets you connect a property to a GHL location and trigger sync.
+### Migration of existing connections
 
-Plan to fix and make this clearer:
+The current single connected property will need to be re-saved with its sub-account's PIT token. The dialog will show empty token field if `secret_token` is null and display a banner: "Re-enter this location's Private Integration Token to continue syncing."
 
-1. Improve GHL sync error handling
-   - Detect GHL 401 scope errors separately from generic 500s.
-   - Return a clearer message: token found, but missing scope or not authorized for this selected location.
-   - Record the issue in integration health with the failed timestamp and GHL endpoint that failed.
-
-2. Add a safe token diagnostic to the edge function logs
-   - Log only token length, first 4 chars, and last 4 chars.
-   - Never log the full token.
-   - This helps confirm whether the backend is using the current token without exposing it.
-
-3. Add a preflight health check for GHL
-   - When syncing GHL, test the selected location against the Contacts endpoint first.
-   - If unauthorized, fail fast with guidance instead of surfacing a generic edge function 500.
-
-4. Confirm the location mapping is valid
-   - Keep using the locations returned by `list-ghl-locations`, but surface a clearer warning if the selected property’s location is no longer accessible by the current token.
-
-5. User-side requirement after code hardening
-   - In GHL Private Integrations, the saved token must include at least:
-     - Contacts read
-     - Locations read
-     - Conversations read
-     - Conversation messages read
-     - Opportunities read
-   - If GHL regenerates the token after changing scopes, the backend secret must be updated with that regenerated token.
-
-After implementation, the sync button will no longer show a vague `Edge function returned 500`; it will show the exact GHL authorization problem and the API Health page will retain the failure timestamp/details.
-
-<presentation-actions>
-  <presentation-open-history>View History</presentation-open-history>
-</presentation-actions>
-
-<presentation-actions>
-<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
-</presentation-actions>
+### Files touched
+- `supabase/migrations/<new>.sql` — add `secret_token` column
+- `supabase/functions/save-ghl-connection/index.ts` — new
+- `supabase/functions/sync-ghl/index.ts` — use per-property token
+- `supabase/functions/check-ghl-access/index.ts` — accept `property_id`, use per-property token
+- `supabase/functions/list-ghl-locations/index.ts` — delete
+- `src/components/data/GHLConnectionDialog.tsx` — new inputs, Test access button, migration banner

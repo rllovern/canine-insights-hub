@@ -550,6 +550,7 @@ export type Database = {
           login_customer_id: string | null
           property_id: string
           refresh_token: string | null
+          secret_token: string | null
           source: string
           status: string
           updated_at: string
@@ -565,6 +566,7 @@ export type Database = {
           login_customer_id?: string | null
           property_id: string
           refresh_token?: string | null
+          secret_token?: string | null
           source: string
           status?: string
           updated_at?: string
@@ -580,6 +582,7 @@ export type Database = {
           login_customer_id?: string | null
           property_id?: string
           refresh_token?: string | null
+          secret_token?: string | null
           source?: string
           status?: string
           updated_at?: string
