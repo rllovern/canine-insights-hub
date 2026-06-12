@@ -7,16 +7,13 @@ import { SpeedData, HandlingData } from "./hooks";
 
 type Tone = "good" | "warn" | "bad";
 
-type Item = {
-  tone: Tone;
-  text: string;
-  drill?: DrillIssue;
-};
+type StatItem = { tone: Tone; value: string; label: string; drill?: DrillIssue };
+type Action  = { label: string; drill: DrillIssue; tone: Tone };
 
 function toneRing(tone: Tone) {
-  if (tone === "bad") return "border-rose-500/50 bg-rose-500/5";
-  if (tone === "warn") return "border-amber-500/50 bg-amber-500/5";
-  return "border-emerald-500/40 bg-emerald-500/5";
+  if (tone === "bad") return "border-rose-500/60 bg-rose-500/[0.06]";
+  if (tone === "warn") return "border-amber-500/60 bg-amber-500/[0.05]";
+  return "border-emerald-500/40 bg-emerald-500/[0.04]";
 }
 function toneText(tone: Tone) {
   if (tone === "bad") return "text-rose-600 dark:text-rose-400";
@@ -38,7 +35,7 @@ export function OperationalAlert({
   onDrill: (issue: DrillIssue) => void;
 }) {
   if (loading || !speed || !handling) {
-    return <Skeleton className="h-32 w-full rounded-xl" />;
+    return <Skeleton className="h-24 w-full rounded-xl" />;
   }
 
   const totalLeads = speed.total_leads || 0;
@@ -56,89 +53,111 @@ export function OperationalAlert({
   if (critical > 0 || pctNever > 50 || (medianHuman && medianHuman > 60 * 60 * 4)) overall = "bad";
   else if (stale > 0 || pctNever > 20 || unassigned > 0) overall = "warn";
 
-  const items: Item[] = [];
-  if (neverResp > 0) {
-    items.push({
-      tone: pctNever > 50 ? "bad" : "warn",
-      text: `${formatNum(neverResp)} leads have no human response (${formatPct(pctNever)} of ${formatNum(totalLeads)}).`,
-      drill: "never_responded",
-    });
-  }
-  if (critical > 0) {
-    items.push({
-      tone: "bad",
-      text: `${formatNum(critical)} leads are critical stale (> ${handling.critical_stale_after_hours}h with no human activity).`,
-      drill: "critical_stale",
-    });
-  } else if (stale > 0) {
-    items.push({
-      tone: "warn",
-      text: `${formatNum(stale)} leads are stale (> ${handling.stale_after_hours}h with no human activity).`,
-      drill: "stale",
-    });
-  }
-  if (unassigned > 0) {
-    items.push({
-      tone: unassigned > totalLeads * 0.5 ? "bad" : "warn",
-      text: `${formatNum(unassigned)} leads are unassigned.`,
-      drill: "unassigned",
-    });
-  }
-  if (medianHuman != null) {
-    const slow = medianHuman > 60 * 60; // > 1h
-    items.push({
-      tone: slow ? "bad" : medianHuman > 15 * 60 ? "warn" : "good",
-      text: `Median human response time is ${formatDuration(medianHuman)}.`,
-    });
-  }
-  if (medianAuto != null && medianHuman != null) {
-    const gap = medianHuman - medianAuto;
-    if (gap > 60 * 30) {
-      items.push({
-        tone: "warn",
-        text: `Automation responds in ${formatDuration(medianAuto)}, but human follow-up is lagging by ${formatDuration(gap)}.`,
-      });
+  // Plain-English verdict
+  let verdict = "Lead handling looks healthy.";
+  if (overall === "bad") {
+    if (pctNever > 50) {
+      verdict = `Critical follow-up issue: ${formatPct(pctNever)} of leads have no human response.`;
+    } else if (critical > 0) {
+      verdict = `Lead handling is unhealthy. ${formatNum(critical)} leads are critically stale.`;
+    } else {
+      verdict = "Lead handling is unhealthy. Human follow-up is lagging behind automation.";
     }
+  } else if (overall === "warn") {
+    verdict = "Needs attention. Human follow-up is slow or some leads are slipping.";
   }
-  if (items.length === 0) {
-    items.push({ tone: "good", text: "No active operational alarms in this window." });
-  }
+
+  const stats: StatItem[] = [
+    {
+      tone: pctNever > 50 ? "bad" : pctNever > 20 ? "warn" : "good",
+      value: formatNum(neverResp), label: "no human response", drill: "never_responded",
+    },
+    {
+      tone: critical > 0 ? "bad" : stale > 0 ? "warn" : "good",
+      value: formatNum(critical > 0 ? critical : stale),
+      label: critical > 0
+        ? `critical stale >${handling.critical_stale_after_hours}h`
+        : `stale >${handling.stale_after_hours}h`,
+      drill: critical > 0 ? "critical_stale" : stale > 0 ? "stale" : undefined,
+    },
+    {
+      tone: unassigned > totalLeads * 0.5 ? "bad" : unassigned > 0 ? "warn" : "good",
+      value: formatNum(unassigned), label: "unassigned", drill: "unassigned",
+    },
+    {
+      tone: medianHuman == null ? "good" : medianHuman > 3600 ? "bad" : medianHuman > 900 ? "warn" : "good",
+      value: formatDuration(medianHuman), label: "median human response",
+    },
+    {
+      tone: "good",
+      value: formatDuration(medianAuto), label: "automation median",
+    },
+  ];
+
+  const actions: Action[] = [];
+  if (neverResp > 0) actions.push({ label: "No-response leads", drill: "never_responded", tone: pctNever > 50 ? "bad" : "warn" });
+  if (critical > 0) actions.push({ label: "Critical stale", drill: "critical_stale", tone: "bad" });
+  else if (stale > 0) actions.push({ label: "Stale leads", drill: "stale", tone: "warn" });
+  if (unassigned > 0) actions.push({ label: "Unassigned", drill: "unassigned", tone: unassigned > totalLeads * 0.5 ? "bad" : "warn" });
 
   const Icon = overall === "bad" ? Flame : overall === "warn" ? AlertTriangle : CheckCircle2;
+  const heading = overall === "bad" ? "Operational Alert" : overall === "warn" ? "Needs Attention" : "All Clear";
 
   return (
-    <div className={cn("rounded-xl border-2 p-5", toneRing(overall))}>
-      <div className="flex items-start gap-3">
-        <div className={cn("rounded-lg p-2 bg-background/60 border", toneRing(overall))}>
-          <Icon className={cn("size-6", toneText(overall))} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className={cn("text-lg font-semibold tracking-tight", toneText(overall))}>
-              {overall === "bad" ? "Operational Alert" : overall === "warn" ? "Needs Attention" : "All Clear"}
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {formatNum(totalLeads)} leads in window
-            </span>
+    <div className={cn("rounded-xl border p-3 sm:p-4", toneRing(overall))}>
+      <div className="flex flex-col lg:flex-row lg:items-stretch gap-4">
+        {/* Left: verdict */}
+        <div className="flex items-start gap-3 lg:w-[44%] lg:min-w-[280px]">
+          <div className={cn("rounded-md p-1.5 border shrink-0", toneRing(overall))}>
+            <Icon className={cn("size-4", toneText(overall))} />
           </div>
-          <ul className="mt-3 space-y-1.5">
-            {items.map((it, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <span className={cn("mt-1.5 size-1.5 rounded-full shrink-0", toneDot(it.tone))} />
-                <span className="flex-1">{it.text}</span>
-                {it.drill && (
-                  <Button
-                    size="sm" variant="ghost"
-                    className="h-6 px-2 text-xs"
-                    onClick={() => onDrill(it.drill!)}
-                  >
-                    View leads →
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <h2 className={cn("text-sm font-semibold tracking-tight", toneText(overall))}>{heading}</h2>
+              <span className="text-[11px] text-muted-foreground">{formatNum(totalLeads)} leads in window</span>
+            </div>
+            <p className="mt-1 text-sm leading-snug text-foreground">{verdict}</p>
+          </div>
         </div>
+
+        {/* Middle: compact stat grid */}
+        <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-3 gap-y-1.5 self-center">
+          {stats.map((s, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={s.drill ? () => onDrill(s.drill!) : undefined}
+              disabled={!s.drill}
+              className={cn(
+                "text-left",
+                s.drill ? "cursor-pointer hover:opacity-80" : "cursor-default",
+              )}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className={cn("size-1.5 rounded-full shrink-0", toneDot(s.tone))} />
+                <span className="text-base font-semibold tabular-nums leading-none">{s.value}</span>
+              </div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground leading-tight">{s.label}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Right: action buttons */}
+        {actions.length > 0 && (
+          <div className="flex flex-row lg:flex-col gap-1.5 lg:min-w-[180px] lg:border-l lg:pl-3 lg:border-border/50">
+            {actions.slice(0, 3).map((a, i) => (
+              <Button
+                key={i}
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs justify-start"
+                onClick={() => onDrill(a.drill)}
+              >
+                View {a.label} →
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
