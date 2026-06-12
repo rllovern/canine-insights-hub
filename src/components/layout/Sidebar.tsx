@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, GripVertical } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, GripVertical, Target, GitBranch, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
@@ -19,10 +19,13 @@ type NavItem = {
 const ALL_ITEMS: NavItem[] = [
   { key: "dashboard", to: "/dashboard", label: "PPC Overview", icon: BarChart3 },
   { key: "calls", to: "/calls", label: "Call Tracking", icon: PhoneCall },
+  { key: "lead-performance", to: "/lead-performance", label: "Lead Performance", icon: Target },
   { key: "reports", to: "/reports", label: "Reports", icon: FileText },
   { key: "budget", to: "/budget", label: "Budget Pacing", icon: Wallet, internalOnly: true },
   { key: "clients", to: "/admin/properties", label: "Clients", icon: Users, internalOnly: true },
   { key: "client-reports", to: "/admin/client-reports", label: "Client Reports", icon: FileSearch, internalOnly: true, external: true },
+  { key: "pipeline-mapping", to: "/admin/pipeline-mapping", label: "Pipeline Mapping", icon: GitBranch, internalOnly: true },
+  { key: "sla-settings", to: "/admin/sla-settings", label: "SLA Settings", icon: Timer, internalOnly: true },
   { key: "users", to: "/admin/users", label: "Users", icon: Users, internalOnly: true },
   { key: "settings", to: "/admin/settings", label: "Settings", icon: Settings, internalOnly: true },
 ];
