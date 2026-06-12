@@ -1,8 +1,6 @@
 import { useMemo, useState } from "react";
 import { Info } from "lucide-react";
-import { PageHeader } from "@/components/data/PageHeader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DateRangePicker } from "@/components/layout/DateRangePicker";
 import { Badge } from "@/components/ui/badge";
 import { useProperties } from "@/contexts/PropertyContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
@@ -22,8 +20,8 @@ const ALL_VALUE = "__all__";
 
 function SectionHeader({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div className="flex items-center gap-2 mt-6 mb-2">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground">{title}</h2>
+    <div className="flex items-center gap-2 mt-4 mb-1.5">
+      <h2 className="text-[12px] font-semibold uppercase tracking-wider text-foreground">{title}</h2>
       {hint && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -59,43 +57,49 @@ export default function LeadPerformance() {
   const { data: quality, loading: qualityLoading } = useQuality(args);
 
   return (
-    <div className="space-y-2">
-      <PageHeader
-        title="Lead Performance"
-        description={isAgencyMode
-          ? "Agency-wide view across all properties. Use the property switcher to drill into a single GHL sub-account."
-          : "Single-property view. Switch to a different property below."}
-        actions={
-          <div className="flex items-center gap-2">
-            <Select value={selected} onValueChange={setSelected}>
-              <SelectTrigger className="w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_VALUE}>
-                  {effectiveRole === "internal" ? "All properties (agency)" : "All my properties"}
-                </SelectItem>
-                {properties.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <DateRangePicker />
-          </div>
-        }
-      />
+    <div className="space-y-1.5">
+      {/* Compact page header — TopBar already shows property/date/compare/view-toggle */}
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold tracking-tight">Lead Performance</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {isAgencyMode
+              ? "Agency-wide across all properties."
+              : "Single-property view."}
+            {" "}Scoped to the selected reporting window.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={selected} onValueChange={setSelected}>
+            <SelectTrigger className="w-56 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_VALUE}>
+                {effectiveRole === "internal" ? "All properties (agency)" : "All my properties"}
+              </SelectItem>
+              {properties.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-      <div className="rounded-md bg-muted/40 border border-border/60 px-3 py-2 text-xs text-muted-foreground flex flex-wrap items-center gap-2">
-        <Info className="size-3.5 shrink-0" />
-        <span className="flex-1 min-w-0">
-          {WINDOW_TOOLTIP} Contact sync is on a 30-day rolling window for v1 — not a lifetime CRM audit.
-        </span>
-        <Badge variant="outline" className="text-[10px]">30-day rolling window</Badge>
+      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="text-[10px] gap-1 cursor-help">
+              <Info className="size-3" /> 30-day rolling window
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs text-xs">{WINDOW_TOOLTIP} Contact sync is on a 30-day rolling window for v1.</TooltipContent>
+        </Tooltip>
         <Badge variant="outline" className="text-[10px]">AI bucketed in automation (v1)</Badge>
         <Badge variant="outline" className="text-[10px]">Showed/no-show provisional</Badge>
       </div>
 
-      <div className="mt-3">
+      <div className="pt-2">
         <OperationalAlert
           speed={speed} handling={handling}
           loading={speedLoading || handlingLoading}
@@ -127,6 +131,7 @@ export default function LeadPerformance() {
         from={range.from}
         to={range.to}
         showAppointmentDerivedNote
+        assignedHint={handling?.assigned}
       />
 
       <SectionHeader title="Data quality" hint="Drift signals to keep the rest of the dashboard honest." />

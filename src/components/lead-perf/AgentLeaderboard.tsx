@@ -23,10 +23,12 @@ type AgentRow = {
 };
 
 export function AgentLeaderboard({
-  propertyIds, from, to, showAppointmentDerivedNote,
+  propertyIds, from, to, showAppointmentDerivedNote, assignedHint,
 }: {
   propertyIds: string[] | null; from: Date; to: Date;
   showAppointmentDerivedNote?: boolean;
+  /** Count of assigned leads in window from handling data, used to explain empty leaderboard. */
+  assignedHint?: number;
 }) {
   const [rows, setRows] = useState<AgentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,15 @@ export function AgentLeaderboard({
 
   if (loading) return <Skeleton className="h-48 w-full rounded-lg" />;
   if (rows.length === 0) {
-    return <div className="rounded-lg border p-6 text-sm text-muted-foreground">No assigned leads in window.</div>;
+    const hint = (assignedHint ?? 0) > 0
+      ? `Lead Handling shows ${assignedHint} assigned lead${assignedHint === 1 ? "" : "s"} in this window, but no agent rows were returned. This usually means the assigned user id on those leads doesn't match a known GHL user (sync may not have ingested that user yet) — or the agent has no human messaging activity to summarise.`
+      : "No assigned leads in window. Either no leads were assigned, or assigned_user_id is missing on the underlying lead facts.";
+    return (
+      <div className="rounded-lg border p-4 text-sm text-muted-foreground space-y-1">
+        <div className="font-medium text-foreground">No agents to display.</div>
+        <div>{hint}</div>
+      </div>
+    );
   }
 
   return (
