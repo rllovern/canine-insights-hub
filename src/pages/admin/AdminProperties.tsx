@@ -39,6 +39,7 @@ import { EmptyState } from "@/components/data/EmptyState";
 import { CTMConnectionDialog } from "@/components/data/CTMConnectionDialog";
 import { MCCImportDialog } from "@/components/data/MCCImportDialog";
 import { CTMImportDialog } from "@/components/data/CTMImportDialog";
+import { GHLConnectionDialog } from "@/components/data/GHLConnectionDialog";
 
 function PropertyDialog({
   initial,
@@ -244,6 +245,7 @@ export default function AdminProperties() {
   const [regenTarget, setRegenTarget] = useState<Property | null>(null);
   const [regenConfirm, setRegenConfirm] = useState("");
   const [ctmTarget, setCtmTarget] = useState<Property | null>(null);
+  const [ghlTarget, setGhlTarget] = useState<Property | null>(null);
   const [editTarget, setEditTarget] = useState<Property | null>(null);
 
   const load = async () => {
@@ -275,6 +277,12 @@ export default function AdminProperties() {
   const ctmByProp = useMemo(() => {
     const m = new Map<string, PropertyDataSource>();
     sources.filter((s) => s.source === "ctm").forEach((s) => m.set(s.property_id, s));
+    return m;
+  }, [sources]);
+
+  const ghlByProp = useMemo(() => {
+    const m = new Map<string, PropertyDataSource>();
+    sources.filter((s) => s.source === "ghl").forEach((s) => m.set(s.property_id, s));
     return m;
   }, [sources]);
 
@@ -489,6 +497,10 @@ export default function AdminProperties() {
                               <Phone className="mr-2 h-4 w-4" />
                               CTM connection
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setGhlTarget(p)}>
+                              <Zap className="mr-2 h-4 w-4" />
+                              Go High Level connection
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               disabled={isSyncing}
                               onClick={() => syncNow(p)}
@@ -521,6 +533,16 @@ export default function AdminProperties() {
           onChanged={load}
           open
           onOpenChange={(o) => { if (!o) setCtmTarget(null); }}
+        />
+      )}
+
+      {ghlTarget && (
+        <GHLConnectionDialog
+          property={ghlTarget}
+          source={ghlByProp.get(ghlTarget.id) ?? null}
+          onChanged={load}
+          open
+          onOpenChange={(o) => { if (!o) setGhlTarget(null); }}
         />
       )}
 
