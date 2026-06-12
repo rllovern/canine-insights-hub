@@ -14,6 +14,33 @@ const GHL_VERSION = "2021-07-28";
 
 type Json = Record<string, unknown>;
 
+class GhlError extends Error {
+  status: number;
+  path: string;
+  body: string;
+  constructor(path: string, status: number, body: string) {
+    super(`GHL ${path} ${status}: ${body.slice(0, 500)}`);
+    this.path = path;
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function tokenFingerprint(token: string) {
+  if (!token) return "missing";
+  return `len=${token.length} ${token.slice(0, 4)}…${token.slice(-4)}`;
+}
+
+function friendlyGhlError(err: GhlError): string {
+  if (err.status === 401) {
+    return `Go High Level rejected the request to ${err.path} (401). The Private Integration token is missing the required scope, or it does not have access to this location. In GHL → Settings → Private Integrations, enable read access for: Contacts, Locations, Conversations, Conversation Messages, Opportunities. If you regenerated the token, update the GHL_PRIVATE_INTEGRATION_TOKEN secret with the new value.`;
+  }
+  if (err.status === 403) {
+    return `Go High Level forbade ${err.path} (403). The token is valid but does not have permission for this location or resource.`;
+  }
+  return err.message;
+}
+
 async function ghl(path: string, token: string, params: Record<string, string | number | undefined> = {}) {
   const url = new URL(GHL_BASE + path);
   for (const [k, v] of Object.entries(params)) {
@@ -28,7 +55,7 @@ async function ghl(path: string, token: string, params: Record<string, string | 
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`GHL ${path} ${res.status}: ${text.slice(0, 500)}`);
+    throw new GhlError(path, res.status, text);
   }
   return (await res.json()) as Json;
 }
@@ -44,6 +71,7 @@ Deno.serve(async (req) => {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+  console.log("sync-ghl token", tokenFingerprint(TOKEN));
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -74,6 +102,34 @@ Deno.serve(async (req) => {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+  console.log("sync-ghl location", locationId, "property", property_id);
+
+  async function recordFailure(message: string) {
+    await admin
+      .from("property_data_sources")
+      .update({ last_error: message.slice(0, 1000), status: "error" })
+      .eq("property_id", property_id)
+      .eq("source", "ghl");
+    await admin.from("sync_runs").insert({
+      property_id,
+      source: "ghl",
+      status: "failure",
+      error_message: message.slice(0, 1000),
+    });
+  }
+
+  // ---- Preflight: confirm token + scope + location access ----
+  try {
+    await ghl("/contacts/", TOKEN, { locationId, limit: 1 });
+  } catch (e) {
+    const msg = e instanceof GhlError ? friendlyGhlError(e) : (e instanceof Error ? e.message : String(e));
+    console.error("sync-ghl preflight failed", msg);
+    await recordFailure(msg);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 200, // return 200 so the client surfaces the message instead of "Edge function returned 500"
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   const fromIso = date_from ? new Date(date_from).toISOString() : new Date(Date.now() - 30 * 86400_000).toISOString();
   const toIso = date_to ? new Date(date_to).toISOString() : new Date().toISOString();
@@ -98,8 +154,10 @@ Deno.serve(async (req) => {
       page++;
     }
   } catch (e) {
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const msg = e instanceof GhlError ? friendlyGhlError(e) : (e instanceof Error ? e.message : String(e));
+    await recordFailure(msg);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 

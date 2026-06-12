@@ -19,6 +19,7 @@ Deno.serve(async (req) => {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+  console.log("list-ghl-locations token", `len=${TOKEN.length} ${TOKEN.slice(0,4)}…${TOKEN.slice(-4)}`);
 
   // Auth: must be signed-in internal user
   const authHeader = req.headers.get("Authorization") ?? "";
@@ -51,8 +52,12 @@ Deno.serve(async (req) => {
   });
   const text = await res.text();
   if (!res.ok) {
-    return new Response(JSON.stringify({ error: `GHL ${res.status}: ${text.slice(0, 500)}` }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const friendly = res.status === 401
+      ? `Go High Level rejected /locations/search (401). The Private Integration token is missing the "Locations" read scope, or it is not an agency-level token. Enable Locations read in GHL → Settings → Private Integrations, regenerate the token, and update the GHL_PRIVATE_INTEGRATION_TOKEN secret.`
+      : `GHL ${res.status}: ${text.slice(0, 500)}`;
+    console.error("list-ghl-locations failed", res.status, text.slice(0, 200));
+    return new Response(JSON.stringify({ error: friendly, locations: [] }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
   let json: any = {};
