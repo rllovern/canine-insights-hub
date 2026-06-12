@@ -1,6 +1,6 @@
 export type AppRole = "internal" | "viewer";
 
-export type DataSource = "google_ads" | "ctm" | "ga4";
+export type DataSource = "google_ads" | "ctm" | "ga4" | "keyword_com" | "ghl";
 
 export interface Property {
   id: string;

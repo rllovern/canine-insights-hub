@@ -5,6 +5,8 @@ const LABELS: Record<DataSource, string> = {
   google_ads: "Google Ads",
   ctm: "CTM",
   ga4: "GA4",
+  keyword_com: "Keyword.com",
+  ghl: "GHL",
 };
 
 export function SourceBadges({
@@ -12,7 +14,7 @@ export function SourceBadges({
 }: {
   connected: DataSource[];
 }) {
-  const all: DataSource[] = ["google_ads", "ctm", "ga4"];
+  const all: DataSource[] = ["google_ads", "ctm", "ga4", "ghl"];
   return (
     <div className="flex flex-wrap gap-1">
       {all.map((s) => {

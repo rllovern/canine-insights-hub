@@ -23,6 +23,7 @@ const SOURCE_TO_FN: Record<string, string> = {
   ctm: "sync-ctm",
   ga4: "sync-ga4",
   keyword_com: "sync-keyword-com",
+  ghl: "sync-ghl",
 };
 
 Deno.serve(async (req) => {
@@ -56,7 +57,7 @@ Deno.serve(async (req) => {
   const { data: srcRows, error: srcErr } = await admin
     .from("property_data_sources")
     .select("property_id, source, status")
-    .in("source", ["google_ads", "ctm", "ga4", "keyword_com"])
+    .in("source", ["google_ads", "ctm", "ga4", "keyword_com", "ghl"])
     .eq("status", "connected");
 
   if (srcErr) {

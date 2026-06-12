@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ApiHealth } from "./ApiHealth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -76,8 +78,13 @@ export default function AdminSettings() {
   return (
     <div className="mx-auto max-w-5xl p-6 space-y-6">
       <PageHeader title="Settings" description="Workspace and integration preferences." />
-
-      <section className="rounded-xl border border-border bg-card p-6 space-y-5">
+      <Tabs defaultValue="schedule" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="schedule">Sync schedule</TabsTrigger>
+          <TabsTrigger value="health">API Health</TabsTrigger>
+        </TabsList>
+        <TabsContent value="schedule">
+        <section className="rounded-xl border border-border bg-card p-6 space-y-5">
         <div className="flex items-start gap-3">
           <div className="grid h-9 w-9 place-items-center rounded-md bg-primary/10 text-primary">
             <Clock className="h-4 w-4" />
@@ -147,7 +154,12 @@ export default function AdminSettings() {
             </div>
           </div>
         )}
-      </section>
+        </section>
+        </TabsContent>
+        <TabsContent value="health">
+          <ApiHealth />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
