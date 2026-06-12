@@ -17,35 +17,62 @@ import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { usePropertyMetricConfig } from "@/lib/property-labels";
 
 export default function CallTracking() {
-  const { current, prior, isLoading, range } = useDashboard();
+  const { current, prior, isLoading, range, compareMode, compareRange } = useDashboard();
   const { activeProperty } = useProperties();
   const { effectiveRole } = usePreviewMode();
   const isInternal = effectiveRole === "internal";
   const cfg = usePropertyMetricConfig();
+  const showCompare = compareMode !== "off";
 
   const series = useMemo(() => {
-    const raw = groupByDate(current).map((r) => ({
-      ...r,
-      cost_per_good_lead: calc.costPerGoodLead(r.cost, r.good_leads),
-      cost_per_intake: calc.costPerIntake(r.cost, r.admissions),
-    }));
-    return fillDateRange(raw, range.from, range.to, {
+    const zeros = {
       cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0,
       leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0,
       admissions: 0, sessions: 0, users: 0,
       cost_per_good_lead: 0, cost_per_intake: 0,
-    } as any);
-  }, [current, range]);
+    } as any;
+    const buildDaily = (rows: typeof current) =>
+      groupByDate(rows).map((r) => ({
+        ...r,
+        cost_per_good_lead: calc.costPerGoodLead(r.cost, r.good_leads),
+        cost_per_intake: calc.costPerIntake(r.cost, r.admissions),
+      }));
+    const cur = fillDateRange(buildDaily(current), range.from, range.to, zeros);
+    if (!showCompare) return cur;
+    const pri = fillDateRange(buildDaily(prior), compareRange.from, compareRange.to, zeros);
+    return cur.map((row: any, i: number) => {
+      const p: any = pri[i] ?? {};
+      return {
+        ...row,
+        record_count_prev: p.record_count ?? 0,
+        good_leads_prev: p.good_leads ?? 0,
+        admissions_prev: p.admissions ?? 0,
+        spam_prev: p.spam ?? 0,
+      };
+    });
+  }, [current, prior, range, compareRange, showCompare]);
 
-  const fillSources = (g: { series: any[]; sources: string[] }) => ({
-    sources: g.sources,
-    series: fillDateRange(g.series, range.from, range.to, Object.fromEntries(g.sources.map((s) => [s, 0])) as any),
-  });
+  const buildSourceSeries = (metric: "record_count" | "good_leads" | "admissions" | "spam") => {
+    const curG = groupByDateAndSource(current, metric);
+    const priG = groupByDateAndSource(prior, metric);
+    const sources = Array.from(new Set([...curG.sources, ...priG.sources]));
+    const zeros = Object.fromEntries(sources.map((s) => [s, 0])) as any;
+    const cur = fillDateRange(curG.series, range.from, range.to, zeros);
+    if (!showCompare) return { sources, series: cur };
+    const pri = fillDateRange(priG.series, compareRange.from, compareRange.to, zeros);
+    const merged = cur.map((row: any, i: number) => {
+      const p: any = pri[i] ?? {};
+      const out: any = { ...row };
+      for (const s of sources) out[`${s}_prev`] = p[s] ?? 0;
+      return out;
+    });
+    return { sources, series: merged };
+  };
 
-  const callsBySource = useMemo(() => fillSources(groupByDateAndSource(current, "record_count")), [current, range]);
-  const goodBySource = useMemo(() => fillSources(groupByDateAndSource(current, "good_leads")), [current, range]);
-  const admBySource = useMemo(() => fillSources(groupByDateAndSource(current, "admissions")), [current, range]);
-  const spamBySource = useMemo(() => fillSources(groupByDateAndSource(current, "spam")), [current, range]);
+  const callsBySource = useMemo(() => buildSourceSeries("record_count"), [current, prior, range, compareRange, showCompare]);
+  const goodBySource = useMemo(() => buildSourceSeries("good_leads"), [current, prior, range, compareRange, showCompare]);
+  const admBySource = useMemo(() => buildSourceSeries("admissions"), [current, prior, range, compareRange, showCompare]);
+  const spamBySource = useMemo(() => buildSourceSeries("spam"), [current, prior, range, compareRange, showCompare]);
 
   const cpglBySource = useMemo(() => {
     const sources = Array.from(new Set(current.map((r) => r.ad_source)));
@@ -70,30 +97,30 @@ export default function CallTracking() {
       <SectionDivider title="Call Performance" subtitle="Total volume and per-source breakdowns of calls, leads, and conversions" />
       <Row>
         <ChartCard title="Total Calls" subtitle="All sources, daily">
-          <SingleLineChart data={series} dataKey="record_count" label="Calls" color="hsl(var(--chart-1))" fmt={fmtNumber} />
+          <SingleLineChart data={series} dataKey="record_count" label="Calls" color="hsl(var(--chart-1))" fmt={fmtNumber} prevKey="record_count_prev" showCompare={showCompare} />
         </ChartCard>
         <ChartCard title="Calls by Source" subtitle="Breakdown by ad source">
-          <MultiLineChart data={callsBySource.series} sources={callsBySource.sources} fmt={fmtNumber} />
+          <MultiLineChart data={callsBySource.series} sources={callsBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
         </ChartCard>
       </Row>
 
       <SectionDivider title="Lead Quality" subtitle="Cost-per-acquisition trends by source" />
       <Row>
         <ChartCard title="Total Good Leads" subtitle="All sources, daily">
-          <SingleLineChart data={series} dataKey="good_leads" label="Good Leads" color="hsl(var(--chart-2))" fmt={fmtNumber} />
+          <SingleLineChart data={series} dataKey="good_leads" label="Good Leads" color="hsl(var(--chart-2))" fmt={fmtNumber} prevKey="good_leads_prev" showCompare={showCompare} />
         </ChartCard>
         <ChartCard title="Good Leads by Source">
-          <MultiLineChart data={goodBySource.series} sources={goodBySource.sources} fmt={fmtNumber} />
+          <MultiLineChart data={goodBySource.series} sources={goodBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
         </ChartCard>
       </Row>
 
       {!cfg.isHidden("admissions") && (
         <Row>
           <ChartCard title={`Total ${cfg.label("admissions")}`} subtitle="Daily">
-            <SingleLineChart data={series} dataKey="admissions" label={cfg.label("admissions")} color="hsl(var(--chart-4))" fmt={fmtNumber} />
+            <SingleLineChart data={series} dataKey="admissions" label={cfg.label("admissions")} color="hsl(var(--chart-4))" fmt={fmtNumber} prevKey="admissions_prev" showCompare={showCompare} />
           </ChartCard>
           <ChartCard title={`${cfg.label("admissions")} by Source`}>
-            <MultiLineChart data={admBySource.series} sources={admBySource.sources} fmt={fmtNumber} />
+            <MultiLineChart data={admBySource.series} sources={admBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
           </ChartCard>
         </Row>
       )}
@@ -103,10 +130,10 @@ export default function CallTracking() {
           <SectionDivider title="Spam Monitoring" subtitle="Internal view only" />
           <Row>
             <ChartCard title={`Total ${cfg.label("spam").toUpperCase()}`} subtitle="All sources, daily">
-              <SingleLineChart data={series} dataKey="spam" label={cfg.label("spam")} color="hsl(var(--chart-5))" fmt={fmtNumber} />
+              <SingleLineChart data={series} dataKey="spam" label={cfg.label("spam")} color="hsl(var(--chart-5))" fmt={fmtNumber} prevKey="spam_prev" showCompare={showCompare} />
             </ChartCard>
             <ChartCard title={`${cfg.label("spam").toUpperCase()} by Source`}>
-              <MultiLineChart data={spamBySource.series} sources={spamBySource.sources} fmt={fmtNumber} />
+              <MultiLineChart data={spamBySource.series} sources={spamBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
             </ChartCard>
           </Row>
         </>

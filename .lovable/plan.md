@@ -1,51 +1,34 @@
 ## Goal
 
-When the user has a comparison period active (Previous period or Custom), every trend chart on the performance report should overlay a faint "ghost" line for the same metric in the comparison range, so the current period can be read against it visually.
+Extend ghost comparison lines to every trend chart on the Call Tracking page (matches what's already on Dashboard).
 
-## Where ghost lines appear
+## Charts to update in `src/pages/CallTracking.tsx`
 
-All daily trend charts driven by `DashboardContext` on the Dashboard / Public performance report:
+Single-line (add `prevKey` + `showCompare`):
+- Total Calls (`record_count`)
+- Total Good Leads (`good_leads`)
+- Total Admissions (`admissions`)
+- Total Spam (`spam`) — internal view
 
-- Cost vs CPM (dual-axis)
-- Clicks vs CTR (dual-axis)
-- Impressions vs Calls (dual-axis)
-- Cost / Good Lead (single line)
-- Cost / Good Lead by Source (multi-line, one ghost per source)
+Multi-line by source (add merged `*_prev` per source + `showCompare`):
+- Calls by Source
+- Good Leads by Source
+- Admissions by Source
+- Spam by Source
 
-If `compareMode === "off"` or there is no prior data, no ghost lines render and behavior is unchanged.
+## Implementation
 
-## How it will look
+1. Pull `compareMode` + `compareRange` from `useDashboard()`. Compute `showCompare = compareMode !== "off"`.
 
-- Ghost lines use the same color as their "live" counterpart but at ~35% opacity, thinner (1.5px), and dashed (`strokeDasharray="4 4"`).
-- No dots, no active dots, hidden from the legend (or labeled with a "(prev)" suffix only inside the tooltip).
-- Tooltip shows both current and prior values for the hovered date, with prior values labeled e.g. `Cost (prev)`.
-- X-axis stays the current period's dates. Prior-period points are aligned by day-offset (day 1 of prior maps to day 1 of current, etc.) so the two lines overlay on the same axis.
+2. Build prior versions of the same datasets used today and merge into the current data by day-offset:
+   - `series`: also build from `prior` via the same `groupByDate + calc` pipeline, fill across `compareRange`, then map index → current row, attaching `record_count_prev`, `good_leads_prev`, `admissions_prev`, `spam_prev`.
+   - Each by-source dataset (`callsBySource`, `goodBySource`, `admBySource`, `spamBySource`): also run on `prior`, union sources from both periods, fill across each range, and merge so each row has `${source}` and `${source}_prev`. The component already iterates over `sources`; the existing `MultiLineChart.showCompare` prop renders the ghost lines using the `_prev` suffix.
 
-## Technical changes
+3. Pass `prevKey` to each `SingleLineChart` and `showCompare` to every chart on the page.
 
-1. `src/contexts/DashboardContext.tsx`
-   - Already exposes `prior`. No API change needed.
-
-2. New helper in `src/lib/metrics.ts`
-   - `alignPriorToCurrent(priorSeries, currentRange, priorRange)` — returns prior rows keyed by the matching current-range ISO date, so the two series can be merged into one dataset row like `{ date, cost, cost_prev, cpm, cpm_prev, ... }`.
-
-3. `src/pages/Dashboard.tsx`
-   - Build a `prior`-side series the same way `series` is built (groupByDate + calc fields), then merge into the main `series` rows as `*_prev` fields, plus a `sourceSeriesPrev` for the by-source chart.
-   - Pass `showCompare` + prior keys to each chart component.
-
-4. `src/components/dashboard/DualAxisChart.tsx`
-   - Accept optional `leftPrevKey`, `rightPrevKey`, `showCompare` props.
-   - When set, render two extra `<Line>`s with `strokeOpacity={0.35}`, `strokeDasharray="4 4"`, `strokeWidth={1.5}`, `dot={false}`, `legendType="none"`.
-   - Tooltip formatter labels them `${label} (prev)`.
-
-5. `src/components/dashboard/MultiLineChart.tsx`
-   - `SingleLineChart`: add optional `prevKey` + `showCompare`, render ghost line.
-   - `MultiLineChart`: accept optional `prevData` (or merged `*_prev` keys) + `showCompare`; for each source render a ghost line in the same color, dashed/faded, hidden from legend.
-
-6. No backend, query, or date-range logic changes. No new fetches — uses the prior data already in `DashboardContext`.
+No backend, query, or date-range changes. No styling changes beyond the existing ghost-line treatment (dashed, 35% opacity, same color, hidden from legend).
 
 ## Out of scope
 
-- KPI cards (already show delta %).
-- Source / campaign breakdown bar tables.
-- Changing the comparison date math or the default range behavior.
+- Source Performance and Campaign Breakdown tables (they already show prior-period deltas).
+- Cost / Good Lead by Source on Call Tracking (was removed previously).
