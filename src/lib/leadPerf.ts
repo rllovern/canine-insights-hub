@@ -33,6 +33,26 @@ export function formatPct(n: number | null | undefined): string {
   return `${Number(n).toFixed(0)}%`;
 }
 
+export function formatPct1(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(Number(n))) return "—";
+  return `${Number(n).toFixed(1)}%`;
+}
+
+/** "X of Y leads" style denominator. */
+export function ofDenom(numerator: number | null | undefined, denom: number | null | undefined, noun = "leads"): string {
+  const n = Number(numerator ?? 0);
+  const d = Number(denom ?? 0);
+  return `${n.toLocaleString()} of ${d.toLocaleString()} ${noun}`;
+}
+
+/** Compute percent safely. */
+export function pctOf(numerator: number | null | undefined, denom: number | null | undefined): number | null {
+  const n = Number(numerator ?? 0);
+  const d = Number(denom ?? 0);
+  if (!d) return null;
+  return (n / d) * 100;
+}
+
 export function formatNum(n: number | null | undefined): string {
   if (n == null) return "—";
   return Number(n).toLocaleString();

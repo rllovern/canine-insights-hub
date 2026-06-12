@@ -1,57 +1,48 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiTile } from "./KpiTile";
 import { DrillIssue, formatNum } from "@/lib/leadPerf";
+import { QualityData } from "./hooks";
 
-type Quality = {
-  unassigned: number;
-  missing_opportunities: number;
-  no_disposition: number;
-  duplicate_contacts: number;
-  duplicate_opportunities: number;
-  lost_without_reason: number;
-  unmapped_stages: number;
-  unknown_response_source: number;
-  lead_facts_missing_contact: number;
-  appointments_missing_status: number;
+type Tile = {
+  key: keyof QualityData;
+  label: string;
+  issue?: DrillIssue;
+  tooltip?: string;
+  navigateTo?: string;
 };
 
-const TILES: Array<{ key: keyof Quality; label: string; issue?: DrillIssue; tooltip?: string }> = [
-  { key: "unassigned", label: "Unassigned leads", issue: "unassigned" },
-  { key: "missing_opportunities", label: "Missing opportunities", issue: "missing_opportunity" },
-  { key: "no_disposition", label: "Closed w/o disposition" },
-  { key: "lost_without_reason", label: "Lost without reason", issue: "lost_without_reason" },
-  { key: "duplicate_contacts", label: "Duplicate contacts", issue: "duplicate_contacts", tooltip: "Same phone or email across multiple contact records." },
-  { key: "duplicate_opportunities", label: "Duplicate opportunities", issue: "duplicate_opportunities" },
-  { key: "unmapped_stages", label: "Unmapped pipeline stages", issue: "unmapped_stages", tooltip: "Stages with no admin-confirmed canonical mapping. Suggestions exist but are not yet applied." },
+const TILES: Tile[] = [
+  { key: "unassigned", label: "Unassigned Leads", issue: "unassigned" },
   {
-    key: "unknown_response_source", label: "Outbound unknown source", issue: "unknown_response_source",
+    key: "unknown_response_source", label: "Outbound Unknown Messages", issue: "unknown_response_source",
     tooltip: "Outbound messages with no userId and no workflow/campaign tag. Inbound from customers is excluded.",
   },
-  { key: "appointments_missing_status", label: "Appointments missing status", issue: "appointments_missing_status", tooltip: "Provisional showed/no-show derivation can't be applied to these." },
-  { key: "lead_facts_missing_contact", label: "Lead facts missing contact" },
+  {
+    key: "unmapped_stages", label: "Unconfirmed Stage Mappings", issue: "unmapped_stages",
+    tooltip: "Stages with no admin-confirmed canonical mapping. Auto-suggestions exist but are not applied.",
+    navigateTo: "/admin/pipeline-mapping",
+  },
+  {
+    key: "appointments_missing_status", label: "Derived Appointment Statuses", issue: "appointments_missing_status",
+    tooltip: "Appointments where showed/no-show is provisionally derived (appointment confirmed + ended in the past).",
+  },
+  { key: "missing_opportunities", label: "Missing Opportunities", issue: "missing_opportunity" },
+  { key: "duplicate_contacts", label: "Duplicate Contacts", issue: "duplicate_contacts", tooltip: "Same phone or email across multiple contact records." },
+  { key: "duplicate_opportunities", label: "Duplicate Opportunities", issue: "duplicate_opportunities" },
+  { key: "lost_without_reason", label: "Lost Without Reason", issue: "lost_without_reason" },
+  { key: "no_disposition", label: "Closed Without Disposition" },
+  { key: "lead_facts_missing_contact", label: "Lead Facts Missing Contact" },
 ];
 
 export function DataQuality({
-  propertyIds, from, to, onDrill,
+  quality, loading, onDrill,
 }: {
-  propertyIds: string[] | null; from: Date; to: Date;
+  quality: QualityData | null;
+  loading: boolean;
   onDrill: (issue: DrillIssue) => void;
 }) {
-  const [data, setData] = useState<Quality | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    (async () => {
-      const { data } = await supabase.rpc("lead_perf_quality", {
-        _property_ids: propertyIds, _from: from.toISOString(), _to: to.toISOString(),
-      });
-      setData((data ?? null) as unknown as Quality | null);
-      setLoading(false);
-    })();
-  }, [propertyIds, from, to]);
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -60,12 +51,15 @@ export function DataQuality({
       </div>
     );
   }
-  if (!data) return null;
+  if (!quality) return null;
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {TILES.map((t) => {
-        const n = data[t.key] ?? 0;
+        const n = Number(quality[t.key] ?? 0);
+        const onClick = n > 0
+          ? (t.navigateTo ? () => navigate(t.navigateTo!) : (t.issue ? () => onDrill(t.issue!) : undefined))
+          : undefined;
         return (
           <KpiTile
             key={t.key}
@@ -73,7 +67,7 @@ export function DataQuality({
             value={formatNum(n)}
             tone={n > 0 ? "warn" : "good"}
             tooltip={t.tooltip}
-            onClick={n > 0 && t.issue ? () => onDrill(t.issue!) : undefined}
+            onClick={onClick}
           />
         );
       })}
