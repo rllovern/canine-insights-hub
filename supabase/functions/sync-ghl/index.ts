@@ -80,50 +80,11 @@ function contactList(payload: Json) {
   return ((payload.contacts ?? payload.results ?? payload.data ?? []) as Json[]);
 }
 
-async function ghlPostForm(path: string, token: string, body: Record<string, string>) {
-  const res = await fetch(GHL_BASE + path, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Version: "v3",
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams(body),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new GhlError(path, res.status, text);
-  try { return JSON.parse(text) as Json; } catch { return {}; }
-}
-
-async function resolveCompanyId(token: string, locationId: string) {
-  const res = await ghl("/locations/search", token, { limit: 200 });
-  const locations = (res.locations as Json[]) ?? [];
-  const location = locations.find((l) => String((l as any).id) === locationId) as any;
-  return (location?.companyId ?? location?.company_id ?? location?.company?.id) as string | undefined;
-}
-
-async function getLocationToken(agencyToken: string, locationId: string, companyId: string) {
-  const res = await ghlPostForm("/oauth/location-token", agencyToken, { companyId, locationId });
-  const token = (res.accessToken ?? res.access_token) as string | undefined;
-  if (!token) throw new Error("Go High Level did not return a location access token.");
-  console.log("sync-ghl location token", tokenFingerprint(token));
-  return token;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const TOKEN = Deno.env.get("GHL_PRIVATE_INTEGRATION_TOKEN") ?? "";
-  if (!TOKEN) {
-    return new Response(JSON.stringify({ error: "GHL_PRIVATE_INTEGRATION_TOKEN missing" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  console.log("sync-ghl token", tokenFingerprint(TOKEN));
-
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
   let body: { property_id?: string; date_from?: string; date_to?: string } = {};
@@ -135,10 +96,10 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Look up GHL location id for this property
+  // Look up GHL location id + per-property token for this property
   const { data: pds, error: pdsErr } = await admin
     .from("property_data_sources")
-    .select("config, status")
+    .select("config, status, secret_token")
     .eq("property_id", property_id)
     .eq("source", "ghl")
     .maybeSingle();
@@ -154,7 +115,13 @@ Deno.serve(async (req) => {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  console.log("sync-ghl location", locationId, "property", property_id);
+  const locationToken = (pds?.secret_token as string | undefined) ?? "";
+  if (!locationToken) {
+    return new Response(JSON.stringify({
+      error: "No Go High Level Private Integration token saved for this property. Open the GHL connection dialog and paste the sub-account's Private Integration token.",
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+  console.log("sync-ghl location", locationId, "property", property_id, "token", tokenFingerprint(locationToken));
 
   async function recordFailure(message: string) {
     await admin
@@ -167,35 +134,6 @@ Deno.serve(async (req) => {
       source: "ghl",
       status: "failure",
       error_message: message.slice(0, 1000),
-    });
-  }
-
-  let locationToken = TOKEN;
-  try {
-    if (!TOKEN.startsWith("pit-")) {
-      let companyId = config.company_id as string | undefined;
-      if (!companyId) {
-        companyId = await resolveCompanyId(TOKEN, locationId);
-        if (companyId) {
-          await admin
-            .from("property_data_sources")
-            .update({ config: { ...config, company_id: companyId } })
-            .eq("property_id", property_id)
-            .eq("source", "ghl");
-        }
-      }
-      if (!companyId) throw new Error("Could not find the GHL company ID for this location. Re-open the GHL connection, pick the location again, and save.");
-      locationToken = await getLocationToken(TOKEN, locationId, companyId);
-    }
-  } catch (e) {
-    const msg = e instanceof GhlError
-      ? `Go High Level could not create a location token for this property (${e.status}). Make sure the agency Private Integration token has the OAuth write scope and access to this location. ${e.body.slice(0, 300)}`
-      : (e instanceof Error ? e.message : String(e));
-    console.error("sync-ghl location token failed", msg);
-    await recordFailure(msg);
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
