@@ -33,7 +33,7 @@ function tokenFingerprint(token: string) {
 
 function friendlyGhlError(err: GhlError): string {
   if (err.status === 401) {
-    return `Go High Level rejected the request to ${err.path} (401). The Private Integration token is missing the required scope, or it does not have access to this location. In GHL → Settings → Private Integrations, enable read access for: Contacts, Locations, Conversations, Conversation Messages, Opportunities. If you regenerated the token, update the GHL_PRIVATE_INTEGRATION_TOKEN secret with the new value.`;
+    return `Go High Level rejected the request to ${err.path} (401). The saved Private Integration token is present, but Go High Level says it is not authorized for this endpoint. Edit the existing GHL Private Integration and enable read access for: Contacts, Conversations, Conversation Messages, Opportunities. You only need to update the backend secret if you rotate/regenerate the token.`;
   }
   if (err.status === 403) {
     return `Go High Level forbade ${err.path} (403). The token is valid but does not have permission for this location or resource.`;
@@ -152,19 +152,21 @@ Deno.serve(async (req) => {
 
   let locationToken = TOKEN;
   try {
-    let companyId = config.company_id as string | undefined;
-    if (!companyId) {
-      companyId = await resolveCompanyId(TOKEN, locationId);
-      if (companyId) {
-        await admin
-          .from("property_data_sources")
-          .update({ config: { ...config, company_id: companyId } })
-          .eq("property_id", property_id)
-          .eq("source", "ghl");
+    if (!TOKEN.startsWith("pit-")) {
+      let companyId = config.company_id as string | undefined;
+      if (!companyId) {
+        companyId = await resolveCompanyId(TOKEN, locationId);
+        if (companyId) {
+          await admin
+            .from("property_data_sources")
+            .update({ config: { ...config, company_id: companyId } })
+            .eq("property_id", property_id)
+            .eq("source", "ghl");
+        }
       }
+      if (!companyId) throw new Error("Could not find the GHL company ID for this location. Re-open the GHL connection, pick the location again, and save.");
+      locationToken = await getLocationToken(TOKEN, locationId, companyId);
     }
-    if (!companyId) throw new Error("Could not find the GHL company ID for this location. Re-open the GHL connection, pick the location again, and save.");
-    locationToken = await getLocationToken(TOKEN, locationId, companyId);
   } catch (e) {
     const msg = e instanceof GhlError
       ? `Go High Level could not create a location token for this property (${e.status}). Make sure the agency Private Integration token has the OAuth write scope and access to this location. ${e.body.slice(0, 300)}`
