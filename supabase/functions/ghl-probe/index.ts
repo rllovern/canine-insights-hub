@@ -185,20 +185,24 @@ Deno.serve(async (req) => {
       };
     }
 
-    // startAfter cursor: take last contact's dateAdded
+    // Cursor probe: contacts list returns a per-row `searchAfter: [ts, id]`.
+    // The API accepts this as `searchAfter` on the next request.
     let cursorInfo: Json | null = null;
-    const lastContact = list1[list1.length - 1];
-    if (lastContact) {
-      const startAfterMs = lastContact && (lastContact as Json).dateAdded
-        ? new Date(String((lastContact as Json).dateAdded)).getTime()
-        : null;
-      if (startAfterMs) {
-        const { bodyText: pc } = await call("contacts.search.cursor", "POST", "/contacts/search", {
-          locationId, pageLimit: 10, startAfter: startAfterMs, startAfterId: (lastContact as Json).id,
-        });
-        const jc = parseJson(pc) ?? {};
-        cursorInfo = { returned: ((jc.contacts as Json[]) ?? []).length };
-      }
+    const lastContact = list1[list1.length - 1] as Json | undefined;
+    const lastSearchAfter = lastContact && Array.isArray(lastContact.searchAfter) ? lastContact.searchAfter : null;
+    if (lastSearchAfter) {
+      const { bodyText: pc, res: rcr } = await call("contacts.search.cursor", "POST", "/contacts/search", {
+        locationId, pageLimit: 10, searchAfter: lastSearchAfter,
+      });
+      const jc = parseJson(pc) ?? {};
+      cursorInfo = {
+        status: rcr?.status,
+        returned: ((jc.contacts as Json[]) ?? []).length,
+        cursor_used: lastSearchAfter,
+        overlap_with_page1: ((jc.contacts as Json[]) ?? []).some((c) => list1.some((x) => (x as Json).id === (c as Json).id)),
+      };
+    } else {
+      cursorInfo = { note: "no searchAfter cursor returned on contacts" };
     }
 
     report.contacts = {
@@ -324,7 +328,8 @@ Deno.serve(async (req) => {
 
   // ============ Probe: Opportunities ============
   {
-    const { bodyText } = await call("opportunities.search", "POST", "/opportunities/search", { location_id: locationId, limit: 100, page: 1 });
+    // POST body uses camelCase `locationId` (the GET version takes snake_case)
+    const { bodyText } = await call("opportunities.search", "POST", "/opportunities/search", { locationId, limit: 100, page: 1 });
     const j = parseJson(bodyText) ?? {};
     const ops = (j.opportunities as Json[]) ?? [];
     const lostWithReason = ops.filter((o) => (o as Json).status === "lost" && (o as Json).lostReasonId).length;
@@ -350,8 +355,10 @@ Deno.serve(async (req) => {
     const cj = parseJson(cb) ?? {};
     const calendars = (cj.calendars as Json[]) ?? [];
     const now = Date.now();
+    // 90-day historical window so appointmentStatus values get a meaningful sample.
+    // (The 7-day operational sync window is a separate concern from this probe.)
     const endTime = now;
-    const startTime = now - 7 * 86400_000;
+    const startTime = now - 90 * 86400_000;
 
     const windowResults: Json[] = [];
     const statusCounts = new Map<string, number>();
@@ -401,7 +408,7 @@ Deno.serve(async (req) => {
     report.calendars = {
       calendars_count: calendars.length,
       calendars_sample_fields: fieldsOf(calendars[0]),
-      window_days: 7,
+      window_days: 90,
       total_events_in_window: totalEvents,
       distinct_appointment_status: Object.fromEntries(statusCounts.entries()),
       per_calendar_results: windowResults,
