@@ -33,7 +33,7 @@ function tokenFingerprint(token: string) {
 
 function friendlyGhlError(err: GhlError): string {
   if (err.status === 401) {
-    return `Go High Level rejected the request to ${err.path} (401). The Private Integration token is missing the required scope, or it does not have access to this location. In GHL → Settings → Private Integrations, enable read access for: Contacts, Locations, Conversations, Conversation Messages, Opportunities. If you regenerated the token, update the GHL_PRIVATE_INTEGRATION_TOKEN secret with the new value.`;
+    return `Go High Level rejected the request to ${err.path} (401). The saved Private Integration token is present, but Go High Level says it is not authorized for this endpoint. Edit the existing GHL Private Integration and enable read access for: Contacts, Conversations, Conversation Messages, Opportunities. You only need to update the backend secret if you rotate/regenerate the token.`;
   }
   if (err.status === 403) {
     return `Go High Level forbade ${err.path} (403). The token is valid but does not have permission for this location or resource.`;
@@ -58,6 +58,37 @@ async function ghl(path: string, token: string, params: Record<string, string | 
     throw new GhlError(path, res.status, text);
   }
   return (await res.json()) as Json;
+}
+
+async function ghlPostForm(path: string, token: string, body: Record<string, string>) {
+  const res = await fetch(GHL_BASE + path, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Version: "v3",
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams(body),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new GhlError(path, res.status, text);
+  try { return JSON.parse(text) as Json; } catch { return {}; }
+}
+
+async function resolveCompanyId(token: string, locationId: string) {
+  const res = await ghl("/locations/search", token, { limit: 200 });
+  const locations = (res.locations as Json[]) ?? [];
+  const location = locations.find((l) => String((l as any).id) === locationId) as any;
+  return (location?.companyId ?? location?.company_id ?? location?.company?.id) as string | undefined;
+}
+
+async function getLocationToken(agencyToken: string, locationId: string, companyId: string) {
+  const res = await ghlPostForm("/oauth/location-token", agencyToken, { companyId, locationId });
+  const token = (res.accessToken ?? res.access_token) as string | undefined;
+  if (!token) throw new Error("Go High Level did not return a location access token.");
+  console.log("sync-ghl location token", tokenFingerprint(token));
+  return token;
 }
 
 Deno.serve(async (req) => {
@@ -96,7 +127,8 @@ Deno.serve(async (req) => {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  const locationId = (pds?.config as Json | null)?.location_id as string | undefined;
+  const config = (pds?.config as Json | null) ?? {};
+  const locationId = config.location_id as string | undefined;
   if (!locationId) {
     return new Response(JSON.stringify({ error: "GHL location not configured for property" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -118,9 +150,38 @@ Deno.serve(async (req) => {
     });
   }
 
+  let locationToken = TOKEN;
+  try {
+    if (!TOKEN.startsWith("pit-")) {
+      let companyId = config.company_id as string | undefined;
+      if (!companyId) {
+        companyId = await resolveCompanyId(TOKEN, locationId);
+        if (companyId) {
+          await admin
+            .from("property_data_sources")
+            .update({ config: { ...config, company_id: companyId } })
+            .eq("property_id", property_id)
+            .eq("source", "ghl");
+        }
+      }
+      if (!companyId) throw new Error("Could not find the GHL company ID for this location. Re-open the GHL connection, pick the location again, and save.");
+      locationToken = await getLocationToken(TOKEN, locationId, companyId);
+    }
+  } catch (e) {
+    const msg = e instanceof GhlError
+      ? `Go High Level could not create a location token for this property (${e.status}). Make sure the agency Private Integration token has the OAuth write scope and access to this location. ${e.body.slice(0, 300)}`
+      : (e instanceof Error ? e.message : String(e));
+    console.error("sync-ghl location token failed", msg);
+    await recordFailure(msg);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   // ---- Preflight: confirm token + scope + location access ----
   try {
-    await ghl("/contacts/", TOKEN, { locationId, limit: 1 });
+    await ghl("/contacts/", locationToken, { locationId, limit: 1 });
   } catch (e) {
     const msg = e instanceof GhlError ? friendlyGhlError(e) : (e instanceof Error ? e.message : String(e));
     console.error("sync-ghl preflight failed", msg);
@@ -142,7 +203,7 @@ Deno.serve(async (req) => {
   try {
     let page = 1;
     while (page < 50) {
-      const res = await ghl("/contacts/", TOKEN, {
+      const res = await ghl("/contacts/", locationToken, {
         locationId,
         limit: 100,
         page,
@@ -202,7 +263,7 @@ Deno.serve(async (req) => {
   // ---- 2. Conversations + first outbound message for speed-to-lead ----
   // GHL conversations: GET /conversations/search?locationId=...
   try {
-    const convRes = await ghl("/conversations/search", TOKEN, {
+    const convRes = await ghl("/conversations/search", locationToken, {
       locationId,
       limit: 100,
     });
@@ -232,7 +293,7 @@ Deno.serve(async (req) => {
         const contactId = anyC.contactId;
         if (!contactId || !contactIds.has(String(contactId))) continue;
         try {
-          const msgRes = await ghl(`/conversations/${anyC.id}/messages`, TOKEN, { limit: 100 });
+          const msgRes = await ghl(`/conversations/${anyC.id}/messages`, locationToken, { limit: 100 });
           const messages = ((msgRes as any).messages?.messages ?? (msgRes as any).messages ?? []) as Json[];
           if (!messages.length) continue;
 
@@ -276,7 +337,7 @@ Deno.serve(async (req) => {
 
   // ---- 3. Opportunities ----
   try {
-    const opRes = await ghl("/opportunities/search", TOKEN, { location_id: locationId, limit: 100 });
+    const opRes = await ghl("/opportunities/search", locationToken, { location_id: locationId, limit: 100 });
     const ops = ((opRes as any).opportunities ?? []) as Json[];
     if (ops.length) {
       await admin.from("ghl_events_raw").upsert(

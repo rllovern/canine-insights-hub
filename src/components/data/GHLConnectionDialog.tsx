@@ -17,7 +17,7 @@ interface Props {
   onOpenChange?: (open: boolean) => void;
 }
 
-interface GhlLocation { id: string; name: string; address: string | null; }
+interface GhlLocation { id: string; name: string; address: string | null; companyId?: string | null; }
 
 export function GHLConnectionDialog({ property, source, onChanged, trigger, open: ctlOpen, onOpenChange: setCtlOpen }: Props) {
   const [uOpen, setUOpen] = useState(false);
@@ -51,6 +51,7 @@ export function GHLConnectionDialog({ property, source, onChanged, trigger, open
 
   const handleSave = async () => {
     if (!locationId) { toast.error("Pick a GHL location"); return; }
+    const location = locations.find((l) => l.id === locationId);
     setSaving(true);
     const { error } = await supabase
       .from("property_data_sources")
@@ -60,7 +61,7 @@ export function GHLConnectionDialog({ property, source, onChanged, trigger, open
           source: "ghl",
           is_connected: true,
           status: "connected",
-          config: { location_id: locationId },
+          config: { location_id: locationId, company_id: location?.companyId ?? null },
           last_error: null,
         },
         { onConflict: "property_id,source" },

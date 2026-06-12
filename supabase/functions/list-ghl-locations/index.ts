@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
     id: l.id,
     name: l.name,
     address: l.address ?? null,
+    companyId: l.companyId ?? l.company_id ?? l.company?.id ?? null,
   }));
 
   return new Response(JSON.stringify({ locations }), {
