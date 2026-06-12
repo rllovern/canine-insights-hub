@@ -240,7 +240,7 @@ export default function BudgetPacing() {
                     <Input
                       defaultValue={c.row.campaign_label ?? ""}
                       placeholder="—"
-                      className="h-8 border-transparent hover:border-input focus:border-input"
+                      className="h-8"
                       onBlur={(e) => {
                         const v = e.target.value.trim() || null;
                         if (v !== c.row.campaign_label) updateRow(c.row.id, { campaign_label: v });
@@ -251,7 +251,7 @@ export default function BudgetPacing() {
                     <Input
                       defaultValue={c.row.notes ?? ""}
                       placeholder="—"
-                      className="h-8 border-transparent hover:border-input focus:border-input"
+                      className="h-8"
                       onBlur={(e) => {
                         const v = e.target.value.trim() || null;
                         if (v !== c.row.notes) updateRow(c.row.id, { notes: v });
@@ -262,7 +262,7 @@ export default function BudgetPacing() {
                     <Input
                       type="number"
                       defaultValue={c.row.monthly_budget}
-                      className="h-8 w-28 ml-auto text-right border-transparent hover:border-input focus:border-input"
+                      className="h-8 w-28 ml-auto text-right"
                       onBlur={(e) => {
                         const v = Number(e.target.value);
                         if (v !== Number(c.row.monthly_budget)) updateRow(c.row.id, { monthly_budget: v });
