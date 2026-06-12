@@ -71,6 +71,7 @@ Deno.serve(async (req) => {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+  console.log("sync-ghl token", tokenFingerprint(TOKEN));
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -101,6 +102,34 @@ Deno.serve(async (req) => {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+  console.log("sync-ghl location", locationId, "property", property_id);
+
+  async function recordFailure(message: string) {
+    await admin
+      .from("property_data_sources")
+      .update({ last_error: message.slice(0, 1000), status: "error" })
+      .eq("property_id", property_id)
+      .eq("source", "ghl");
+    await admin.from("sync_runs").insert({
+      property_id,
+      source: "ghl",
+      status: "failure",
+      error_message: message.slice(0, 1000),
+    });
+  }
+
+  // ---- Preflight: confirm token + scope + location access ----
+  try {
+    await ghl("/contacts/", TOKEN, { locationId, limit: 1 });
+  } catch (e) {
+    const msg = e instanceof GhlError ? friendlyGhlError(e) : (e instanceof Error ? e.message : String(e));
+    console.error("sync-ghl preflight failed", msg);
+    await recordFailure(msg);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 200, // return 200 so the client surfaces the message instead of "Edge function returned 500"
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   const fromIso = date_from ? new Date(date_from).toISOString() : new Date(Date.now() - 30 * 86400_000).toISOString();
   const toIso = date_to ? new Date(date_to).toISOString() : new Date().toISOString();
@@ -125,8 +154,10 @@ Deno.serve(async (req) => {
       page++;
     }
   } catch (e) {
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const msg = e instanceof GhlError ? friendlyGhlError(e) : (e instanceof Error ? e.message : String(e));
+    await recordFailure(msg);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
