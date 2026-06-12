@@ -1,99 +1,38 @@
-## Budget Pacing page
+## Two fixes for Budget Pacing
 
-A new internal-only page at `/budget` that mirrors the structure of your reference screenshot. Each row is an "account" = (property + optional campaign label). Internal users can add, edit, and delete rows and budgets. Viewers do not see this page.
+### 1. Inline cells should look like plain text
 
-### Columns
+Remove the bordered input look on Budget, Campaign Label, and Notes cells. They should render as normal table text. Clicking a cell turns it into an editable input; blurring (or pressing Enter) saves and reverts to plain text. Same behavior, cleaner look — no more colored boxes around every cell.
 
-| Column | Source | Notes |
-|---|---|---|
-| # | row index | auto |
-| Account Name | property name | from `properties.name` |
-| Campaign Label | row config | optional; filters which `daily_metrics` rows count toward this account (matches `campaign` ILIKE `%label%`). Empty = all campaigns for that property. |
-| Notes | row config | free text, editable inline |
-| Budget | row config | editable inline (monthly) |
-| Spends | computed | sum of `daily_metrics.cost` over selected period (default MTD) |
-| % Spend | computed | spends / budget |
-| Yesterday Spend | computed | sum of cost for yesterday |
-| Active Budget | Google Ads sync (new) | sum of currently-enabled campaigns' daily budgets |
-| Target Daily Spend | computed | `(budget − spends) / days_remaining_in_month` |
-| Projection | computed | `spends + avg(last_5_days_spend) × days_remaining_in_month` |
-| Proj Run Rate | computed | projection / budget |
+Implementation: small `EditableCell` / `EditableNumberCell` component that toggles between a `<span>` and an `<Input>` on click. Uses `bg-transparent border-0 px-0 focus-visible:ring-0` for the in-edit state so it blends with the table.
 
-Conditional formatting: % Spend, Projection, Proj Run Rate use a red→yellow→green gradient (green near 100%, red far from it), matching the reference's intent without copying the palette — uses existing semantic tokens.
+### 2. Campaign Label should match real Google Ads labels
 
-### Date toggle
-- Defaults to **Month-to-date** (current calendar month, 1st → today).
-- Toggle: This month, Last month, custom month picker.
-- Spends, % Spend, Yesterday Spend, Target Daily Spend, Projection, Proj Run Rate all reflect the selected month. "Yesterday" is always the most recent day inside that month (for past months, it's the last day of the month).
-- Active Budget is always "current" (live state of campaigns); does not change with the toggle.
+Today the page does a substring match on `daily_metrics.campaign` name. Switch to using actual Google Ads labels attached to campaigns.
 
-### Editing
-- Internal-only: gated via `has_role(auth.uid(), 'internal')`.
-- Inline edit for Budget, Notes, Campaign Label.
-- "Add Account" button → modal: pick property, optional campaign label, monthly budget, notes.
-- "Delete" on row hover.
-
-### Active Budget from Google Ads
-Extend the existing `sync-google-ads` edge function to also fetch each campaign's daily budget (`campaign_budget.amount_micros / 1e6`) and status (only `ENABLED` counts). Store a snapshot per `(property_id, campaign_name)` so we can sum it per row at read time and filter by the row's campaign label.
-
-If the sync hasn't run yet or returns no data, Active Budget shows `—` instead of `$0` so it's obvious it's missing rather than zero.
-
----
-
-## Technical details
-
-### Schema (1 migration)
+Schema:
 
 ```sql
--- 1. Per-row budget configuration
-CREATE TABLE public.budget_accounts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE public.campaign_labels (
   property_id uuid NOT NULL REFERENCES public.properties(id) ON DELETE CASCADE,
-  campaign_label text,           -- nullable; matches against daily_metrics.campaign ILIKE '%label%'
-  notes text,
-  monthly_budget numeric NOT NULL DEFAULT 0,
-  sort_order int NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.budget_accounts TO authenticated;
-GRANT ALL ON public.budget_accounts TO service_role;
-ALTER TABLE public.budget_accounts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "internal read"  ON public.budget_accounts FOR SELECT TO authenticated USING (public.has_role(auth.uid(),'internal'));
-CREATE POLICY "internal write" ON public.budget_accounts FOR ALL    TO authenticated USING (public.has_role(auth.uid(),'internal')) WITH CHECK (public.has_role(auth.uid(),'internal'));
-CREATE TRIGGER budget_accounts_updated BEFORE UPDATE ON public.budget_accounts FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
--- 2. Snapshot of current Google Ads campaign daily budgets (overwritten each sync)
-CREATE TABLE public.campaign_budgets (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  property_id uuid NOT NULL REFERENCES public.properties(id) ON DELETE CASCADE,
-  campaign text NOT NULL,
-  daily_budget numeric NOT NULL DEFAULT 0,
-  status text,                   -- ENABLED / PAUSED / REMOVED
+  campaign text NOT NULL,        -- campaign name (matches daily_metrics.campaign / campaign_budgets.campaign)
+  label_name text NOT NULL,
   synced_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (property_id, campaign)
+  PRIMARY KEY (property_id, campaign, label_name)
 );
-GRANT SELECT ON public.campaign_budgets TO authenticated;
-GRANT ALL    ON public.campaign_budgets TO service_role;
-ALTER TABLE public.campaign_budgets ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "internal read" ON public.campaign_budgets FOR SELECT TO authenticated USING (public.has_role(auth.uid(),'internal'));
+-- GRANT + RLS: internal-only read, service role full access.
 ```
 
-### Edge function changes
-- `sync-google-ads`: after fetching campaign performance, also query `campaign` resource for `campaign_budget.amount_micros` and `campaign.status`; upsert into `campaign_budgets` (delete + insert per property for a clean snapshot).
+`sync-google-ads` extension: after the metrics + budget queries, run
+`SELECT campaign.name, label.name FROM campaign_label WHERE campaign.status != 'REMOVED'`,
+delete + re-insert that property's rows in `campaign_labels`.
 
-### Frontend
-- New route `/budget` in `App.tsx`, sidebar item "Budget Pacing" (internal-only, like the Admin section).
-- `src/pages/BudgetPacing.tsx`:
-  - Loads `budget_accounts`, joins to `properties.name`.
-  - Fetches `daily_metrics` for selected month, filters by `property_id` and (if `campaign_label`) `campaign` ILIKE.
-  - Fetches `campaign_budgets` filtered the same way; sums `daily_budget` where status = ENABLED.
-  - Computes all derived columns client-side.
-- Reuses shadcn `Table`, `Input`, `Dialog`, `Button`. Inline edit on blur / Enter.
-- Month toggle: simple `Select` (This month, Last month, plus 12 months back).
-- Conditional cell coloring via tailwind utility based on thresholds.
+Frontend:
+- `BudgetPacing.tsx` loads `campaign_labels`, builds a `Map<property_id, Map<label_name_lower, Set<campaign_name>>>`.
+- New helper `matchesLabel(propertyId, campaign, label)`:
+  - If `label` is empty → include all campaigns (unchanged).
+  - Else → include only campaigns in that property's label set. If the label exists in Google Ads but matches nothing, sum is `0`. If we have no label data for the property yet (sync hasn't run), fall back to substring match so existing rows don't break.
+- Use the same logic for `daily_metrics` (Spends, Yesterday, Last 5) and `campaign_budgets` (Active Budget).
+- Help text in the Add dialog updated: "Match Google Ads campaigns that carry this label."
 
-### Out of scope
-- Per-day historical Active Budget tracking. We only store the current snapshot.
-- Non-Google ad sources for Active Budget (rows that only have non-Google spend will show `—`).
-- Viewer access — internal-only for now.
+Out of scope: a dropdown of known labels (free text for now); editing labels in Google Ads from this UI.
