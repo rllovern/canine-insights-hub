@@ -1855,7 +1855,13 @@ export type Database = {
         | "lost"
         | "ignore"
       ghl_opportunity_status: "open" | "won" | "lost" | "abandoned" | "unknown"
-      ghl_response_source: "human" | "automation" | "ai" | "system" | "unknown"
+      ghl_response_source:
+        | "human"
+        | "automation"
+        | "ai"
+        | "system"
+        | "unknown"
+        | "customer"
       ghl_stage_history_source: "sync_diff" | "webhook" | "manual_backfill"
     }
     CompositeTypes: {
@@ -2005,7 +2011,14 @@ export const Constants = {
         "ignore",
       ],
       ghl_opportunity_status: ["open", "won", "lost", "abandoned", "unknown"],
-      ghl_response_source: ["human", "automation", "ai", "system", "unknown"],
+      ghl_response_source: [
+        "human",
+        "automation",
+        "ai",
+        "system",
+        "unknown",
+        "customer",
+      ],
       ghl_stage_history_source: ["sync_diff", "webhook", "manual_backfill"],
     },
   },
