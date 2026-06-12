@@ -14,7 +14,7 @@ export function SpeedToLead({
   loading: boolean;
   onDrill: (issue: DrillIssue) => void;
 }) {
-  if (loading) return <Skel n={6} />;
+  if (loading) return <Skel n={5} />;
   if (!speed) return null;
 
   const total = speed.total_leads || 0;
@@ -24,9 +24,10 @@ export function SpeedToLead({
   const under5 = Math.round((speed.pct_under_5m / 100) * total);
   const under15 = Math.round((speed.pct_under_15m / 100) * total);
   const missed5 = total - under5;
+  const missed5Pct = pctOf(missed5, total);
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
       <KpiTile
         label="Human Response Rate"
         value={formatPct(respPct)}
@@ -52,25 +53,17 @@ export function SpeedToLead({
         onClick={() => onDrill("never_responded")}
       />
       <KpiTile
-        label="Missed 5-Min SLA"
-        value={formatPct(pctOf(missed5, total))}
-        sub={ofDenom(missed5, total)}
-        tone={missed5 / Math.max(1, total) > 0.5 ? "bad" : missed5 > 0 ? "warn" : "good"}
-        onClick={() => onDrill("slow_response")}
-        tooltip="Share of all leads in window that did not get a human response within 5 minutes."
-      />
-      <KpiTile
         label="Responded Under 5 Min"
         value={formatPct(speed.pct_under_5m)}
         sub={ofDenom(under5, total)}
-        tone={speed.pct_under_5m >= 50 ? "good" : speed.pct_under_5m >= 20 ? "warn" : "bad"}
-        tooltip={`Of leads that responded, this is ${formatPct(pctOf(under5, responded))}.`}
+        tone={speed.pct_under_5m >= 50 ? "good" : speed.pct_under_5m >= 20 ? "warn" : "default"}
+        tooltip={`Of leads that responded, this is ${formatPct(pctOf(under5, responded))}. Missed 5-min SLA: ${formatPct(missed5Pct)} (${formatNum(missed5)} of ${formatNum(total)}).`}
       />
       <KpiTile
         label="Responded Under 15 Min"
         value={formatPct(speed.pct_under_15m)}
         sub={ofDenom(under15, total)}
-        tone={speed.pct_under_15m >= 70 ? "good" : speed.pct_under_15m >= 40 ? "warn" : "bad"}
+        tone={speed.pct_under_15m >= 70 ? "good" : speed.pct_under_15m >= 40 ? "warn" : "default"}
         tooltip={`Responded Under 1 Min: ${formatPct(speed.pct_under_1m)} (${formatNum(under1)} of ${formatNum(total)}).`}
       />
     </div>
@@ -78,7 +71,7 @@ export function SpeedToLead({
 }
 
 /**
- * Secondary automation comparison. Visually lower weight.
+ * Secondary automation comparison — single compact horizontal strip.
  */
 export function AutomationComparison({
   speed, handling, loading,
@@ -87,34 +80,28 @@ export function AutomationComparison({
   handling: HandlingData | null;
   loading: boolean;
 }) {
-  if (loading) return <Skel n={3} />;
+  if (loading) return <Skeleton className="h-10 w-full rounded-lg" />;
   if (!speed || !handling) return null;
+  const Item = ({ label, value }: { label: string; value: string }) => (
+    <div className="flex items-baseline gap-1.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm font-semibold tabular-nums text-foreground">{value}</span>
+    </div>
+  );
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <KpiTile
-        label="Median Automation Response"
-        value={formatDuration(speed.median_automation_seconds)}
-        sub="First outbound automation touch (AI bucketed in automation for v1)"
-      />
-      <KpiTile
-        label="Human vs Automation Response Gap"
-        value={formatDuration(speed.human_vs_automation_gap_seconds ?? null)}
-        sub="Median human time minus median automation time"
-        tone={(speed.human_vs_automation_gap_seconds ?? 0) > 3600 ? "warn" : "default"}
-      />
-      <KpiTile
-        label="Automation Touches Per Lead"
-        value={Number(handling.avg_automation_touches ?? 0).toFixed(2)}
-        sub={`Avg human attempts: ${Number(handling.avg_human_attempts ?? 0).toFixed(2)}`}
-        tooltip="Automation + AI sends per lead. AI is bucketed into automation for v1."
-      />
+    <div className="rounded-lg border bg-muted/30 px-3 py-2 flex flex-wrap items-center gap-x-5 gap-y-1.5">
+      <Item label="Automation median:" value={formatDuration(speed.median_automation_seconds)} />
+      <Item label="Human median:" value={formatDuration(speed.median_human_raw_seconds)} />
+      <Item label="Gap:" value={formatDuration(speed.human_vs_automation_gap_seconds ?? null)} />
+      <Item label="Automation touches / lead:" value={Number(handling.avg_automation_touches ?? 0).toFixed(2)} />
+      <span className="ml-auto text-[10.5px] text-muted-foreground/80">AI bucketed into automation for v1</span>
     </div>
   );
 }
 
 function Skel({ n }: { n: number }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
       {Array.from({ length: n }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}
     </div>
   );
