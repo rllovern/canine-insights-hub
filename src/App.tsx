@@ -13,6 +13,7 @@ import PropertyPage from "./pages/PropertyPage";
 import PublicReport from "./pages/PublicReport";
 import Reports from "./pages/Reports";
 import Assistant from "./pages/Assistant";
+import BudgetPacing from "./pages/BudgetPacing";
 import AdminProperties from "./pages/admin/AdminProperties";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
@@ -56,6 +57,7 @@ const App = () => (
                     <Route path="/properties/:slug" element={<PropertyPage />} />
                     <Route path="/assistant" element={<Assistant />} />
                     <Route path="/reports" element={<Reports />} />
+                    <Route path="/budget" element={<RequireAuth requireRealRole="internal"><BudgetPacing /></RequireAuth>} />
                     <Route
                       path="/admin/properties"
                       element={<RequireAuth requireRealRole="internal"><AdminProperties /></RequireAuth>}

@@ -255,6 +255,43 @@ Deno.serve(async (req) => {
       .update({ status: "connected", last_synced_at: new Date().toISOString(), last_error: null })
       .eq("id", conn.id);
 
+    // Also refresh per-campaign daily budget snapshot for Budget Pacing.
+    try {
+      const budgetGaql = `
+        SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros
+        FROM campaign
+        WHERE campaign.status != 'REMOVED'
+        ${campaignIdAllowlist ? `AND campaign.id IN (${campaignIdAllowlist.join(",")})` : ""}
+      `;
+      const bRes = await fetch(url, { method: "POST", headers, body: JSON.stringify({ query: budgetGaql }) });
+      const bJson = await bRes.json();
+      if (bRes.ok) {
+        const bChunks = Array.isArray(bJson) ? bJson : [bJson];
+        const budgetRows: Array<{ property_id: string; campaign: string; daily_budget: number; status: string }> = [];
+        const seen = new Set<string>();
+        for (const chunk of bChunks) {
+          for (const r of chunk.results ?? []) {
+            const name = r.campaign?.name ?? "(unknown)";
+            if (seen.has(name)) continue;
+            seen.add(name);
+            budgetRows.push({
+              property_id: propertyId,
+              campaign: name,
+              daily_budget: Number(r.campaignBudget?.amountMicros ?? 0) / 1_000_000,
+              status: String(r.campaign?.status ?? ""),
+            });
+          }
+        }
+        // Snapshot: clear prior rows for this property then insert current.
+        await admin.from("campaign_budgets").delete().eq("property_id", propertyId);
+        if (budgetRows.length) {
+          await admin.from("campaign_budgets").insert(budgetRows.map((r) => ({ ...r, synced_at: new Date().toISOString() })));
+        }
+      }
+    } catch (e) {
+      console.error("campaign_budgets snapshot failed", e);
+    }
+
     return new Response(JSON.stringify({ ok: true, written, range: { from, to } }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

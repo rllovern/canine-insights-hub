@@ -14,6 +14,82 @@ export type Database = {
   }
   public: {
     Tables: {
+      budget_accounts: {
+        Row: {
+          campaign_label: string | null
+          created_at: string
+          id: string
+          monthly_budget: number
+          notes: string | null
+          property_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          campaign_label?: string | null
+          created_at?: string
+          id?: string
+          monthly_budget?: number
+          notes?: string | null
+          property_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          campaign_label?: string | null
+          created_at?: string
+          id?: string
+          monthly_budget?: number
+          notes?: string | null
+          property_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_accounts_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_budgets: {
+        Row: {
+          campaign: string
+          daily_budget: number
+          id: string
+          property_id: string
+          status: string | null
+          synced_at: string
+        }
+        Insert: {
+          campaign: string
+          daily_budget?: number
+          id?: string
+          property_id: string
+          status?: string | null
+          synced_at?: string
+        }
+        Update: {
+          campaign?: string
+          daily_budget?: number
+          id?: string
+          property_id?: string
+          status?: string | null
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_budgets_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ctm_calls: {
         Row: {
           ad_group: string | null
