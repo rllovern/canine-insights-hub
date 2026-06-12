@@ -1,0 +1,1 @@
+ALTER TYPE public.ghl_response_source ADD VALUE IF NOT EXISTS 'customer';

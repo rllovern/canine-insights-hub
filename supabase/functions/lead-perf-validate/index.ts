@@ -99,10 +99,17 @@ Deno.serve(async (req) => {
 
   // Message classification breakdown
   const sources: Json = {};
-  for (const s of ["human", "automation", "system", "unknown"]) {
+  for (const s of ["human", "automation", "system", "customer", "unknown"]) {
     sources[s] = await count("ghl_messages", (q) => (q as ReturnType<typeof admin.from>).eq("response_source", s).gte("sent_at", from.toISOString()).lte("sent_at", to.toISOString()));
   }
   db.messages_by_source = sources;
+  // Outbound-only unknown (the actionable drift signal)
+  db.outbound_unknown = await count("ghl_messages", (q) => (q as ReturnType<typeof admin.from>)
+    .eq("response_source", "unknown").eq("direction", "outbound")
+    .gte("sent_at", from.toISOString()).lte("sent_at", to.toISOString()));
+
+  // Stage-diff history rows written by sync
+  db.stage_history_rows = await count("ghl_opportunity_stage_history");
 
   // Appointment status distribution
   const apptStatus: Json = {};
@@ -167,8 +174,8 @@ Deno.serve(async (req) => {
   if (typeof live.stages_total === "number" && typeof db.stages === "number" && live.stages_total !== db.stages) {
     drift.push(`stages: live ${live.stages_total} vs db ${db.stages}`);
   }
-  if ((db.messages_by_source as Json)?.unknown && (db.messages_by_source as Json).unknown as number > 0) {
-    drift.push(`messages with response_source=unknown: ${(db.messages_by_source as Json).unknown} (review source_raw values)`);
+  if ((db.outbound_unknown as number) > 0) {
+    drift.push(`outbound messages with response_source=unknown: ${db.outbound_unknown} (review source_raw values)`);
   }
   const unmapped = (mapping ?? []).filter((m) => !(m as Json).confirmed_by_user).length;
   if (unmapped) drift.push(`pipeline mapping: ${unmapped} stages still unconfirmed (suggestions only)`);
