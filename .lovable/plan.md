@@ -1,82 +1,59 @@
+Do I know what the issue is? Yes.
 
-## 1. Go High Level integration
-
-**Auth.** Agency-wide Private Integration token stored as a secret `GHL_PRIVATE_INTEGRATION_TOKEN` (requested via add_secret). One token, used across all locations.
-
-**Per-property mapping.** Add `ghl` to `property_data_sources.source` enum (or use existing text column — TBD at build time). Each property's GHL config stores `{ location_id }`. A small Connect dialog on the property settings lets internal users pick which GHL location maps to the property (we list locations via the agency token).
-
-**Data model — capture everything, surface what we need now.**
-
-- `ghl_contacts` — typed columns for the fields we actively use (first_name, last_name, email, phone, source, assigned_to, created_at, first_response_at, speed_to_lead_seconds), plus a `raw jsonb` column holding the full untouched contact payload from GHL. New fields tomorrow = no schema change.
-- `ghl_events_raw` — append-only archive of every conversation/message/opportunity/appointment/note payload we pull, keyed by `(property_id, ghl_object_type, ghl_object_id, occurred_at)` with a `raw jsonb` body. This is the "house every conceivable data point" bucket; we can derive new metrics later without re-pulling.
-- All tables: RLS scoped via internal role + viewer access through existing `viewer_can_access`, plus the standard GRANT block.
-
-**Speed-to-lead computation.** For each new contact, find the earliest outbound message/call timestamp in the conversations endpoint and store the delta on `ghl_contacts.speed_to_lead_seconds`. Re-evaluated on every sync until a value is set.
-
-**Edge function `sync-ghl`.** Same shape as the existing `sync-google-ads` / `sync-ctm` / `sync-ga4`:
-- Input: `{ property_id, date_from, date_to }`.
-- Pulls contacts (paginated), conversations, opportunities, appointments, notes for the date window.
-- Upserts typed rows into `ghl_contacts`; inserts raw payloads into `ghl_events_raw`.
-- Returns `{ written }`.
-
-**Scheduler hookup.** Add `ghl` to `scheduled-sync-all`'s `SOURCE_TO_FN` map so the existing every-N-hours cron picks it up.
-
-**No new dashboard surfaces in this plan.** Speed-to-lead, lead counts, etc. will land as a follow-up once the data is flowing. (Confirm if you want a quick KPI added now.)
-
-## 2. API Health page
-
-**Route.** `/admin/settings/api-health` (also reachable as a tab inside `AdminSettings` so it lives under Settings as requested). Internal-only via `RequireAuth requireRealRole="internal"`.
-
-**Layout.** Grouped by integration:
+The app is successfully reaching the `sync-ghl` edge function and the function is successfully reading the stored `GHL_PRIVATE_INTEGRATION_TOKEN`. The failure is coming back from Go High Level on this exact request:
 
 ```text
-Google Ads            ● Healthy        Last success: 2h ago    Last issue: —
-  ▸ expand → table of properties, status pill, last_success_at, last_failure_at, last error message
-CallTrackingMetrics   ● Degraded       Last success: 6h ago    Last issue: 32m ago
-GA4                   ● Healthy        ...
-Keyword.com           ● Healthy        ...
-Go High Level         ● Not connected  ...
+GET https://services.leadconnectorhq.com/contacts/?locationId=...
+401: The token is not authorized for this scope.
 ```
 
-**Status rules per (integration, property):**
-- `healthy` — most recent `sync_runs` row is `success` and `started_at` is within `2 × cron interval`.
-- `failing` — most recent run is `failure`.
-- `stale` — last success older than `2 × cron interval`.
-- `not_connected` — no `property_data_sources` row with `status='connected'`.
+That means the token exists, but Go High Level is refusing the Contacts endpoint for one of these reasons:
 
-**Aggregate status per integration:** worst status across its connected properties.
+1. The Private Integration token does not include the Contacts read scope.
+2. The token is agency/company-level but does not have access to the selected sub-account/location.
+3. The location selected for the property does not belong to the same GHL account/token.
+4. The token was regenerated in GHL but the saved backend secret is still the older token.
 
-**Data source.** Reuses the existing `sync_runs` table (already populated by `scheduled-sync-all`). We add an index on `(source, started_at desc)` if one isn't already present, and a SECURITY DEFINER RPC `get_api_health_summary()` that returns one row per (source, property) with `status`, `last_success_at`, `last_failure_at`, `last_error_message`. Internal-only via `has_role` check.
+Files involved:
 
-**Drilldown row shows:**
-- Property name + link to the property page
-- Status pill
-- Last successful run (date/time, relative)
-- Last issue (date/time, relative, with error excerpt; click to view full message in a popover)
-- "Sync now" button (calls the matching `sync-<source>` edge function for that property)
+- `supabase/functions/sync-ghl/index.ts` — calls `/contacts/`, `/conversations/search`, `/conversations/{id}/messages`, and `/opportunities/search`.
+- `supabase/functions/list-ghl-locations/index.ts` — lists available locations from the saved token.
+- `src/components/data/GHLConnectionDialog.tsx` — lets you connect a property to a GHL location and trigger sync.
 
-**Auto-refresh.** Page refetches the RPC every 30s.
+Plan to fix and make this clearer:
 
-## 3. Sidebar / navigation
+1. Improve GHL sync error handling
+   - Detect GHL 401 scope errors separately from generic 500s.
+   - Return a clearer message: token found, but missing scope or not authorized for this selected location.
+   - Record the issue in integration health with the failed timestamp and GHL endpoint that failed.
 
-No new top-level nav item — API Health lives under Settings. Settings page becomes tabbed: `Schedule | API Health`.
+2. Add a safe token diagnostic to the edge function logs
+   - Log only token length, first 4 chars, and last 4 chars.
+   - Never log the full token.
+   - This helps confirm whether the backend is using the current token without exposing it.
 
-## 4. Files touched
+3. Add a preflight health check for GHL
+   - When syncing GHL, test the selected location against the Contacts endpoint first.
+   - If unauthorized, fail fast with guidance instead of surfacing a generic edge function 500.
 
-- New migration: `ghl_contacts`, `ghl_events_raw`, GHL added to `property_data_sources` source values, `get_api_health_summary()` RPC, index on `sync_runs`.
-- New secret: `GHL_PRIVATE_INTEGRATION_TOKEN` (via add_secret prompt).
-- New edge function: `supabase/functions/sync-ghl/index.ts`.
-- New edge function: `supabase/functions/list-ghl-locations/index.ts` (for the connect dialog).
-- Update `supabase/functions/scheduled-sync-all/index.ts` — add `ghl` to source map.
-- New component: `src/components/data/GHLConnectionDialog.tsx`.
-- Update `src/pages/admin/AdminSettings.tsx` — wrap content in tabs.
-- New: `src/pages/admin/ApiHealth.tsx` (rendered inside the Settings tab).
-- Update `src/pages/admin/AdminProperties.tsx` — add GHL row in the data sources area.
+4. Confirm the location mapping is valid
+   - Keep using the locations returned by `list-ghl-locations`, but surface a clearer warning if the selected property’s location is no longer accessible by the current token.
 
-## 5. Out of scope (for this iteration)
+5. User-side requirement after code hardening
+   - In GHL Private Integrations, the saved token must include at least:
+     - Contacts read
+     - Locations read
+     - Conversations read
+     - Conversation messages read
+     - Opportunities read
+   - If GHL regenerates the token after changing scopes, the backend secret must be updated with that regenerated token.
 
-- GHL-driven dashboard KPIs and charts (speed-to-lead, lead volume) — added once data is flowing.
-- Per-property GHL OAuth installs (we're using the agency token).
-- Alerting/notifications when a sync goes red.
+After implementation, the sync button will no longer show a vague `Edge function returned 500`; it will show the exact GHL authorization problem and the API Health page will retain the failure timestamp/details.
 
-Confirm and I'll switch to build mode and implement.
+<presentation-actions>
+  <presentation-open-history>View History</presentation-open-history>
+</presentation-actions>
+
+<presentation-actions>
+<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
+</presentation-actions>

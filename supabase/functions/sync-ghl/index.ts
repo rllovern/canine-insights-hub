@@ -14,6 +14,33 @@ const GHL_VERSION = "2021-07-28";
 
 type Json = Record<string, unknown>;
 
+class GhlError extends Error {
+  status: number;
+  path: string;
+  body: string;
+  constructor(path: string, status: number, body: string) {
+    super(`GHL ${path} ${status}: ${body.slice(0, 500)}`);
+    this.path = path;
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function tokenFingerprint(token: string) {
+  if (!token) return "missing";
+  return `len=${token.length} ${token.slice(0, 4)}…${token.slice(-4)}`;
+}
+
+function friendlyGhlError(err: GhlError): string {
+  if (err.status === 401) {
+    return `Go High Level rejected the request to ${err.path} (401). The Private Integration token is missing the required scope, or it does not have access to this location. In GHL → Settings → Private Integrations, enable read access for: Contacts, Locations, Conversations, Conversation Messages, Opportunities. If you regenerated the token, update the GHL_PRIVATE_INTEGRATION_TOKEN secret with the new value.`;
+  }
+  if (err.status === 403) {
+    return `Go High Level forbade ${err.path} (403). The token is valid but does not have permission for this location or resource.`;
+  }
+  return err.message;
+}
+
 async function ghl(path: string, token: string, params: Record<string, string | number | undefined> = {}) {
   const url = new URL(GHL_BASE + path);
   for (const [k, v] of Object.entries(params)) {
@@ -28,7 +55,7 @@ async function ghl(path: string, token: string, params: Record<string, string | 
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`GHL ${path} ${res.status}: ${text.slice(0, 500)}`);
+    throw new GhlError(path, res.status, text);
   }
   return (await res.json()) as Json;
 }
