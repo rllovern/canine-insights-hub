@@ -493,7 +493,15 @@ Deno.serve(async (req) => {
         }
       }
     }
-    counts.appointments = await upsertChunked(admin, "ghl_appointments", apptRows, "property_id,ghl_event_id");
+    // Dedupe — same event can be returned across overlapping windows/calendars.
+    const seen = new Set<string>();
+    const deduped = apptRows.filter((r) => {
+      const k = `${(r as Json).property_id}:${(r as Json).ghl_event_id}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    counts.appointments = await upsertChunked(admin, "ghl_appointments", deduped, "property_id,ghl_event_id");
     counts.appointment_status_distribution = statusDist;
     samples.appointment = apptRows[0] ?? null;
   }, undefined);
