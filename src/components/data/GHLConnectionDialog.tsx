@@ -44,7 +44,9 @@ export function GHLConnectionDialog({ property, source, onChanged, trigger, open
     const { data, error } = await supabase.functions.invoke("list-ghl-locations", { body: {} });
     setLoadingLocs(false);
     if (error) { toast.error(`Could not load GHL locations: ${error.message}`); return; }
-    setLocations(((data as { locations?: GhlLocation[] })?.locations) ?? []);
+    const payload = data as { locations?: GhlLocation[]; error?: string } | null;
+    if (payload?.error) toast.error(payload.error);
+    setLocations(payload?.locations ?? []);
   };
 
   const handleSave = async () => {
