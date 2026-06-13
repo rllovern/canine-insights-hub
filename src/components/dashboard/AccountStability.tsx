@@ -218,6 +218,19 @@ function StatusTimeline({
   );
 }
 
+function groupChanges(events: Classified[]): Classified[][] {
+  // Bucket by 5-min window + campaign + user + resource_type
+  const buckets = new Map<string, Classified[]>();
+  for (const e of events) {
+    const t = Math.floor(new Date(e.change_date_time).getTime() / (5 * 60 * 1000));
+    const key = [t, e.campaign_id ?? "_", e.user_email ?? "_", e.resource_type ?? "_"].join("|");
+    const arr = buckets.get(key) ?? [];
+    arr.push(e);
+    buckets.set(key, arr);
+  }
+  return Array.from(buckets.values());
+}
+
 function ChangeSparkline({ events, days = 30 }: { events: Classified[]; days?: number }) {
   const now = new Date();
   const buckets = Array.from({ length: days }, (_, i) => {
@@ -237,6 +250,9 @@ function ChangeSparkline({ events, days = 30 }: { events: Classified[]; days?: n
     { high: 0, medium: 0, low: 0 } as Record<Impact, number>,
   );
   const structural = totals.high + totals.medium;
+  const groups = groupChanges(events);
+  const groupCount = groups.length;
+  const impactedScopes = new Set(events.map((e) => e.campaign_id ?? e.campaign_name ?? "_account_")).size;
   const max = Math.max(1, ...buckets.map((b) => b.total));
   return (
     <div className="rounded-lg border border-border bg-card p-3">
@@ -244,33 +260,41 @@ function ChangeSparkline({ events, days = 30 }: { events: Classified[]; days?: n
         <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Change Activity · last {days} days</div>
         <div className="flex items-center gap-3 text-[10.5px] text-muted-foreground">
           <span><span className="text-foreground font-semibold">{events.length}</span> total</span>
+          <span><span className="text-foreground font-semibold">{groupCount}</span> change groups</span>
+          <span><span className="text-foreground font-semibold">{impactedScopes}</span> scopes</span>
           <span><span className="text-foreground font-semibold">{structural}</span> structural</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-destructive" />{totals.high} high</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />{totals.medium} med</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/50" />{totals.low} low/admin</span>
         </div>
       </div>
-      <div className="flex items-end gap-[3px] h-14">
+      <div className="flex items-end gap-[3px] h-20 border-b border-border/60">
         {buckets.map((b, i) => {
-          const h = b.total === 0 ? 4 : Math.max(12, (b.total / max) * 100);
+          const h = b.total === 0 ? 0 : Math.max(8, (b.total / max) * 100);
           const top: Impact = b.high > 0 ? "high" : b.medium > 0 ? "medium" : "low";
+          const isToday = i === buckets.length - 1;
           return (
             <div
               key={i}
               className="flex-1 flex items-end h-full"
-              title={`${format(b.day, "MMM d")}: ${b.total} change${b.total === 1 ? "" : "s"} (H${b.high}/M${b.medium}/L${b.low})`}
+              title={`${format(b.day, "MMM d")} · ${b.total} change${b.total === 1 ? "" : "s"} · ${b.high} high · ${b.medium} med · ${b.low} low`}
             >
-              <div
-                className={`w-full rounded-sm ${b.total === 0 ? "bg-muted/50" : impactBarClass(top)}`}
-                style={{ height: `${h}%`, opacity: b.total === 0 ? 0.6 : 1 }}
-              />
+              {b.total === 0 ? (
+                <div className={`w-full ${isToday ? "border-l border-dashed border-primary/40" : ""}`} style={{ height: "100%" }} />
+              ) : (
+                <div
+                  className={`w-full rounded-t-sm ${impactBarClass(top)}`}
+                  style={{ height: `${h}%` }}
+                />
+              )}
             </div>
           );
         })}
       </div>
       <div className="mt-1 flex justify-between text-[9.5px] text-muted-foreground">
         <span>{format(buckets[0].day, "MMM d")}</span>
-        <span>{format(buckets[buckets.length - 1].day, "MMM d")}</span>
+        <span>{format(buckets[Math.floor(buckets.length / 2)].day, "MMM d")}</span>
+        <span>Today · {format(buckets[buckets.length - 1].day, "MMM d")}</span>
       </div>
     </div>
   );
