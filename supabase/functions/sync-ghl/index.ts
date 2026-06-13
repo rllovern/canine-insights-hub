@@ -77,7 +77,7 @@ async function ghlFetch(method: string, path: string, token: string, body?: Json
 // ---------- Classification ------------------------------------------
 // Returns one of: human | automation | system | unknown.
 // AI is bucketed under 'automation' for v1.
-function classifyMessage(m: Json): "human" | "automation" | "system" | "customer" | "unknown" {
+function classifyMessage(m: Json): "human" | "automation" | "system" | "customer" | "unknown" | "ai" {
   const dir = String(m.direction ?? "").toLowerCase();
   const mt = String(m.messageType ?? "").toUpperCase();
   const src = String(m.source ?? "").toLowerCase();
@@ -92,6 +92,7 @@ function classifyMessage(m: Json): "human" | "automation" | "system" | "customer
   if (dir && dir !== "outbound") return "customer";
 
   // Outbound automation surfaces
+  if (src.includes("ai") || mt.includes("ai")) return "ai";
   if (src === "workflow" || src === "campaign" || src === "bulk_actions") return "automation";
 
   // userId present + not flagged as automation = a real human action
@@ -300,6 +301,7 @@ Deno.serve(async (req) => {
   // ===== 3. CONTACTS (cursor pagination) ============================
   const contactIds: string[] = [];
   const contactCreatedAt = new Map<string, string>();
+  const contactLookup = new Map<string, { phone: string | null; email: string | null }>();
   await safe("contacts", async () => {
     let cursor: unknown[] | null = null;
     let pages = 0;
@@ -318,18 +320,12 @@ Deno.serve(async (req) => {
       pages++;
     }
 
-    const inRange = buffer.filter((c) => {
-      const d = (c.dateAdded ?? c.createdAt) as string | undefined;
-      if (!d) return true;
-      const t = new Date(d).getTime();
-      return t >= dateFrom.getTime() && t <= dateTo.getTime();
-    });
-
-    const rows = inRange.map((c) => {
+    const rows = buffer.map((c) => {
       const a = c as Json;
       const id = String(a.id);
       const createdAt = (a.dateAdded ?? a.createdAt) as string | null;
       if (createdAt) contactCreatedAt.set(id, createdAt);
+      contactLookup.set(id, { phone: (a.phone as string | null) ?? null, email: (a.email as string | null) ?? null });
       contactIds.push(id);
       return {
         property_id, ghl_location_id: locationId, ghl_contact_id: id,
@@ -346,14 +342,14 @@ Deno.serve(async (req) => {
       };
     });
     counts.contacts_total_pulled = buffer.length;
-    counts.contacts_in_window = await upsertChunked(admin, "ghl_contacts", rows, "property_id,ghl_contact_id");
-    samples.contact = inRange[0] ?? null;
+    counts.contacts_synced = await upsertChunked(admin, "ghl_contacts", rows, "property_id,ghl_contact_id");
+    samples.contact = buffer[0] ?? null;
 
     // Tag refresh fallback: /contacts/search sometimes returns stale or empty tags.
     // For contacts in the window whose tags came back empty, fetch the detail
     // endpoint (cap to avoid burning the API budget).
     const TAG_REFRESH_CAP = 300;
-    const needsTagRefresh = inRange
+    const needsTagRefresh = buffer
       .filter((c) => {
         const t = (c as Json).tags;
         return !Array.isArray(t) || t.length === 0;
@@ -398,12 +394,59 @@ Deno.serve(async (req) => {
       skip += list.length;
     }
     if (conversationPages >= MAX_CONVERSATION_SEARCH_PAGES) conversationSearchCapped = true;
+    const contactSet = new Set(contactIds);
+    const targetedConversationSamples: Json[] = [];
+    let targetedConversationLookups = 0;
+    let targetedConversationsAdded = 0;
+
+    // Location-wide conversation search can miss older conversations when the
+    // location has more than the safety-capped pages. Hydrate every in-window
+    // contact directly by contactId so old leads with visible GHL activity do
+    // not end up with zero local messages.
+    for (const cid of contactIds) {
+      const alreadyHasConversation = Array.from(convMap.values()).some((conv) => String((conv as Json).contactId ?? "") === cid);
+      if (alreadyHasConversation) continue;
+      targetedConversationLookups++;
+      const found = new Map<string, Json>();
+      const addMatches = (items: Json[]) => {
+        for (const conv of items) {
+          const id = String((conv as Json).id ?? "");
+          if (id) found.set(id, conv);
+        }
+      };
+      const j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(cid)}&limit=100`, token);
+      addMatches(((j.conversations as Json[]) ?? []).filter((conv) => String((conv as Json).contactId ?? "") === cid));
+      const contactInfo = contactLookup.get(cid);
+      const phoneDigits = String(contactInfo?.phone ?? "").replace(/\D/g, "");
+      const email = String(contactInfo?.email ?? "").trim().toLowerCase();
+      if (!found.size && (phoneDigits || email)) {
+        const q = encodeURIComponent(email || phoneDigits);
+        const byQuery = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&query=${q}&limit=100`, token).catch(() => ({ conversations: [] } as Json));
+        addMatches(((byQuery.conversations as Json[]) ?? []).filter((conv) => {
+          const convContactId = String((conv as Json).contactId ?? "");
+          const convPhone = String((conv as Json).phone ?? (conv as Json).contactPhone ?? "").replace(/\D/g, "");
+          const convEmail = String((conv as Json).email ?? (conv as Json).contactEmail ?? "").trim().toLowerCase();
+          return convContactId === cid || (!!phoneDigits && convPhone.endsWith(phoneDigits.slice(-10))) || (!!email && convEmail === email);
+        }));
+      }
+      const list = Array.from(found.values());
+      for (const conv of list) {
+        const id = String((conv as Json).id ?? "");
+        if (!id || convMap.has(id)) continue;
+        convMap.set(id, conv);
+        targetedConversationsAdded++;
+      }
+      if (list.length && targetedConversationSamples.length < 10) targetedConversationSamples.push({ contact_id: cid, conversations_found: list.length });
+    }
+
     const convs = Array.from(convMap.values());
     counts.conversations = convs.length;
     counts.conversation_pages = conversationPages;
     counts.conversation_search_capped = conversationSearchCapped;
+    counts.targeted_conversation_lookups = targetedConversationLookups;
+    counts.targeted_conversations_added = targetedConversationsAdded;
+    samples.targeted_conversation_hydration = targetedConversationSamples;
 
-    const contactSet = new Set(contactIds);
     const msgRows: Json[] = [];
     let firstHumanSample: Json | null = null;
     let firstAutoSample: Json | null = null;
@@ -412,14 +455,16 @@ Deno.serve(async (req) => {
     let totalMessagePages = 0;
     const cappedConversations: Json[] = [];
     const perConversation: Json[] = [];
-    const classCounts: Record<string, number> = { human: 0, automation: 0, system: 0, customer: 0, unknown: 0 };
+    const classCounts: Record<string, number> = { human: 0, automation: 0, ai: 0, system: 0, customer: 0, unknown: 0 };
 
     for (const c of convs) {
       const cAny = c as Json;
       const conversationId = String(cAny.id ?? "");
       const contactId = String(cAny.contactId ?? "");
       if (!conversationId) continue;
-      if (contactId && !contactSet.has(contactId)) continue;
+      const lastMsgAt = cAny.lastMessageTimestamp ? new Date(Number(cAny.lastMessageTimestamp)).getTime() : 0;
+      const isRecent = lastMsgAt >= dateFrom.getTime();
+      if (contactId && !contactSet.has(contactId) && !isRecent) continue;
 
       const seenMessageIds = new Set<string>();
       let lastMessageId: string | null = null;

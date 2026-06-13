@@ -149,6 +149,29 @@ Deno.serve(async (req) => {
 
   const report: Json = { property_id, contact_id, location_id: locationId, resync, warnings: [] as string[] };
 
+  const { data: localContact } = await admin.from("ghl_contacts")
+    .select("ghl_contact_id, first_name, last_name, phone, email, tags, ghl_created_at, updated_at")
+    .eq("property_id", property_id).eq("ghl_contact_id", contact_id).maybeSingle();
+  let liveContact: Json | null = null;
+  try {
+    const d = await ghl("GET", `/contacts/${contact_id}`, token);
+    liveContact = ((d.contact as Json | undefined) ?? d) as Json;
+  } catch (e) {
+    (report.warnings as string[]).push(`live_contact_fetch_failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  report.contact = {
+    local: localContact ?? null,
+    live: liveContact ? {
+      id: liveContact.id,
+      firstName: liveContact.firstName,
+      lastName: liveContact.lastName,
+      phone: liveContact.phone,
+      email: liveContact.email,
+      tags: liveContact.tags,
+      dateAdded: liveContact.dateAdded ?? liveContact.createdAt,
+    } : null,
+  };
+
   const { data: beforeFact } = await admin.from("ghl_lead_facts")
     .select("id, contact_id, opportunity_id, lead_created_at, needs_first_response, needs_first_response_reason, stage_id, canonical_stage, handled_by_stage, first_human_answered_inbound_at, first_human_engagement_at, human_call_duration_seconds")
     .eq("property_id", property_id).eq("contact_id", contact_id).maybeSingle();
@@ -161,15 +184,39 @@ Deno.serve(async (req) => {
   // Find every live conversation for this contact, then walk all message pages.
   // Prefer contact-scoped search so a one-lead diagnostic does not scan the whole location.
   const conversations: Json[] = [];
+  const conversationIds = new Set<string>();
+  const addConversations = (items: Json[]) => {
+    for (const c of items) {
+      const id = String((c as Json).id ?? "");
+      if (!id || conversationIds.has(id)) continue;
+      conversationIds.add(id);
+      conversations.push(c);
+    }
+  };
   let conversationPages = 0;
   let usedContactScopedConversationSearch = true;
   try {
     const j = await ghl("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(contact_id)}&limit=100`, token);
     const list = ((j.conversations as Json[]) ?? []);
-    conversations.push(...list.filter((c) => String((c as Json).contactId ?? "") === contact_id));
+    addConversations(list.filter((c) => String((c as Json).contactId ?? "") === contact_id));
     conversationPages++;
   } catch (_e) {
     usedContactScopedConversationSearch = false;
+  }
+  const phoneDigits = String((liveContact?.phone ?? localContact?.phone) ?? "").replace(/\D/g, "");
+  const email = String((liveContact?.email ?? localContact?.email) ?? "").trim().toLowerCase();
+  if (!conversations.length && (phoneDigits || email)) {
+    const q = encodeURIComponent(email || phoneDigits);
+    try {
+      const j = await ghl("GET", `/conversations/search?locationId=${locationId}&query=${q}&limit=100`, token);
+      const list = ((j.conversations as Json[]) ?? []).filter((c) => {
+        const convContactId = String((c as Json).contactId ?? "");
+        const convPhone = String((c as Json).phone ?? (c as Json).contactPhone ?? "").replace(/\D/g, "");
+        const convEmail = String((c as Json).email ?? (c as Json).contactEmail ?? "").trim().toLowerCase();
+        return convContactId === contact_id || (!!phoneDigits && convPhone.endsWith(phoneDigits.slice(-10))) || (!!email && convEmail === email);
+      });
+      addConversations(list);
+    } catch (_e) { /* fall through to location scan */ }
   }
   if (!conversations.length) {
     usedContactScopedConversationSearch = false;
@@ -178,7 +225,7 @@ Deno.serve(async (req) => {
     while (conversationPages < MAX_CONVERSATION_SEARCH_PAGES) {
       const j = await ghl("GET", `/conversations/search?locationId=${locationId}&limit=100&skip=${skip}`, token);
       const list = ((j.conversations as Json[]) ?? []);
-      conversations.push(...list.filter((c) => String((c as Json).contactId ?? "") === contact_id));
+      addConversations(list.filter((c) => String((c as Json).contactId ?? "") === contact_id));
       conversationPages++;
       if (list.length < 100) break;
       skip += list.length;
@@ -231,6 +278,24 @@ Deno.serve(async (req) => {
   if (oppPage > MAX_OPPORTUNITY_PAGES) opportunityPaginationCapped = true;
 
   if (resync) {
+    if (liveContact) {
+      await admin.from("ghl_contacts").upsert({
+        property_id,
+        ghl_location_id: locationId,
+        ghl_contact_id: contact_id,
+        first_name: liveContact.firstName ?? null,
+        last_name: liveContact.lastName ?? null,
+        email: liveContact.email ?? null,
+        phone: liveContact.phone ?? null,
+        source: liveContact.source ?? null,
+        assigned_to: liveContact.assignedTo ?? null,
+        assigned_user_id: liveContact.assignedTo ?? null,
+        tags: Array.isArray(liveContact.tags) ? liveContact.tags : null,
+        ghl_created_at: liveContact.dateAdded ?? liveContact.createdAt ?? null,
+        raw: liveContact,
+      } as never, { onConflict: "property_id,ghl_contact_id" });
+    }
+
     const messageRows = liveMessages.map((m) => {
       const mA = m as Json;
       return {
