@@ -327,9 +327,25 @@ Deno.serve(async (req) => {
   // ===== 4. CONVERSATIONS + MESSAGES (classified) ===================
   await safe("conversations_messages", async () => {
     // Pull conversations for the location, then walk each one for in-window contacts.
-    const j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&limit=100`, token);
-    const convs = ((j.conversations as Json[]) ?? []);
+    // The first implementation only read the first 100 conversations, which could
+    // miss older-but-still-in-window leads and leave answered calls unattached.
+    const convMap = new Map<string, Json>();
+    let skip = 0;
+    let pages = 0;
+    while (pages < 50) {
+      const j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&limit=100&skip=${skip}`, token);
+      const list = ((j.conversations as Json[]) ?? []);
+      for (const conv of list) {
+        const id = String((conv as Json).id ?? "");
+        if (id) convMap.set(id, conv);
+      }
+      if (list.length < 100) break;
+      skip += list.length;
+      pages++;
+    }
+    const convs = Array.from(convMap.values());
     counts.conversations = convs.length;
+    counts.conversation_pages = pages + 1;
 
     const contactSet = new Set(contactIds);
     const msgRows: Json[] = [];
