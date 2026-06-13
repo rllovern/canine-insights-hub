@@ -594,6 +594,8 @@ function buildTools(ctx: Ctx) {
       execute: wrap(ctx, "save_visual_report", async (i) => {
         const pid = i.property_id ?? ctx.defaultPropertyId;
         if (pid) await assertPropertyAccess(ctx.supabase, ctx.userId, pid);
+        const s = (i.schema ?? {}) as Record<string, unknown>;
+        const cmp = s["comparison_range"] as { from?: string; to?: string } | undefined;
         const { data, error } = await ctx.supabase
           .from("ai_agent_reports")
           .insert({
@@ -604,8 +606,14 @@ function buildTools(ctx: Ctx) {
             title: i.title,
             date_range_start: i.date_range?.from ?? null,
             date_range_end: i.date_range?.to ?? null,
+            comparison_range_start: cmp?.from ?? null,
+            comparison_range_end: cmp?.to ?? null,
             schema_json: i.schema,
             evidence_json: i.evidence ?? null,
+            scope_json: s["scope"] ?? null,
+            status_json: s["status"] ?? null,
+            caveats_json: s["caveats"] ?? null,
+            confidence_json: s["confidence"] ?? null,
             saved: false,
           })
           .select("id")
