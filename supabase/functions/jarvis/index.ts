@@ -601,7 +601,7 @@ serve(async (req) => {
     const result = streamText({
       model: gateway("openai/gpt-5.5"),
       system: SYSTEM_PROMPT + contextHeader,
-      messages: convertToModelMessages(messages),
+      messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
       tools: buildTools(ctx),
       stopWhen: stepCountIs(50),
     });
