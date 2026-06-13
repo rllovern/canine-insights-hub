@@ -53,6 +53,198 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_agent_messages: {
+        Row: {
+          content: string | null
+          created_at: string
+          evidence_json: Json | null
+          id: string
+          parts_json: Json | null
+          role: string
+          session_id: string
+          tool_calls_json: Json | null
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          evidence_json?: Json | null
+          id?: string
+          parts_json?: Json | null
+          role: string
+          session_id: string
+          tool_calls_json?: Json | null
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          evidence_json?: Json | null
+          id?: string
+          parts_json?: Json | null
+          role?: string
+          session_id?: string
+          tool_calls_json?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_agent_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agent_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_agent_reports: {
+        Row: {
+          created_at: string
+          date_range_end: string | null
+          date_range_start: string | null
+          evidence_json: Json | null
+          id: string
+          property_id: string | null
+          report_type: string
+          saved: boolean
+          schema_json: Json
+          session_id: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date_range_end?: string | null
+          date_range_start?: string | null
+          evidence_json?: Json | null
+          id?: string
+          property_id?: string | null
+          report_type: string
+          saved?: boolean
+          schema_json: Json
+          session_id?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date_range_end?: string | null
+          date_range_start?: string | null
+          evidence_json?: Json | null
+          id?: string
+          property_id?: string | null
+          report_type?: string
+          saved?: boolean
+          schema_json?: Json
+          session_id?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_agent_reports_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_agent_reports_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agent_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_agent_sessions: {
+        Row: {
+          created_at: string
+          date_range_end: string | null
+          date_range_start: string | null
+          id: string
+          page_context: string | null
+          property_id: string | null
+          status: string
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date_range_end?: string | null
+          date_range_start?: string | null
+          id?: string
+          page_context?: string | null
+          property_id?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date_range_end?: string | null
+          date_range_start?: string | null
+          id?: string
+          page_context?: string | null
+          property_id?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_agent_sessions_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_agent_tool_runs: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          id: string
+          input_json: Json | null
+          output_json: Json | null
+          session_id: string | null
+          status: string
+          tool_name: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          input_json?: Json | null
+          output_json?: Json | null
+          session_id?: string | null
+          status?: string
+          tool_name: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          input_json?: Json | null
+          output_json?: Json | null
+          session_id?: string | null
+          status?: string
+          tool_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_agent_tool_runs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agent_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budget_accounts: {
         Row: {
           campaign_label: string | null
@@ -1922,6 +2114,10 @@ export type Database = {
       set_sync_cron_schedule: {
         Args: { _active: boolean; _schedule: string }
         Returns: undefined
+      }
+      user_can_access_property: {
+        Args: { _property_id: string; _user_id: string }
+        Returns: boolean
       }
       viewer_can_access: {
         Args: { _property_id: string; _user_id: string }
