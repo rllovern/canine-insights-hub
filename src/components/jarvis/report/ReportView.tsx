@@ -36,7 +36,13 @@ const severityBadgeClass: Record<Severity, string> = {
   neutral: "bg-muted text-muted-foreground border-border",
 };
 
-function SummaryCards({ cards }: { cards: SummaryCard[] }) {
+function SummaryCards({
+  cards,
+  onAction,
+}: {
+  cards: SummaryCard[];
+  onAction?: (card: SummaryCard) => void;
+}) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {cards.map((c, i) => {
@@ -47,8 +53,25 @@ function SummaryCards({ cards }: { cards: SummaryCard[] }) {
           dir === "up" ? "text-emerald-600 dark:text-emerald-400"
           : dir === "down" ? "text-destructive"
           : "text-muted-foreground";
+        const actionable = !!c.action_payload && !!onAction;
         return (
-          <Card key={i} className={cn("p-3 border", toneClasses[tone])}>
+          <Card
+            key={i}
+            role={actionable ? "button" : undefined}
+            tabIndex={actionable ? 0 : undefined}
+            onClick={actionable ? () => onAction(c) : undefined}
+            onKeyDown={actionable ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onAction(c);
+              }
+            } : undefined}
+            className={cn(
+              "p-3 border",
+              toneClasses[tone],
+              actionable && "cursor-pointer transition hover:border-primary/50 hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-ring",
+            )}
+          >
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{c.label}</div>
             <div className="mt-1 text-xl font-semibold tabular-nums">{c.value}</div>
             {(c.delta != null || c.hint) && (
@@ -59,6 +82,7 @@ function SummaryCards({ cards }: { cards: SummaryCard[] }) {
               </div>
             )}
             {c.detail && <div className="mt-0.5 text-[11px] text-muted-foreground">{c.detail}</div>}
+            {actionable && <div className="mt-1 text-[10px] uppercase tracking-wide text-primary">Open drill-in</div>}
           </Card>
         );
       })}
@@ -273,6 +297,28 @@ function ReportTable({ spec }: { spec: TableSpec }) {
   );
 }
 
+function tableForAction(schema: ReportSchema, card: SummaryCard): TableSpec | null {
+  const payload = card.action_payload;
+  if (!payload || payload.type !== "open_table") return null;
+  const tables = schema.tables ?? [];
+  const base = payload.table_title
+    ? tables.find((t) => t.title === payload.table_title || t.title?.toLowerCase().includes(payload.table_title!.toLowerCase()))
+    : tables[0];
+  if (!base) return null;
+  const filters = payload.row_filter ?? {};
+  const entries = Object.entries(filters).filter(([, v]) => v !== undefined);
+  const rows = entries.length
+    ? (base.rows ?? []).filter((row) => entries.every(([k, v]) => row[k] === v))
+    : (base.rows ?? []);
+  return {
+    ...base,
+    title: payload.label ?? `${card.label} drill-in`,
+    description: payload.reason ?? base.description,
+    rows,
+    empty: "No matching drill-in rows.",
+  };
+}
+
 const sevIcon: Record<string, typeof Info> = {
   info: Info,
   good: Info,
@@ -473,6 +519,7 @@ function ReportViewInner({
   onSave?: (id: string) => Promise<void> | void;
 }) {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [drillTable, setDrillTable] = useState<TableSpec | null>(null);
   const [saving, setSaving] = useState(false);
   const [clientSafe, setClientSafe] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
@@ -514,6 +561,21 @@ function ReportViewInner({
     setSaving(true);
     try { await onSave(reportId); toast({ title: "Report saved" }); }
     finally { setSaving(false); }
+  };
+  const onSummaryAction = (card: SummaryCard) => {
+    const payload = card.action_payload;
+    if (!payload) return;
+    if (payload.type === "open_evidence" || payload.type === "open_debug") {
+      setEvidenceOpen(true);
+      toast({ title: payload.label ?? card.label, description: payload.reason });
+      return;
+    }
+    const table = tableForAction(view, card);
+    if (!table) {
+      toast({ title: "No drill-in available", description: payload.reason });
+      return;
+    }
+    setDrillTable(table);
   };
 
   return (
@@ -604,7 +666,16 @@ function ReportViewInner({
         ) : null}
       </Card>
 
-      {view.summary_cards?.length ? <SummaryCards cards={view.summary_cards} /> : null}
+      {view.summary_cards?.length ? <SummaryCards cards={view.summary_cards} onAction={onSummaryAction} /> : null}
+      {drillTable && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Drill-in</div>
+            <Button size="sm" variant="ghost" onClick={() => setDrillTable(null)}>Close</Button>
+          </div>
+          <ReportTable spec={drillTable} />
+        </div>
+      )}
       {view.charts?.map((c, i) => <ReportChart key={i} spec={c} />)}
       {view.tables?.map((t, i) => <ReportTable key={i} spec={t} />)}
       {view.recommendations?.length ? <Recommendations items={view.recommendations} /> : null}

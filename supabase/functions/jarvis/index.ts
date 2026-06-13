@@ -26,6 +26,8 @@ You operate the dashboard on behalf of an authenticated user. NEVER invent numbe
 
 RULES:
 - For any analytical question, call the relevant tool(s) first, then answer using only the tool output.
+- Behave like a conversational command agent, not a report factory. If the exact ask cannot be answered, say that plainly first, show the lookup/filter reason, and offer concrete next actions instead of producing a polished report that misses the ask.
+- For speed-to-lead questions, ALWAYS call get_speed_to_lead_breakdown. Respect the requested metric: if the user asks for average, compute/report average; do not substitute median. For a person name like "Taylor", resolve the name through the tool before saying unavailable. For "forms only", use the tool's lead_type:"form" filter.
 - If the user asks for "missing CTM leads in GHL", "reconciliation", "leads that didn't make it", etc., call reconcile_ctm_to_ghl, then save_visual_report with a complete report schema, then briefly describe what you found.
 - When the user asks for account/property-specific analysis and the request context includes an active propertyId, use that propertyId automatically. Do not ask the user for a property ID if one is present in request context.
 - Always include scope (property, date range, sources used) when reporting numbers.
@@ -48,6 +50,8 @@ PHASE 2 — also include when available:
 - confidence: { level: "high"|"medium"|"low", explanation } — drives a confidence badge.
 - recommendations: each item may include action_type ("open_queue"|"export"|"save_report"|"create_alert_later"|"review_mapping"|"resync_later") and severity ("low"|"medium"|"high"). "create_alert_later" renders as a disabled "Coming in Phase 3" button.
 - actions: report-level actions. "create_alert_disabled" must be disabled with disabled_reason "Alerting ships in Phase 3".
+- summary_cards may include action_payload. Only include action_payload when there is a real drill-in table/evidence target. For speed-to-lead cards, add drill-ins to matching lead rows, responded rows, never-responded rows, and unavailable diagnostics.
+- speed-to-lead reports MUST include a lead-level table with: lead name / phone / email, lead type, created at, assigned/default owner, first human outbound at, first answered inbound at, first human engagement at, response type, response seconds, current stage, tags, GHL link.
 
 REPORT TYPES (use these report_type strings):
 - "performance_comparison" — compare two periods
@@ -62,7 +66,10 @@ CLIENT-SAFE MODE: when the user asks for a client/external summary, never use ra
 CLARIFY FIRST when:
 - "missing leads" is ambiguous (CTM↔GHL, GHL leads w/o opportunity, leads w/o human response?)
 - date range is unspecified and not in context
-- multiple report types could satisfy the request`;
+- multiple report types could satisfy the request
+
+SPEED-TO-LEAD UNAVAILABLE BEHAVIOR:
+If get_speed_to_lead_breakdown returns answerable:false, do NOT pretend the report answered the question. Say exactly why, using unavailable_reasons/diagnostics. Offer these next actions as short buttons/choices in prose: Diagnose Taylor mapping, Show form lead records, Show available agent metrics, Create missing tool support.`;
 
 function svc() {
   return createClient(
@@ -223,6 +230,75 @@ function resolveRange(ctx: Ctx, from?: string, to?: string, days?: number) {
   return { from: f.toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) };
 }
 
+function secondsBetween(a: string | null | undefined, b: string | null | undefined) {
+  if (!a || !b) return null;
+  const diff = new Date(a).getTime() - new Date(b).getTime();
+  return Number.isFinite(diff) ? Math.max(0, Math.round(diff / 1000)) : null;
+}
+
+function percentile(values: number[], p: number) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = (sorted.length - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+function normText(v: unknown) {
+  return String(v ?? "").trim().toLowerCase();
+}
+
+function textIncludes(haystack: unknown, needle: unknown) {
+  const h = normText(haystack);
+  const n = normText(needle);
+  return !!h && !!n && h.includes(n);
+}
+
+function levenshtein(a: string, b: string) {
+  const aa = normText(a);
+  const bb = normText(b);
+  const dp = Array.from({ length: aa.length + 1 }, (_, i) => [i, ...Array(bb.length).fill(0)]);
+  for (let j = 1; j <= bb.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= aa.length; i++) {
+    for (let j = 1; j <= bb.length; j++) {
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (aa[i - 1] === bb[j - 1] ? 0 : 1),
+      );
+    }
+  }
+  return dp[aa.length][bb.length];
+}
+
+function detectLeadType(contact: Record<string, unknown> | undefined, firstChannel?: string | null) {
+  const raw = (contact?.raw ?? {}) as Record<string, unknown>;
+  const attr = (raw.attributionSource ?? {}) as Record<string, unknown>;
+  const lastAttr = (raw.lastAttributionSource ?? {}) as Record<string, unknown>;
+  const hay = [
+    contact?.source, firstChannel,
+    attr.medium, attr.mediumId, attr.sessionSource, attr.url,
+    lastAttr.medium, lastAttr.mediumId, lastAttr.sessionSource, lastAttr.url,
+    raw.source, raw.formId, raw.formName, raw.source_event_type,
+  ].map((v) => String(v ?? "").toLowerCase()).join(" ");
+  if (/external[_\s-]?form|\bform\b|formid|formname|submission/.test(hay)) return "form";
+  if (/\bcall\b|phone|type_call/.test(hay)) return "call";
+  if (/\bchat\b|webchat/.test(hay)) return "chat";
+  if (/\bsms\b|text message/.test(hay)) return "sms";
+  return "unknown";
+}
+
+function sourceBundle(contact: Record<string, unknown> | undefined) {
+  const raw = (contact?.raw ?? {}) as Record<string, unknown>;
+  const attr = (raw.attributionSource ?? {}) as Record<string, unknown>;
+  const lastAttr = (raw.lastAttributionSource ?? {}) as Record<string, unknown>;
+  return [contact?.source, raw.source, attr.medium, attr.mediumId, attr.sessionSource, attr.url, lastAttr.medium, lastAttr.mediumId, lastAttr.sessionSource, lastAttr.url]
+    .filter((v) => v != null && String(v).trim() !== "")
+    .join(" · ");
+}
+
 function buildTools(ctx: Ctx) {
   return {
     get_property_context: tool({
@@ -291,6 +367,251 @@ function buildTools(ctx: Ctx) {
           }),
         ]);
         return { property_id: id, days: i.days, speed: speed.data, handling: handling.data };
+      }),
+    }),
+
+    get_speed_to_lead_breakdown: tool({
+      description:
+        "Dedicated command tool for speed-to-lead questions. Resolves agent names/IDs (including default owner), supports form/call/chat/sms/all lead segmentation, computes average/median/p75/p90, and returns lead-level rows plus unavailable diagnostics. Use this for every speed-to-lead question, especially 'average', named agents, or 'forms only'.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        days: z.number().int().min(1).max(180).optional(),
+        filters: z.object({
+          agent_name: z.string().optional(),
+          user_name: z.string().optional(),
+          agent_user_id: z.string().optional(),
+          user_id: z.string().optional(),
+          default_owner: z.boolean().optional(),
+          lead_type: z.enum(["form", "call", "chat", "sms", "all"]).default("all"),
+          source_channel: z.string().optional(),
+          assigned_user_id: z.string().optional(),
+          responded_only: z.boolean().optional(),
+          include_answered_inbound_calls: z.boolean().default(false),
+          metric_type: z.enum(["average", "median", "p75", "p90"]).default("average"),
+          time_basis: z.enum(["raw", "business_hours"]).default("raw"),
+        }).default({}),
+        limit: z.number().int().min(1).max(500).default(100),
+      }),
+      execute: wrap(ctx, "get_speed_to_lead_breakdown", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "get_speed_to_lead_breakdown");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
+        const fromISO = `${from}T00:00:00Z`;
+        const toISO = `${to}T23:59:59Z`;
+        const filters = i.filters ?? {};
+        const requestedAgent = filters.agent_name ?? filters.user_name ?? filters.agent_user_id ?? filters.user_id ?? filters.assigned_user_id ?? null;
+
+        const [propertyRes, usersRes, factsRes, srcRes] = await Promise.all([
+          ctx.supabase.from("properties").select("id,name,default_lead_owner_user_id").eq("id", id).maybeSingle(),
+          ctx.supabase.from("ghl_users").select("ghl_user_id,name,email,is_active,raw").eq("property_id", id).limit(1000),
+          ctx.supabase.from("ghl_lead_facts").select("contact_id,assigned_user_id,stage_id,canonical_stage,lead_created_at,first_human_outbound_at,first_human_answered_inbound_at,first_human_engagement_at,first_human_engagement_type,first_human_response_channel,human_speed_to_lead_seconds_raw,human_speed_to_lead_seconds_business,human_attempt_count,tag_names,last_synced_at").eq("property_id", id).gte("lead_created_at", fromISO).lte("lead_created_at", toISO).limit(5000),
+          ctx.supabase.from("property_data_sources").select("config,last_synced_at").eq("property_id", id).eq("source", "ghl").maybeSingle(),
+        ]);
+        if (propertyRes.error) throw new Error(propertyRes.error.message);
+        if (usersRes.error) throw new Error(usersRes.error.message);
+        if (factsRes.error) throw new Error(factsRes.error.message);
+
+        const property = propertyRes.data;
+        const facts = (factsRes.data ?? []) as Array<Record<string, unknown>>;
+        const users = (usersRes.data ?? []) as Array<Record<string, unknown>>;
+        const userById = new Map(users.map((u) => [String(u.ghl_user_id), u]));
+        const defaultOwnerId = String(property?.default_lead_owner_user_id ?? "") || null;
+
+        const assignedIds = [...new Set(facts.map((f) => String(f.assigned_user_id ?? "")).filter(Boolean))];
+        const contactIds = [...new Set(facts.map((f) => String(f.contact_id ?? "")).filter(Boolean))];
+        const [contactsRes, stagesRes, msgUsersRes] = await Promise.all([
+          contactIds.length
+            ? ctx.supabase.from("ghl_contacts").select("ghl_contact_id,first_name,last_name,email,phone,source,tags,raw").eq("property_id", id).in("ghl_contact_id", contactIds).limit(5000)
+            : Promise.resolve({ data: [], error: null }),
+          ctx.supabase.from("ghl_pipeline_stages").select("ghl_stage_id,name").eq("property_id", id).limit(1000),
+          ctx.supabase.from("ghl_messages").select("ghl_user_id,raw").eq("property_id", id).gte("sent_at", fromISO).lte("sent_at", toISO).not("ghl_user_id", "is", null).limit(1000),
+        ]);
+        if (contactsRes.error) throw new Error(contactsRes.error.message);
+        if (stagesRes.error) throw new Error(stagesRes.error.message);
+        if (msgUsersRes.error) throw new Error(msgUsersRes.error.message);
+
+        const contacts = new Map(((contactsRes.data ?? []) as Array<Record<string, unknown>>).map((c) => [String(c.ghl_contact_id), c]));
+        const stages = new Map(((stagesRes.data ?? []) as Array<Record<string, unknown>>).map((s) => [String(s.ghl_stage_id), String(s.name ?? "")]));
+        const msgUserIds = [...new Set(((msgUsersRes.data ?? []) as Array<Record<string, unknown>>).map((m) => String(m.ghl_user_id ?? "")).filter(Boolean))];
+
+        const candidates = new Map<string, Record<string, unknown>>();
+        for (const u of users) candidates.set(String(u.ghl_user_id), { ...u, match_sources: ["ghl_users"] });
+        for (const aid of assignedIds) if (!candidates.has(aid)) candidates.set(aid, { ghl_user_id: aid, name: null, email: null, match_sources: ["lead assigned_user_id"] });
+        for (const mid of msgUserIds) if (!candidates.has(mid)) candidates.set(mid, { ghl_user_id: mid, name: null, email: null, match_sources: ["message user_id"] });
+        if (defaultOwnerId) {
+          const prev = candidates.get(defaultOwnerId) ?? { ghl_user_id: defaultOwnerId, name: null, email: null, match_sources: [] };
+          candidates.set(defaultOwnerId, { ...prev, is_default_owner: true, match_sources: [...((prev.match_sources as string[]) ?? []), "default property owner"] });
+        }
+
+        let resolvedUserId: string | null = filters.assigned_user_id ?? filters.agent_user_id ?? filters.user_id ?? null;
+        let agentResolution: Record<string, unknown> | null = null;
+        const unavailableReasons: string[] = [];
+        if (requestedAgent) {
+          const q = normText(requestedAgent);
+          const candidateList = [...candidates.values()];
+          const exact = candidateList.filter((u) => {
+            const uid = normText(u.ghl_user_id);
+            const name = normText(u.name);
+            const email = normText(u.email);
+            const nameTokens = name.split(/\s+/).filter(Boolean);
+            return uid === q || email === q || name === q || nameTokens.includes(q);
+          });
+          const scored = candidateList
+            .map((u) => {
+              const name = String(u.name ?? u.ghl_user_id ?? "");
+              const email = String(u.email ?? "");
+              const score = Math.min(levenshtein(q, name), levenshtein(q, email), levenshtein(q, String(u.ghl_user_id ?? "")));
+              return { user_id: u.ghl_user_id, name: u.name, email: u.email, is_default_owner: !!u.is_default_owner, score };
+            })
+            .sort((a, b) => a.score - b.score)
+            .slice(0, 5);
+          if (exact.length === 1) {
+            resolvedUserId = String(exact[0].ghl_user_id);
+            agentResolution = { requested: requestedAgent, status: "resolved", matched_user: exact[0], lookup_sources: ["ghl_users.name", "ghl_users.email", "default property owner", "lead assigned_user_id", "message user_id"] };
+          } else if (exact.length > 1) {
+            unavailableReasons.push(`${requestedAgent} matched multiple GHL users; choose one before calculating speed-to-lead.`);
+            agentResolution = { requested: requestedAgent, status: "ambiguous", matches: exact };
+          } else {
+            unavailableReasons.push(`${requestedAgent} was not found as a GHL user.`);
+            agentResolution = { requested: requestedAgent, status: "not_found", message: `${requestedAgent} was not found as a GHL user. Did you mean ${scored[0]?.name ?? scored[0]?.user_id ?? "one of the available users"}?`, suggestions: scored, lookup_sources: ["ghl_users.name", "ghl_users.email", "default property owner", "lead assigned_user_id", "message user_id"] };
+          }
+        } else if (filters.default_owner && defaultOwnerId) {
+          resolvedUserId = defaultOwnerId;
+          agentResolution = { requested: "default owner", status: "resolved", matched_user: candidates.get(defaultOwnerId) ?? { ghl_user_id: defaultOwnerId } };
+        }
+
+        const decorated = facts.map((f) => {
+          const contact = contacts.get(String(f.contact_id ?? ""));
+          const assignedId = String(f.assigned_user_id ?? "") || null;
+          const effectiveOwnerId = assignedId ?? defaultOwnerId;
+          const owner = effectiveOwnerId ? userById.get(effectiveOwnerId) ?? candidates.get(effectiveOwnerId) : null;
+          const leadType = detectLeadType(contact, String(f.first_human_response_channel ?? ""));
+          const source = sourceBundle(contact);
+          const outboundSeconds = filters.time_basis === "business_hours"
+            ? (f.human_speed_to_lead_seconds_business == null ? null : Number(f.human_speed_to_lead_seconds_business))
+            : (f.human_speed_to_lead_seconds_raw == null ? null : Number(f.human_speed_to_lead_seconds_raw));
+          const engagementSeconds = filters.include_answered_inbound_calls
+            ? secondsBetween(String(f.first_human_engagement_at ?? ""), String(f.lead_created_at ?? ""))
+            : null;
+          const responseSeconds = filters.include_answered_inbound_calls ? (engagementSeconds ?? outboundSeconds) : outboundSeconds;
+          const responseType = responseSeconds == null ? "none"
+            : filters.include_answered_inbound_calls && f.first_human_engagement_type ? String(f.first_human_engagement_type)
+            : "outbound_human_follow_up";
+          const firstName = String(contact?.first_name ?? "").trim();
+          const lastName = String(contact?.last_name ?? "").trim();
+          const name = `${firstName} ${lastName}`.trim() || null;
+          const locId = ((srcRes.data?.config ?? {}) as Record<string, unknown>).location_id as string | undefined;
+          return {
+            contact_id: f.contact_id,
+            lead_name: name,
+            phone: contact?.phone ?? null,
+            email: contact?.email ?? null,
+            lead_type: leadType,
+            source_channel: source,
+            created_at: f.lead_created_at,
+            assigned_user_id: assignedId,
+            default_owner_user_id: defaultOwnerId,
+            owner_user_id: effectiveOwnerId,
+            owner_name: owner?.name ?? effectiveOwnerId ?? null,
+            first_human_outbound_at: f.first_human_outbound_at,
+            first_answered_inbound_at: f.first_human_answered_inbound_at,
+            first_human_engagement_at: f.first_human_engagement_at,
+            response_type: responseType,
+            response_seconds: responseSeconds,
+            current_stage: stages.get(String(f.stage_id ?? "")) ?? f.canonical_stage ?? null,
+            tags: Array.isArray(f.tag_names) ? f.tag_names : [],
+            ghl_link: locId && f.contact_id ? `https://app.gohighlevel.com/v2/location/${locId}/contacts/detail/${f.contact_id}` : null,
+          };
+        });
+
+        const leadTypeCoverage = decorated.filter((r) => r.lead_type !== "unknown").length;
+        const formSignals = decorated.filter((r) => r.lead_type === "form").length;
+        if (filters.lead_type === "form" && formSignals === 0 && facts.length > 0) {
+          unavailableReasons.push("I cannot isolate form leads because form-source tagging is missing.");
+        }
+
+        let rows = decorated;
+        if (resolvedUserId) rows = rows.filter((r) => filters.assigned_user_id ? r.assigned_user_id === resolvedUserId : r.owner_user_id === resolvedUserId);
+        if (filters.default_owner && defaultOwnerId) rows = rows.filter((r) => r.owner_user_id === defaultOwnerId);
+        if (filters.lead_type && filters.lead_type !== "all") rows = rows.filter((r) => r.lead_type === filters.lead_type);
+        if (filters.source_channel) rows = rows.filter((r) => textIncludes(r.source_channel, filters.source_channel));
+        if (filters.responded_only === true) rows = rows.filter((r) => r.response_seconds != null);
+        if (filters.responded_only === false) rows = rows.filter((r) => true);
+
+        const responseValues = rows.map((r) => r.response_seconds).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+        const total = rows.length;
+        const responded = responseValues.length;
+        const never = Math.max(0, total - responded);
+        const average = responded ? responseValues.reduce((a, b) => a + b, 0) / responded : null;
+        const median = percentile(responseValues, 0.5);
+        const p75 = percentile(responseValues, 0.75);
+        const p90 = percentile(responseValues, 0.9);
+        const under = (s: number) => responseValues.filter((v) => v <= s).length;
+
+        if (requestedAgent && agentResolution?.status === "resolved" && total === 0) {
+          unavailableReasons.push(`${requestedAgent} has no matching leads in this date range after filters were applied.`);
+        }
+        if (total > 0 && responded === 0) unavailableReasons.push("Lead rows exist, but response timestamps are missing for the requested response definition.");
+        if (filters.time_basis === "business_hours" && filters.include_answered_inbound_calls) {
+          unavailableReasons.push("Business-hours adjustment is only stored for outbound human follow-up; answered inbound calls use raw elapsed time in this breakdown.");
+        }
+
+        const answerable = unavailableReasons.length === 0 || (total > 0 && !(requestedAgent && agentResolution?.status !== "resolved") && !(filters.lead_type === "form" && formSignals === 0));
+        const dataQualityIssues = [
+          filters.lead_type === "form" && formSignals === 0 ? { issue: "Form-source tagging unavailable", severity: "critical", detail: "No reliable form markers were found in contact source or attribution metadata for this window." } : null,
+          leadTypeCoverage < decorated.length ? { issue: "Some leads have unknown lead type", severity: "warning", detail: `${decorated.length - leadTypeCoverage} of ${decorated.length} leads lack clear source/channel tagging.` } : null,
+        ].filter(Boolean);
+
+        return {
+          answerable,
+          property_id: id,
+          property_name: property?.name ?? null,
+          from,
+          to,
+          filters: { ...filters, resolved_user_id: resolvedUserId },
+          agent_resolution: agentResolution,
+          total_matching_leads: total,
+          responded_leads: responded,
+          never_responded: never,
+          average_speed_to_lead_seconds: average,
+          median_speed_to_lead_seconds: median,
+          p75_speed_to_lead_seconds: p75,
+          p90_speed_to_lead_seconds: p90,
+          under_1_min: under(60),
+          under_5_min: under(300),
+          under_15_min: under(900),
+          requested_metric_type: filters.metric_type ?? "average",
+          requested_metric_value_seconds: filters.metric_type === "median" ? median : filters.metric_type === "p75" ? p75 : filters.metric_type === "p90" ? p90 : average,
+          response_definition: filters.include_answered_inbound_calls ? "first human engagement: outbound human follow-up or answered inbound call" : "first outbound human follow-up only",
+          time_basis: filters.time_basis ?? "raw",
+          lead_level_rows: rows.slice(0, i.limit),
+          row_count_returned: Math.min(rows.length, i.limit),
+          caveats: [
+            rows.length > i.limit ? `Lead rows capped at ${i.limit}.` : null,
+            facts.length === 5000 ? "Source facts capped at 5000 rows; narrow the date range for exhaustive analysis." : null,
+            average != null ? "Average can be skewed by outliers; median and p75/p90 are included for context." : null,
+          ].filter(Boolean),
+          unavailable_reasons: unavailableReasons,
+          diagnostics: {
+            data_quality_issues: dataQualityIssues,
+            lead_type_counts: decorated.reduce((acc, r) => ({ ...acc, [r.lead_type]: ((acc as Record<string, number>)[r.lead_type] ?? 0) + 1 }), {} as Record<string, number>),
+            available_agents: [...candidates.values()].map((u) => ({ user_id: u.ghl_user_id, name: u.name, email: u.email, is_default_owner: !!u.is_default_owner })).slice(0, 100),
+            possible_unavailable_reasons_checked: [
+              "person not found in GHL users/default owner/assigned user IDs/message user IDs",
+              "person has no assigned/default-owned leads in the date range",
+              "form leads cannot be identified",
+              "lead rows exist but response timestamps are missing",
+            ],
+          },
+          confidence: {
+            level: !answerable ? "low" : dataQualityIssues.length ? "medium" : "high",
+            explanation: !answerable ? unavailableReasons.join(" ") : dataQualityIssues.length ? "Some lead source tagging is incomplete." : "Computed from lead-level CRM facts and contact attribution metadata.",
+          },
+          sources_used: ["ghl_lead_facts", "ghl_contacts", "ghl_users", "ghl_messages", "ghl_pipeline_stages"],
+          sync_freshness: { ghl: srcRes.data?.last_synced_at ?? null },
+        };
       }),
     }),
 
