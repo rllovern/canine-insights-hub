@@ -407,8 +407,29 @@ Deno.serve(async (req) => {
       const alreadyHasConversation = Array.from(convMap.values()).some((conv) => String((conv as Json).contactId ?? "") === cid);
       if (alreadyHasConversation) continue;
       targetedConversationLookups++;
+      const found = new Map<string, Json>();
+      const addMatches = (items: Json[]) => {
+        for (const conv of items) {
+          const id = String((conv as Json).id ?? "");
+          if (id) found.set(id, conv);
+        }
+      };
       const j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(cid)}&limit=100`, token);
-      const list = ((j.conversations as Json[]) ?? []).filter((conv) => String((conv as Json).contactId ?? "") === cid);
+      addMatches(((j.conversations as Json[]) ?? []).filter((conv) => String((conv as Json).contactId ?? "") === cid));
+      const contactInfo = contactLookup.get(cid);
+      const phoneDigits = String(contactInfo?.phone ?? "").replace(/\D/g, "");
+      const email = String(contactInfo?.email ?? "").trim().toLowerCase();
+      if (!found.size && (phoneDigits || email)) {
+        const q = encodeURIComponent(email || phoneDigits);
+        const byQuery = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&query=${q}&limit=100`, token).catch(() => ({ conversations: [] } as Json));
+        addMatches(((byQuery.conversations as Json[]) ?? []).filter((conv) => {
+          const convContactId = String((conv as Json).contactId ?? "");
+          const convPhone = String((conv as Json).phone ?? (conv as Json).contactPhone ?? "").replace(/\D/g, "");
+          const convEmail = String((conv as Json).email ?? (conv as Json).contactEmail ?? "").trim().toLowerCase();
+          return convContactId === cid || (!!phoneDigits && convPhone.endsWith(phoneDigits.slice(-10))) || (!!email && convEmail === email);
+        }));
+      }
+      const list = Array.from(found.values());
       for (const conv of list) {
         const id = String((conv as Json).id ?? "");
         if (!id || convMap.has(id)) continue;
