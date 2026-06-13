@@ -4,6 +4,9 @@ import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
 } from "@/components/ui/command";
 import { Sparkles, BarChart3, PhoneCall, FileText, Target, GitCompare, Search } from "lucide-react";
+import { useProperties } from "@/contexts/PropertyContext";
+import { useDashboard } from "@/contexts/DashboardContext";
+import { rangeToISO } from "@/lib/metrics";
 
 const QUICK = [
   { label: "Reconcile CTM to GHL (last 14 days)", q: "Reconcile CTM calls against GHL for the last 14 days" },
@@ -23,6 +26,8 @@ const NAV = [
 export function JarvisCommandBar() {
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
+  const { activeProperty } = useProperties();
+  const { range } = useDashboard();
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -37,7 +42,17 @@ export function JarvisCommandBar() {
 
   const ask = (q: string) => {
     setOpen(false);
-    nav(`/assistant?q=${encodeURIComponent(q)}`);
+    const sp = new URLSearchParams();
+    sp.set("q", q);
+    if (activeProperty?.id) sp.set("propertyId", activeProperty.id);
+    if (range) {
+      try {
+        const iso = rangeToISO(range);
+        sp.set("from", iso.from);
+        sp.set("to", iso.to);
+      } catch { /* noop */ }
+    }
+    nav(`/assistant?${sp.toString()}`);
   };
 
   return (
