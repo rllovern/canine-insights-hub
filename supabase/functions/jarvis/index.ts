@@ -198,14 +198,16 @@ function buildTools(ctx: Ctx) {
         "Get the active property's name, connected data sources, and sync freshness. Always call this first when starting a new line of inquiry about a property.",
       inputSchema: z.object({
         property_id: z.string().uuid().optional().describe("Defaults to active dashboard property"),
+        propertyId: z.string().uuid().optional().describe("Alias for property_id; defaults to active dashboard property"),
       }),
-      execute: wrap(ctx, "get_property_context", async ({ property_id }) => {
-        const id = property_id ?? ctx.defaultPropertyId;
+      execute: wrap(ctx, "get_property_context", async (input) => {
+        logToolContext("get_property_context", input, ctx);
+        const id = input.property_id ?? input.propertyId ?? ctx.defaultPropertyId;
         if (!id) {
           return {
             ok: false,
             error: "missing_property_id",
-            message: "No property_id was provided to get_property_context.",
+            message: "No property selected.",
           };
         }
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
@@ -321,10 +323,11 @@ function buildTools(ctx: Ctx) {
         "Reconcile CTM calls against GHL contacts/messages/lead_facts/opportunities. Phone-or-email identity match, ±15min strong activity, same-day loose activity. Returns full classification.",
       inputSchema: z.object({
         property_id: z.string().uuid().optional(),
+        propertyId: z.string().uuid().optional(),
         days: z.number().int().min(1).max(90).default(10),
       }),
       execute: wrap(ctx, "reconcile_ctm_to_ghl", async (i) => {
-        const id = resolveProperty(ctx, i.property_id);
+        const id = resolveProperty(ctx, i, "reconcile_ctm_to_ghl");
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const toD = new Date();
         const fromD = new Date(toD.getTime() - i.days * 86400_000);
