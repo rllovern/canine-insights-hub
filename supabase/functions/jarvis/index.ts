@@ -138,6 +138,7 @@ async function assertPropertyAccess(
 
 type Ctx = {
   supabase: ReturnType<typeof svc>;
+  userSupabase: ReturnType<typeof svc>;
   userId: string;
   sessionId: string;
   defaultPropertyId: string | null;

@@ -1,61 +1,60 @@
-## Root cause
+## Problem
 
-The "Pending" badge is the UI state `input-streaming` from `src/components/ai-elements/tool.tsx` (label map: `"input-streaming": "Pending"`). It means the model started a tool call but the tool never returned an output — the stream was cut off mid-execution.
+When Jarvis is asked anything that hits the lead-performance RPCs (`lead_perf_speed`, `_handling`, `_pipeline`, `_agents`, `_quality`, `_drill`), the call fails with "not authenticated".
 
-The edge logs prove it:
+Root cause: those Postgres functions call `public.lead_perf_check_access(...)`, which does:
 
+```sql
+DECLARE _uid uuid := auth.uid();
+BEGIN
+  IF _uid IS NULL THEN RAISE EXCEPTION 'not authenticated'; END IF;
+  ...
 ```
-[Jarvis Tool Context] toolName: "reconcile_ctm_to_ghl" ...
-CPU Time exceeded
-shutdown
-```
 
-`reconcile_ctm_to_ghl` in `supabase/functions/jarvis/index.ts` runs into the Supabase Edge Runtime CPU budget and the worker is killed before it can return. Because the tool never produces output, `save_visual_report` is never called either, and the AI SDK stream ends with the last tool part still in `input-streaming` / `input-available`. The UI therefore renders "Pending" (or "Running") forever.
+Inside the Jarvis edge function we run every query through the service-role client (`svc()`), so `auth.uid()` is always NULL → the access guard raises, the tool surfaces it as a caveat, and the model tells the user "GHL came back with 'not authenticated'." It has nothing to do with the GHL sub-account connection; reconnecting GHL would not fix it.
 
-Why it's blowing the CPU budget:
+## Fix
 
-- `ghl_contacts` is fetched with `.limit(50000)` and NO date filter — full property contact dump.
-- `ghl_lead_facts` and `ghl_opportunities` are fetched with `.limit(50000)` each.
-- `ghl_messages` is fetched with `.limit(100000)`.
-- All of this is then walked in nested JS loops with `new Date(...).getTime()` per row.
+Run only the access-checked `lead_perf_*` RPCs through a user-scoped Supabase client so `auth.uid()` resolves to the signed-in user. Keep the service-role client for everything else (table reads/writes, logging tool runs, session/message persistence) so nothing else regresses.
 
-For a property like Ashtabula this trivially exceeds the per-invocation CPU budget. It is not a bug in the report renderer or in property context — those are working (logs show `inputPropertyId: ea92c5ce-...` resolved correctly).
+### Changes — `supabase/functions/jarvis/index.ts`
 
-## Plan
+1. **Capture the caller's JWT** in the request handler and build a second client:
+   ```ts
+   const userJwt = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+   const userSupabase = createClient(
+     Deno.env.get("SUPABASE_URL")!,
+     Deno.env.get("SUPABASE_ANON_KEY")!,
+     { global: { headers: { Authorization: `Bearer ${userJwt}` } } },
+   );
+   ```
 
-### 1. Make `reconcile_ctm_to_ghl` finish inside the CPU budget
+2. **Extend `Ctx`** with `userSupabase: ReturnType<typeof svc>` and pass it in at construction (line 1224).
 
-In `supabase/functions/jarvis/index.ts`:
+3. **Route every `lead_perf_*` RPC through `ctx.userSupabase`** instead of `ctx.supabase`. Call sites to update (all in `supabase/functions/jarvis/index.ts`):
+   - line 285 — `lead_perf_speed` (inside `get_lead_flow_summary` / equivalent)
+   - line 288 — `lead_perf_handling`
+   - lines 825–829 — `get_lead_performance_report` (speed, handling, pipeline, agents, quality)
+   - line 867 — `lead_perf_drill`
+   - line 979 — `lead_perf_quality` (data-quality audit tool)
+   - lines 1056–1058 — client-summary facts (speed, handling, pipeline)
 
-- Restrict `ghl_contacts` to phone/email values that actually appear in the window's CTM calls instead of pulling the whole property:
-  1. Fetch CTM calls first (already capped at 2000).
-  2. Build the set of normalized phones and emails from those calls.
-  3. Query `ghl_contacts` with `.or("phone.in.(...),email.in.(...)")` in chunks (≤ ~200 values per `.in`).
-- Lower hard caps: `ghl_lead_facts` and `ghl_opportunities` → `.limit(5000)` (window-scoped), `ghl_messages` → `.limit(20000)`.
-- Reduce default `days` from `10` to `7`; keep `max(90)` but warn via caveats when the window is large.
-- Precompute `callTs` and `callDay` per call once; precompute `msgTs` / `msgDay` per message once into a typed array so the inner loop is O(1) per candidate instead of re-parsing dates.
-- Short-circuit per-call ranking: as soon as a candidate scores `opportunity`, stop iterating remaining candidates.
-- Add a soft time guard: capture `performance.now()` at the start; if processing exceeds ~8s, stop classifying further calls and add a caveat `"Partial result: stopped after N calls due to time budget"` so the tool always returns and `save_visual_report` can run.
+   Leave `ctx.supabase.rpc("user_can_access_property", ...)` and all `ctx.supabase.from(...)` reads/writes alone — Jarvis already runs its own `assertPropertyAccess` check before any tool body, so the service-role table reads are intentional and correct.
 
-### 2. Make stuck tool calls visible instead of permanently "Pending"
+### Why this is safe
 
-In `src/components/jarvis/JarvisChat.tsx` (and the AI SDK chat status handling there):
+- The Jarvis function already enforces per-tool property access via `assertPropertyAccess` → `user_can_access_property` before any RPC runs, so we are not loosening access.
+- `lead_perf_check_access` will now see the real user id and pass for internal users / property viewers exactly as it does from the dashboard's normal RPC calls.
+- No DB migration required, no schema or RLS changes, no other tools affected.
 
-- When the chat status transitions to `error` or the stream ends with any tool part still in `input-streaming` / `input-available`, render that tool part as `output-error` locally with the message: "Tool run was interrupted (likely exceeded compute budget). Try a narrower window."
-- Surface a single non-blocking toast: "Reconciliation didn't finish — try `days: 7` or a single source."
+## Verification
 
-No change to `tool.tsx` label map; we just stop leaving parts in the streaming state on stream termination.
+1. After deploy, reload `/assistant?session=<uuid>` and ask: "What's Taylor's average speed-to-lead from form submissions for June 1–13?" — expect a numeric answer instead of the "not authenticated" caveat.
+2. Run a `Lead Performance` report via Jarvis (`get_lead_performance_report`) and confirm `speed`, `handling`, `pipeline`, `agents`, `quality` all come back with data, no caveats containing "not authenticated".
+3. Confirm existing flows still work: session persistence to `ai_agent_sessions` / `ai_agent_messages`, tool-run rows in `ai_agent_tool_runs`, and saved reports in `ai_agent_reports`.
 
-### 3. Verification
+## Out of scope
 
-- Redeploy `jarvis` edge function.
-- From `/assistant` with Ashtabula selected, ask: "Run the CTM↔GHL reconciliation for the last 7 days."
-- Confirm in edge logs: `reconcile_ctm_to_ghl` completes with a result object, `save_visual_report` is then called, no `CPU Time exceeded`.
-- Confirm in UI: tool badges progress Pending → Running → Completed, and the report renders via `ReportView`.
-- Force a timeout case (e.g. `days: 90` on a large property) and confirm the UI shows an error badge + toast instead of an indefinite "Pending".
-
-### Out of scope
-
-- Auth path (verified working: `hasUser: true`, token valid for 1503s).
-- Property context plumbing (verified working: `inputPropertyId` matches selection).
-- Report renderer crash safety (already handled by `ReportErrorBoundary`).
+- No changes to GHL sync, the `save-ghl-connection` / `check-ghl-access` functions, or the GHL connection dialog — the GHL connection is not the problem.
+- No DB migration; `lead_perf_check_access` stays as-is.
+- No Phase 3 alert work.
