@@ -72,7 +72,8 @@ export type DrillIssue =
   | "duplicate_opportunities"
   | "unknown_response_source"
   | "appointments_missing_status"
-  | "unmapped_stages";
+  | "unmapped_stages"
+  | "disqualified_by_tag";
 
 export const ISSUE_LABEL: Record<DrillIssue, string> = {
   never_responded: "Never responded",
@@ -88,6 +89,7 @@ export const ISSUE_LABEL: Record<DrillIssue, string> = {
   unknown_response_source: "Unknown response source",
   appointments_missing_status: "Appointments missing status",
   unmapped_stages: "Unmapped pipeline stages",
+  disqualified_by_tag: "Disqualified by tag",
 };
 
 export const WINDOW_TOOLTIP =
