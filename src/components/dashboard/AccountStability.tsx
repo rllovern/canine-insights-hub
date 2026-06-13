@@ -532,3 +532,20 @@ function daysLeft(c: Classified, now: Date): number {
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+function reasonTooltip(reason: string): string {
+  const r = reason.toLowerCase();
+  if (r.includes("budget")) return "Budget changes reset pacing models; expect delivery to fluctuate while bidding recalibrates.";
+  if (r.includes("bid") || r.includes("cpa") || r.includes("roas")) return "Bid strategy or target changes trigger a Google Ads learning period while Smart Bidding re-models conversions.";
+  if (r.includes("conversion")) return "Conversion goal/action changes alter what the bidder optimizes for, restarting learning across affected campaigns.";
+  if (r.includes("landing") || r.includes("url")) return "Landing page/URL changes can affect Quality Score and asset learning until new performance data accrues.";
+  if (r.includes("ad/asset") || r.includes("asset") || r.includes("ad ")) return "Ad/asset changes restart asset-level learning while Google tests new creative combinations.";
+  if (r.includes("audience")) return "Audience signal changes shift who the auction prioritizes; expect short-term delivery and CPA swings.";
+  if (r.includes("ad group criterion")) return "Ad group targeting changes can affect auction behavior at the ad group level.";
+  if (r.includes("campaign criterion")) return "Targeting/criteria changes (locations, languages, devices, negatives) can affect delivery and require restabilization.";
+  if (r.includes("location") || r.includes("geo")) return "Geo/location targeting changes change the eligible auction pool and require restabilization.";
+  if (r.includes("campaign created")) return "New campaigns enter a full learning phase as Google gathers initial conversion data.";
+  if (r.includes("status")) return "Pausing/enabling campaigns interrupts learning; resumed campaigns may need to restabilize.";
+  if (r.includes("ad group created")) return "New ad groups require initial learning before performance stabilizes.";
+  return "Structural change — may briefly affect delivery while Google Ads restabilizes.";
+}
