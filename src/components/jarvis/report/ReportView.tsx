@@ -159,11 +159,37 @@ function csvFromTable(t: TableSpec): string {
 
 export function normalizeReportSchema(report: ReportSchema): ReportSchema {
   const safe = (report ?? {}) as ReportSchema;
-  const charts = (Array.isArray(safe.charts) ? safe.charts : []).map((c) => ({
-    ...c,
-    data: Array.isArray((c as ChartSpec)?.data) ? (c as ChartSpec).data : [],
-    y: Array.isArray((c as ChartSpec)?.y) ? (c as ChartSpec).y : [],
-  })) as ChartSpec[];
+  const charts = (Array.isArray(safe.charts) ? safe.charts : []).map((raw) => {
+    const c = (raw ?? {}) as Record<string, unknown> & Partial<ChartSpec>;
+    // Accept alternate LLM shapes: x_key/xKey for x, series:[{key,label}] for y.
+    const x =
+      (typeof c.x === "string" && c.x) ||
+      (typeof (c as { x_key?: unknown }).x_key === "string" && (c as { x_key: string }).x_key) ||
+      (typeof (c as { xKey?: unknown }).xKey === "string" && (c as { xKey: string }).xKey) ||
+      undefined;
+    let y: string[] = Array.isArray(c.y)
+      ? (c.y as unknown[]).filter((v): v is string => typeof v === "string")
+      : [];
+    const series = (c as { series?: unknown }).series;
+    if (y.length === 0 && Array.isArray(series)) {
+      y = series
+        .map((s) => {
+          if (typeof s === "string") return s;
+          if (s && typeof s === "object") {
+            const k = (s as { key?: unknown; dataKey?: unknown }).key ?? (s as { dataKey?: unknown }).dataKey;
+            return typeof k === "string" ? k : null;
+          }
+          return null;
+        })
+        .filter((v): v is string => !!v);
+    }
+    const data = Array.isArray(c.data) ? (c.data as ChartSpec["data"]) : [];
+    // Last resort: infer y from first data row keys (excluding x)
+    if (y.length === 0 && data.length > 0 && x) {
+      y = Object.keys(data[0] ?? {}).filter((k) => k !== x);
+    }
+    return { ...(c as object), x, y, data } as ChartSpec;
+  }) as ChartSpec[];
   const tables = (Array.isArray(safe.tables) ? safe.tables : []).map((t) => ({
     ...t,
     columns: Array.isArray((t as TableSpec)?.columns) ? (t as TableSpec).columns : [],
