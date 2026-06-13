@@ -378,7 +378,7 @@ function mergeSpeedToLeadSummaryCards(cards: SummaryCard[]): SummaryCard[] {
   const isFormAverage = (card: SummaryCard) =>
     has(card, /\baverage\b/) && has(card, /\bform\b/) && !has(card, /response rate/) && !isUnavailable(card);
   const isFormResponseRate = (card: SummaryCard) =>
-    has(card, /response rate/) && has(card, /\bform\b|\bhuman\b/);
+    has(card, /response rate|human responses?|percentage|%/) && has(card, /\bform\b|\bhuman\b/);
 
   const unavailableStlIdx = cards.findIndex((card) => isStl(card) && isUnavailable(card));
   const formAverageIdx = cards.findIndex(isFormAverage);
