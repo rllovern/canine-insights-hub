@@ -1495,6 +1495,7 @@ function buildTools(ctx: Ctx) {
         const pid = i.property_id ?? ctx.defaultPropertyId;
         if (pid) await assertPropertyAccess(ctx.supabase, ctx.userId, pid);
         const s = (i.schema ?? {}) as Record<string, unknown>;
+        const normalizedSchema = normalizeSpeedToLeadReportSchema(s);
         const cmp = s["comparison_range"] as { from?: string; to?: string } | undefined;
         const { data, error } = await ctx.supabase
           .from("ai_agent_reports")
@@ -1508,7 +1509,7 @@ function buildTools(ctx: Ctx) {
             date_range_end: i.date_range?.to ?? null,
             comparison_range_start: cmp?.from ?? null,
             comparison_range_end: cmp?.to ?? null,
-            schema_json: i.schema,
+            schema_json: normalizedSchema,
             evidence_json: i.evidence ?? null,
             scope_json: s["scope"] ?? null,
             status_json: s["status"] ?? null,
@@ -1519,7 +1520,7 @@ function buildTools(ctx: Ctx) {
           .select("id")
           .single();
         if (error) throw new Error(error.message);
-        return { report_id: data.id, schema: i.schema };
+        return { report_id: data.id, schema: normalizedSchema };
       }),
     }),
   };
