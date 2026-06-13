@@ -553,6 +553,26 @@ function buildTools(ctx: Ctx) {
         const p90 = percentile(responseValues, 0.9);
         const under = (s: number) => responseValues.filter((v) => v <= s).length;
 
+        const fmtDur = (s: number | null): string | null => {
+          if (s == null || !Number.isFinite(Number(s))) return null;
+          const n = Math.max(0, Math.round(Number(s)));
+          if (n < 60) return `${n}s`;
+          if (n < 3600) {
+            const m = Math.floor(n / 60);
+            const rs = n % 60;
+            return rs ? `${m}m ${rs}s` : `${m}m`;
+          }
+          const h = Math.floor(n / 3600);
+          const m = Math.floor((n % 3600) / 60);
+          const rs = n % 60;
+          const parts = [`${h}h`];
+          if (m) parts.push(`${m}m`);
+          if (rs) parts.push(`${rs}s`);
+          return parts.join(" ");
+        };
+        const humanResponseRatePct = total > 0 ? (responded / total) * 100 : null;
+        const requestedMetricSeconds = filters.metric_type === "median" ? median : filters.metric_type === "p75" ? p75 : filters.metric_type === "p90" ? p90 : average;
+
         if (requestedAgent && agentResolution?.status === "resolved" && total === 0) {
           unavailableReasons.push(`${requestedAgent} has no matching leads in this date range after filters were applied.`);
         }
@@ -582,11 +602,18 @@ function buildTools(ctx: Ctx) {
           median_speed_to_lead_seconds: median,
           p75_speed_to_lead_seconds: p75,
           p90_speed_to_lead_seconds: p90,
+          average_speed_to_lead_human: fmtDur(average),
+          median_speed_to_lead_human: fmtDur(median),
+          p75_speed_to_lead_human: fmtDur(p75),
+          p90_speed_to_lead_human: fmtDur(p90),
+          human_response_rate_pct: humanResponseRatePct,
+          human_response_rate_label: humanResponseRatePct == null ? null : `${humanResponseRatePct.toFixed(1)}%`,
           under_1_min: under(60),
           under_5_min: under(300),
           under_15_min: under(900),
           requested_metric_type: filters.metric_type ?? "average",
-          requested_metric_value_seconds: filters.metric_type === "median" ? median : filters.metric_type === "p75" ? p75 : filters.metric_type === "p90" ? p90 : average,
+          requested_metric_value_seconds: requestedMetricSeconds,
+          requested_metric_value_human: fmtDur(requestedMetricSeconds),
           response_definition: filters.include_answered_inbound_calls ? "first human engagement: outbound human follow-up or answered inbound call" : "first outbound human follow-up only",
           time_basis: filters.time_basis ?? "raw",
           lead_level_rows: rows.slice(0, i.limit),
