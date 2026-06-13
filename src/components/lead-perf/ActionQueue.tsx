@@ -197,7 +197,7 @@ export function ActionQueue({
                           )}
                         </span>
                       ) : (
-                        <span className="italic text-muted-foreground/60">No activity after lead created</span>
+                        <span className="italic text-muted-foreground/60">—</span>
                       )}
                     </td>
                     <td className="px-3 py-1.5 hidden lg:table-cell max-w-[200px]">
