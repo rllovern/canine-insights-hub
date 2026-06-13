@@ -1174,6 +1174,12 @@ serve(async (req) => {
     }
 
     const supabase = svc();
+    const userJwt = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const userSupabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: `Bearer ${userJwt}` } } },
+    );
 
     // Verify property access if provided
     if (propertyId) {
@@ -1224,6 +1230,7 @@ serve(async (req) => {
 
     const ctx: Ctx = {
       supabase,
+      userSupabase,
       userId: user.id,
       sessionId: sessionId!,
       defaultPropertyId: propertyId,
