@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { usePropertyMetricConfig } from "@/lib/property-labels";
+import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 
 export default function CallTracking() {
   const { current, prior, isLoading, range, compareMode, compareRange } = useDashboard();
@@ -94,7 +95,17 @@ export default function CallTracking() {
 
   return (
     <>
-      <SectionDivider title="Call Performance" subtitle="Total volume and per-source breakdowns of calls, leads, and conversions" />
+      <SectionDivider
+        title="Call Performance"
+        subtitle="Total volume and per-source breakdowns of calls, leads, and conversions"
+        right={
+          <AskJarvisButton
+            range={range}
+            prompt="Reconcile CTM calls against GHL contacts for the selected property and date range. Flag mismatches, missing matches, and likely causes."
+            label="Reconcile with Jarvis"
+          />
+        }
+      />
       <Row>
         <ChartCard title="Total Calls" subtitle="All sources, daily">
           <SingleLineChart data={series} dataKey="record_count" label="Calls" color="hsl(var(--chart-1))" fmt={fmtNumber} prevKey="record_count_prev" showCompare={showCompare} />
