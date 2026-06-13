@@ -4,6 +4,7 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { DualAxisChart } from "@/components/dashboard/DualAxisChart";
 import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLineChart";
+import { AccountChangeHistory } from "@/components/dashboard/AccountChangeHistory";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fillDateRange } from "@/lib/metrics";
@@ -153,28 +154,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <SectionDivider title="Cost / Good Lead" subtitle="Cost efficiency per qualified lead, blended and broken out by source" />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <ChartCard title="Cost / Good Lead" subtitle="Total trend">
-          <SingleLineChart
-            data={series}
-            dataKey="cost_per_good_lead"
-            label="Cost / Good Lead"
-            color="hsl(var(--chart-3))"
-            fmt={(v) => fmtCurrency(v, 2)}
-            prevKey="cost_per_good_lead_prev"
-            showCompare={showCompare}
-          />
-        </ChartCard>
-        <ChartCard title="Cost / Good Lead by Source" subtitle="Total trend">
-          <MultiLineChart
-            data={sourceSeries}
-            sources={[...REQUIRED_SOURCES]}
-            fmt={(v) => fmtCurrency(v, 2)}
-            showCompare={showCompare}
-          />
-        </ChartCard>
-      </div>
+      <SectionDivider title="Account Change History" subtitle="Recent edits made inside the Google Ads account" />
+      <AccountChangeHistory propertyId={activeProperty.id} />
     </>
   );
 }
