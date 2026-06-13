@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChartCard } from "./ChartCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow, format, addDays, differenceInDays } from "date-fns";
@@ -28,7 +28,7 @@ type Impact = "high" | "medium" | "low";
 
 type Classified = ChangeEvent & {
   impact: Impact;
-  windowDays: number; // 0 = no countdown
+  windowDays: number;
   reason: string;
 };
 
@@ -47,7 +47,6 @@ function classify(e: ChangeEvent): Classified {
   const fields = fieldsOf(e).map((f) => f.toLowerCase());
   const has = (...needles: string[]) => fields.some((f) => needles.some((n) => f.includes(n)));
 
-  // HIGH
   if (rt === "CAMPAIGN" && op === "CREATE") return mk("high", 14, "Campaign created");
   if (rt === "CAMPAIGN" && has("bidding_strategy", "bidding_strategy_type", "manual_cpc", "maximize_conversions", "target_cpa", "target_roas")) {
     if (has("target_cpa", "target_roas")) return mk("high", 14, "Target CPA/ROAS changed");
@@ -64,7 +63,6 @@ function classify(e: ChangeEvent): Classified {
   }
   if (rt === "CAMPAIGN" && has("status")) return mk("high", 7, "Campaign status changed");
 
-  // MEDIUM
   if (rt === "CAMPAIGN_CRITERION" || rt === "AD_GROUP_CRITERION") {
     return mk("medium", 5, `${prettyResource(rt)} ${op.toLowerCase()}`);
   }
@@ -74,7 +72,6 @@ function classify(e: ChangeEvent): Classified {
     return mk("medium", 4, has("final_url", "final_urls") ? "Landing page changed" : "Ad/asset changed");
   }
 
-  // LOW
   if (has("name") || has("label")) return mk("low", 0, "Name/label change");
   return mk("low", 0, `${prettyResource(rt) || "Change"} ${op.toLowerCase()}`);
 
@@ -140,12 +137,11 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
       ?? null;
   }, [classified]);
 
-  // Campaign-level rollup: keep most impactful + most recent per campaign
   const perCampaign = useMemo(() => {
     const map = new Map<string, Classified & { campaignKey: string }>();
     const rank: Record<Impact, number> = { high: 3, medium: 2, low: 1 };
     for (const c of classified) {
-      const key = c.campaign_id ?? c.campaign_name ?? "(account-level)";
+      const key = c.campaign_id ?? c.campaign_name ?? "Account-level change";
       const prev = map.get(key);
       if (!prev) { map.set(key, { ...c, campaignKey: key }); continue; }
       const better =
@@ -168,31 +164,46 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
   const impactedCount = stabilizing.length;
   const accountDaysLeft = stabilizing.reduce((m, c) => Math.max(m, daysLeft(c, now)), 0);
   const reviewDate = lastMajor ? addDays(new Date(lastMajor.change_date_time), lastMajor.windowDays || 7) : null;
-  const status = accountDaysLeft > 0 ? "Stabilizing" : "Stable";
+
+  const status = useMemo(() => {
+    if (!lastMajor || !events?.length) return "Ready for Optimization";
+    const daysSince = differenceInDays(now, new Date(lastMajor.change_date_time));
+    if (lastMajor.impact === "high" && daysSince < 3) return "High Risk Learning Reset";
+    if (accountDaysLeft > 0) return "Stabilizing";
+    return "Stable";
+  }, [lastMajor, events, accountDaysLeft, now]);
+
+  const daysCardSub = useMemo(() => {
+    if (accountDaysLeft <= 0 || !lastMajor) return "No active stabilization";
+    const day = Math.max(1, (lastMajor.windowDays || 7) - accountDaysLeft + 1);
+    return `Day ${day} of ${lastMajor.windowDays} · ${capitalize(lastMajor.impact)}-impact change`;
+  }, [accountDaysLeft, lastMajor]);
 
   return (
     <ChartCard
       title="Account Stability"
       subtitle={
         <span>
-          Status: <span className="text-foreground font-medium">{status}</span>
-          {" · "}Last major change: {lastMajor ? formatDistanceToNow(new Date(lastMajor.change_date_time), { addSuffix: true }) : "—"}
+          Last major change: {lastMajor ? formatDistanceToNow(new Date(lastMajor.change_date_time), { addSuffix: true }) : "—"}
           {reviewDate && <> · Next optimization review: {format(reviewDate, "MMM d")}</>}
         </span>
       }
       right={
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button className="text-muted-foreground hover:text-foreground" aria-label="About stabilization">
-                <Info className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs">
-              This is an internal stabilization estimate based on recent structural account changes. It is not necessarily an official Google Ads learning status.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <div className="flex items-center gap-2">
+          <Badge variant={statusBadgeVariant(status)} className="text-[10px] uppercase">{status}</Badge>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="text-muted-foreground hover:text-foreground" aria-label="About stabilization">
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-xs">
+                This is an internal stabilization estimate based on recent structural Google Ads changes. It is not necessarily an official Google Ads learning status.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       }
     >
       {loading && (
@@ -210,7 +221,7 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
               sub={lastMajor ? (
                 <>
                   <div className="truncate">{lastMajor.reason}</div>
-                  <div className="truncate">{lastMajor.campaign_name ?? "Account-level"}</div>
+                  <div className="truncate">{lastMajor.campaign_name ?? "Account-level change"}</div>
                   {lastMajor.user_email && <div className="truncate">{lastMajor.user_email}</div>}
                 </>
               ) : "Account is quiet"}
@@ -218,21 +229,29 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
             <StatCard
               label="Days Left in Stabilization"
               value={accountDaysLeft > 0 ? `${accountDaysLeft} days left` : "—"}
-              sub={accountDaysLeft > 0 && lastMajor
-                ? `Day ${Math.max(1, (lastMajor.windowDays || 7) - accountDaysLeft + 1)} of ${lastMajor.windowDays || 7}`
-                : "No active stabilization"}
+              sub={daysCardSub}
             />
             <StatCard
               label="Next Optimization Review"
               value={reviewDate ? format(reviewDate, "MMM d") : "—"}
-              sub="Avoid major edits unless performance is severely broken"
+              sub={reviewDate
+                ? `Review performance on ${format(reviewDate, "MMM d")}. Avoid major structural edits until then unless spend or lead quality is clearly broken.`
+                : "No upcoming review"
+              }
             />
             <StatCard
               label="Impacted Campaigns"
-              value={impactedCount}
+              value={`${impactedCount} affected`}
               sub={impactedCount > 0
-                ? stabilizing.slice(0, 3).map((c) => c.campaign_name ?? c.campaignKey).join(", ")
-                : "No campaigns currently stabilizing"}
+                ? (
+                  <div className="flex flex-col gap-0.5">
+                    {stabilizing.map((c) => (
+                      <div key={c.campaignKey} className="truncate">{c.campaign_name ?? c.campaignKey}</div>
+                    ))}
+                  </div>
+                )
+                : "No campaigns currently stabilizing"
+              }
             />
           </div>
 
@@ -279,4 +298,8 @@ function daysLeft(c: Classified, now: Date): number {
   if (c.windowDays <= 0) return 0;
   const end = addDays(new Date(c.change_date_time), c.windowDays);
   return Math.max(0, differenceInDays(end, now));
+}
+
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
