@@ -399,6 +399,58 @@ function summarize(s: ReportSchema): string {
   return [s.title, cards, recs].filter(Boolean).join("\n\n");
 }
 
+/** Strip internal-only fields (spam, bad-lead, internal cost detail) so a report
+ *  is safe to share with a client. Pure transform on the normalized schema. */
+const INTERNAL_RE = /spam|bad[\s_-]?lead|medicaid|internal/i;
+
+function isInternalKey(k: string | undefined | null) {
+  return typeof k === "string" && INTERNAL_RE.test(k);
+}
+
+export function toClientSafe(s: ReportSchema): ReportSchema {
+  const summary_cards = (s.summary_cards ?? []).filter(
+    (c) => !INTERNAL_RE.test(c.label ?? "") && !INTERNAL_RE.test(c.detail ?? ""),
+  );
+  const charts = (s.charts ?? []).map((c) => ({
+    ...c,
+    y: (c.y ?? []).filter((k) => !isInternalKey(k)),
+    data: (c.data ?? []).map((row) => {
+      const out: Record<string, string | number | null> = {};
+      for (const [k, v] of Object.entries(row)) {
+        if (!isInternalKey(k) || k === c.x) out[k] = v;
+      }
+      return out;
+    }),
+  })).filter((c) => (c.y ?? []).length > 0);
+  const tables = (s.tables ?? []).map((t) => {
+    const columns = (t.columns ?? []).filter(
+      (col) => !INTERNAL_RE.test(col.key) && !INTERNAL_RE.test(col.label ?? ""),
+    );
+    const rows = (t.rows ?? []).filter((r) => {
+      const flat = Object.values(r).map((v) => String(v ?? "")).join(" ");
+      return !INTERNAL_RE.test(flat);
+    });
+    return { ...t, columns, rows };
+  });
+  const recommendations = (s.recommendations ?? []).filter(
+    (r) => !INTERNAL_RE.test(r.title ?? "") && !INTERNAL_RE.test(r.detail ?? ""),
+  );
+  return {
+    ...s,
+    summary_cards,
+    charts,
+    tables,
+    recommendations,
+    evidence: undefined,
+    caveats: (s.caveats ?? []).filter((c) => !INTERNAL_RE.test(c)),
+    scope: {
+      ...s.scope,
+      caveats: (s.scope?.caveats ?? []).filter((c) => !INTERNAL_RE.test(c)),
+      sync_freshness: undefined,
+    },
+  };
+}
+
 function ReportViewInner({
   schema,
   reportId,
