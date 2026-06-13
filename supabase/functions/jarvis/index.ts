@@ -33,7 +33,11 @@ RULES:
 - Never claim you took a write action; you only have read+report tools in this phase.
 
 REPORT SCHEMA (when calling save_visual_report):
-The 'schema' arg must include type:"report", title, scope, summary_cards, charts, tables, recommendations, evidence.`;
+The 'schema' arg must include type:"report", title, scope, summary_cards, charts, tables, recommendations, evidence.
+CHART SHAPE (strict): each chart MUST be { type: "bar"|"line"|"area", title, x: "<dataKey>", y: ["<dataKey>", ...], data: [{...}] }.
+- Use "x" (string) and "y" (array of strings), NOT "x_key" and NOT "series".
+- Every key in "x" and "y" must exist on each row of "data".
+TABLE SHAPE (strict): { title, columns: [{ key, label, align? }], rows: [{...}] }. Every column.key must exist on each row.`;
 
 function svc() {
   return createClient(
