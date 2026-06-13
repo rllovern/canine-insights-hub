@@ -1,32 +1,21 @@
-## Problem
+# Jarvis — Phase 1 build plan (approved with revisions)
 
-The `Account Change History` card shows "Could not load change history: Failed to send a request to the Edge Function". The edge function is actually reachable, but the Google Ads GAQL query references fields that don't exist on `change_event`, so the API returns a 400 and our function returns 500. The browser surfaces it as a fetch error.
+Scope: agent foundation + flagship CTM↔GHL reconciliation report. No alerts, no write actions.
 
-Direct test against the deployed function returns:
+## Revisions accepted
+- Reconciliation classifies each CTM row as: `unmatchable` | `missing` | `contact_only` | `activity_loose` | `activity_strong` | `lead_fact` | `opportunity`.
+- Identity = phone OR email exact (normalized). Timestamp proximity is secondary evidence (±15 min strong, same-day loose).
+- Every report carries scope/evidence: property, date range, sources used, sync freshness, matching method, unmatchable/contact-only/activity counts, caveats.
+- Explicit permission tests for cross-property, cross-user, internal-read-all, service-role writes.
+- Report header actions: Save · Copy summary · Open evidence · Export CSV · Create alert (disabled, "coming soon").
 
-```
-UNRECOGNIZED_FIELD: Unrecognized field in the query: 'change_event.feed'.
-```
+## Build
+1. Migration: `ai_agent_sessions`, `ai_agent_messages`, `ai_agent_tool_runs`, `ai_agent_reports` with GRANTs, RLS, owner-only + internal-read-all policies.
+2. Edge function `jarvis`: AI SDK `streamText` against Lovable AI Gateway (`google/gemini-3-flash-preview`), system prompt enforces tool use + evidence, persists messages + tool runs.
+3. Tools: `get_property_context`, `get_account_summary`, `get_lead_performance_snapshot`, `get_account_stability`, `reconcile_ctm_to_ghl`, `save_visual_report`.
+4. Report schema in `src/lib/jarvis/reportSchema.ts`; renderer in `src/components/jarvis/report/`.
+5. UI: replace `/assistant` with full-page Jarvis (chat + report drawer). Global `Cmd+K` `JarvisCommandBar` in `AppShell`.
+6. Threads: sessions in DB; active session id in URL `?session=…`.
 
-`change_event.feed` and `change_event.asset` are not valid selectable fields on `change_event` in Google Ads API v23.
-
-## Fix
-
-Update `supabase/functions/google-ads-change-history/index.ts`:
-
-1. Remove the invalid `change_event.feed` and `change_event.asset` columns from the GAQL SELECT. Keep only validated fields: `change_date_time`, `user_email`, `client_type`, `change_resource_type`, `change_resource_name`, `resource_change_operation`, `changed_fields`, `campaign`, `ad_group`.
-2. GAQL requires a date filter on `change_event.change_date_time` using `BETWEEN ... AND ...` (two-sided range) and a `LIMIT` (already present). Switch the WHERE clause to `BETWEEN '<since>' AND '<now>'` to satisfy the API contract.
-3. Return a clearer error body when the upstream Google Ads call fails so the UI can show the underlying message instead of a generic fetch error.
-
-## Frontend
-
-No structural changes needed in `AccountChangeHistory.tsx`. Already handles `data.error` — once the function returns events, the list renders.
-
-## Verification
-
-- Re-invoke the edge function with the active Ashtabula/MoCo property and confirm a 200 with an `events` array.
-- Reload the PPC Overview page and confirm the card renders the change feed (or a clean empty state).
-
-## Files
-
-- `supabase/functions/google-ads-change-history/index.ts` — fix GAQL query and error surface.
+## Out of scope (later phases)
+Alerts, embedded "ask why" buttons, write/execute tools, push notifications, cross-property queries.
