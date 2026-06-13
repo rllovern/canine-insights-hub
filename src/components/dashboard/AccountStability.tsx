@@ -167,11 +167,11 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
     <ChartCard
       title="Account Stability"
       subtitle={
-        <>
-          Status: <span className={status === "Stabilizing" ? "text-foreground font-medium" : "text-foreground font-medium"}>{status}</span>
+        <span>
+          Status: <span className="text-foreground font-medium">{status}</span>
           {" · "}Last major change: {lastMajor ? formatDistanceToNow(new Date(lastMajor.change_date_time), { addSuffix: true }) : "—"}
           {reviewDate && <> · Next optimization review: {format(reviewDate, "MMM d")}</>}
-        </> as any
+        </span>
       }
       right={
         <TooltipProvider>
