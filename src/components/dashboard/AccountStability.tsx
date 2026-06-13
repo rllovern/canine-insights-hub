@@ -89,6 +89,13 @@ function impactTone(i: Impact): "default" | "secondary" | "destructive" | "outli
   return "outline";
 }
 
+function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "High Risk Learning Reset") return "destructive";
+  if (status === "Stabilizing") return "secondary";
+  if (status === "Stable") return "default";
+  return "outline";
+}
+
 function StatCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border bg-card p-3 min-w-0">
