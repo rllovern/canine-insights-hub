@@ -278,6 +278,24 @@ Deno.serve(async (req) => {
   if (oppPage > MAX_OPPORTUNITY_PAGES) opportunityPaginationCapped = true;
 
   if (resync) {
+    if (liveContact) {
+      await admin.from("ghl_contacts").upsert({
+        property_id,
+        ghl_location_id: locationId,
+        ghl_contact_id: contact_id,
+        first_name: liveContact.firstName ?? null,
+        last_name: liveContact.lastName ?? null,
+        email: liveContact.email ?? null,
+        phone: liveContact.phone ?? null,
+        source: liveContact.source ?? null,
+        assigned_to: liveContact.assignedTo ?? null,
+        assigned_user_id: liveContact.assignedTo ?? null,
+        tags: Array.isArray(liveContact.tags) ? liveContact.tags : null,
+        ghl_created_at: liveContact.dateAdded ?? liveContact.createdAt ?? null,
+        raw: liveContact,
+      } as never, { onConflict: "property_id,ghl_contact_id" });
+    }
+
     const messageRows = liveMessages.map((m) => {
       const mA = m as Json;
       return {
