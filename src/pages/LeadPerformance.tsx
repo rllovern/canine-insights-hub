@@ -16,6 +16,7 @@ import { DataQualityRail } from "@/components/lead-perf/DataQualityRail";
 import { DrillSheet } from "@/components/lead-perf/DrillSheet";
 import { useSpeed, useHandling, usePipeline, useQuality } from "@/components/lead-perf/hooks";
 import { DrillIssue, WINDOW_TOOLTIP } from "@/lib/leadPerf";
+import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 
 const ALL_VALUE = "__all__";
 
@@ -91,6 +92,12 @@ export default function LeadPerformance() {
               ))}
             </SelectContent>
           </Select>
+          <AskJarvisButton
+            range={range}
+            propertyId={selected !== ALL_VALUE ? selected : undefined}
+            prompt="Generate a lead performance report for the current scope and date range. Surface speed-to-lead, action-queue volume, and where leads are stalling."
+            label="Run with Jarvis"
+          />
         </div>
       </div>
 
