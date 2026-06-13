@@ -25,6 +25,67 @@ async function ghl(method: string, path: string, token: string, body?: Json): Pr
   try { return JSON.parse(text) as Json; } catch { return {}; }
 }
 
+function messagesFromPayload(j: Json): { messages: Json[]; nextPage: boolean | null; lastMessageId: string | null } {
+  const inner = j.messages as Json | Json[] | undefined;
+  const messages: Json[] = Array.isArray(inner) ? inner as Json[]
+    : Array.isArray((inner as Json | undefined)?.messages) ? ((inner as Json).messages as Json[])
+    : [];
+  const source = (Array.isArray(inner) ? j : (inner ?? j)) as Json;
+  const nextRaw = source.nextPage ?? source.next_page ?? source.hasMore ?? source.has_more ?? null;
+  const nextPage = nextRaw == null ? null : nextRaw === true || nextRaw === 1 || String(nextRaw).toLowerCase() === "true";
+  const lastMessageId = String(source.lastMessageId ?? source.last_message_id ?? messages[messages.length - 1]?.id ?? "") || null;
+  return { messages, nextPage, lastMessageId };
+}
+
+function msgDuration(m: Json): number {
+  const raw = ((m.meta as Json | undefined)?.call as Json | undefined)?.duration
+    ?? (m.raw as Json | undefined)?.duration
+    ?? (m.raw as Json | undefined)?.callDuration
+    ?? m.duration
+    ?? m.callDuration;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function msgStatus(m: Json): string {
+  return String(((m.meta as Json | undefined)?.call as Json | undefined)?.status
+    ?? (m.raw as Json | undefined)?.status
+    ?? m.status
+    ?? m.callStatus
+    ?? "").toLowerCase();
+}
+
+function isCall(m: Json): boolean { return String((m.message_type ?? m.messageType) ?? "").toUpperCase() === "TYPE_CALL"; }
+function isInbound(m: Json): boolean { return String(m.direction ?? "").toLowerCase() === "inbound"; }
+function isAnsweredInboundCall(m: Json): boolean {
+  return isCall(m) && isInbound(m) && ["completed", "answered", "in-progress"].includes(msgStatus(m)) && msgDuration(m) >= 30;
+}
+
+async function fetchConversationMessages(token: string, conversationId: string) {
+  const MAX_PAGES = 25;
+  const messages: Json[] = [];
+  const seen = new Set<string>();
+  let lastMessageId: string | null = null;
+  let pages = 0;
+  let capped = false;
+  while (pages < MAX_PAGES) {
+    const qs = new URLSearchParams({ limit: "100" });
+    if (lastMessageId) qs.set("lastMessageId", lastMessageId);
+    const page = messagesFromPayload(await ghl("GET", `/conversations/${conversationId}/messages?${qs.toString()}`, token));
+    pages++;
+    let added = 0;
+    for (const m of page.messages) {
+      const id = String((m as Json).id ?? "");
+      if (!id || seen.has(id)) continue;
+      seen.add(id); added++; messages.push(m);
+    }
+    lastMessageId = page.lastMessageId;
+    if (!page.messages.length || added === 0 || page.nextPage === false || (page.nextPage == null && page.messages.length < 100) || !lastMessageId) break;
+  }
+  if (pages >= MAX_PAGES) capped = true;
+  return { messages, pages, capped };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
