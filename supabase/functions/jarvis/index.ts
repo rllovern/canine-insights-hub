@@ -14,6 +14,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Expose-Headers": "x-session-id",
 };
 
@@ -41,16 +42,43 @@ function svc() {
 }
 
 async function authUser(req: Request) {
-  const h = req.headers.get("Authorization");
-  if (!h?.startsWith("Bearer ")) return null;
-  const token = h.slice(7);
-  const c = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-  );
-  const { data, error } = await c.auth.getClaims(token);
-  if (error || !data?.claims?.sub) return null;
-  return { id: data.claims.sub as string };
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const apikeyHeader = req.headers.get("apikey") ?? "";
+  const token = authHeader.replace("Bearer ", "");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+
+  console.log("[Jarvis Edge Auth Debug]", {
+    hasAuthHeader: !!authHeader,
+    authHeaderStartsBearer: authHeader.startsWith("Bearer "),
+    tokenPrefix: token.slice(0, 12),
+    hasApikeyHeader: !!apikeyHeader,
+  });
+  console.log("[Jarvis Edge Env Debug]", {
+    supabaseHost: supabaseUrl ? new URL(supabaseUrl).host : null,
+    hasAnonKey: !!supabaseAnonKey,
+    hasServiceRoleKey: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  });
+
+  if (!token || !authHeader.startsWith("Bearer ")) {
+    return { user: null, error: "Missing Authorization Bearer token", detail: null };
+  }
+
+  const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  const { data: { user }, error: userError } = await supabaseUserClient.auth.getUser();
+
+  console.log("[Jarvis Edge User Debug]", {
+    hasUser: !!user,
+    userId: user?.id,
+    userErrorMessage: userError?.message,
+  });
+
+  if (userError || !user) {
+    return { user: null, error: "Invalid user session", detail: userError?.message ?? null };
+  }
+  return { user: { id: user.id }, error: null, detail: null };
 }
 
 function normPhone(s: string | null | undefined) {
