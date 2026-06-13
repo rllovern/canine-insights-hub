@@ -36,7 +36,13 @@ const severityBadgeClass: Record<Severity, string> = {
   neutral: "bg-muted text-muted-foreground border-border",
 };
 
-function SummaryCards({ cards }: { cards: SummaryCard[] }) {
+function SummaryCards({
+  cards,
+  onAction,
+}: {
+  cards: SummaryCard[];
+  onAction?: (card: SummaryCard) => void;
+}) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {cards.map((c, i) => {
@@ -47,8 +53,25 @@ function SummaryCards({ cards }: { cards: SummaryCard[] }) {
           dir === "up" ? "text-emerald-600 dark:text-emerald-400"
           : dir === "down" ? "text-destructive"
           : "text-muted-foreground";
+        const actionable = !!c.action_payload && !!onAction;
         return (
-          <Card key={i} className={cn("p-3 border", toneClasses[tone])}>
+          <Card
+            key={i}
+            role={actionable ? "button" : undefined}
+            tabIndex={actionable ? 0 : undefined}
+            onClick={actionable ? () => onAction(c) : undefined}
+            onKeyDown={actionable ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onAction(c);
+              }
+            } : undefined}
+            className={cn(
+              "p-3 border",
+              toneClasses[tone],
+              actionable && "cursor-pointer transition hover:border-primary/50 hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-ring",
+            )}
+          >
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{c.label}</div>
             <div className="mt-1 text-xl font-semibold tabular-nums">{c.value}</div>
             {(c.delta != null || c.hint) && (
@@ -59,6 +82,7 @@ function SummaryCards({ cards }: { cards: SummaryCard[] }) {
               </div>
             )}
             {c.detail && <div className="mt-0.5 text-[11px] text-muted-foreground">{c.detail}</div>}
+            {actionable && <div className="mt-1 text-[10px] uppercase tracking-wide text-primary">Open drill-in</div>}
           </Card>
         );
       })}
