@@ -62,6 +62,8 @@ export function JarvisChat() {
   const [params, setParams] = useSearchParams();
   const sessionParam = params.get("session");
   const [sessionId, setSessionId] = useState<string | null>(sessionParam);
+  const initialQ = params.get("q");
+  const didPrefill = useRef(false);
   const [input, setInput] = useState("");
   const [activeReport, setActiveReport] = useState<ReportRef | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -100,6 +102,18 @@ export function JarvisChat() {
     transport,
     onError: (e) => toast({ title: "Jarvis error", description: e.message, variant: "destructive" }),
   });
+
+  // Auto-send prefilled query from Cmd+K
+  useEffect(() => {
+    if (initialQ && !didPrefill.current) {
+      didPrefill.current = true;
+      sendMessage({ text: initialQ });
+      const next = new URLSearchParams(params);
+      next.delete("q");
+      setParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQ]);
 
   const reports = useMemo(() => extractReports(messages), [messages]);
   useEffect(() => {
