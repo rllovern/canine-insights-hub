@@ -36,6 +36,19 @@ const QUICK_PROMPTS = [
 
 type ReportRef = { id: string; schema: ReportSchema };
 
+async function getFreshAccessToken() {
+  const { data: sessionData, error } = await supabase.auth.getSession();
+  if (error || !sessionData.session?.access_token) return null;
+
+  const expiresAt = sessionData.session.expires_at ?? 0;
+  const needsRefresh = expiresAt > 0 && expiresAt <= Math.floor(Date.now() / 1000) + 60;
+  if (!needsRefresh) return sessionData.session.access_token;
+
+  const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError || !refreshData.session?.access_token) return null;
+  return refreshData.session.access_token;
+}
+
 function extractReports(messages: UIMessage[]): ReportRef[] {
   const reports: ReportRef[] = [];
   for (const m of messages) {
@@ -76,21 +89,23 @@ export function JarvisChat() {
     () =>
       new DefaultChatTransport({
         api: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis`,
-        headers: () => ({
-          Authorization: `Bearer ${accessToken ?? ""}`,
-        }),
-        prepareSendMessagesRequest: ({ messages, id, headers, api }) => ({
-          api,
-          headers,
-          body: {
+        prepareSendMessagesRequest: async ({ messages, id, api }) => {
+          const freshToken = await getFreshAccessToken();
+          if (!freshToken) throw new Error("Missing or invalid user session. Please sign in and retry.");
+
+          return {
+            api,
+            headers: { Authorization: `Bearer ${freshToken}` },
+            body: {
             id,
             messages,
             propertyId: activeProperty?.id ?? null,
             from: iso.from,
             to: iso.to,
             sessionId,
-          },
-        }),
+            },
+          };
+        },
         fetch: async (url, init) => {
           const r = await fetch(url as RequestInfo, init);
           const sid = r.headers.get("x-session-id");
@@ -113,7 +128,7 @@ export function JarvisChat() {
 
   // Auto-send prefilled query from Cmd+K
   useEffect(() => {
-    if (initialQ && !didPrefill.current) {
+    if (initialQ && accessToken && !didPrefill.current) {
       didPrefill.current = true;
       sendMessage({ text: initialQ });
       const next = new URLSearchParams(params);
@@ -121,7 +136,7 @@ export function JarvisChat() {
       setParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQ]);
+  }, [initialQ, accessToken]);
 
   const reports = useMemo(() => extractReports(messages), [messages]);
   useEffect(() => {
