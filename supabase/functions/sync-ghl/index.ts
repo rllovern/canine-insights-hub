@@ -348,6 +348,36 @@ Deno.serve(async (req) => {
     counts.contacts_total_pulled = buffer.length;
     counts.contacts_in_window = await upsertChunked(admin, "ghl_contacts", rows, "property_id,ghl_contact_id");
     samples.contact = inRange[0] ?? null;
+
+    // Tag refresh fallback: /contacts/search sometimes returns stale or empty tags.
+    // For contacts in the window whose tags came back empty, fetch the detail
+    // endpoint (cap to avoid burning the API budget).
+    const TAG_REFRESH_CAP = 300;
+    const needsTagRefresh = inRange
+      .filter((c) => {
+        const t = (c as Json).tags;
+        return !Array.isArray(t) || t.length === 0;
+      })
+      .slice(0, TAG_REFRESH_CAP);
+    let tagRefreshed = 0;
+    for (const c of needsTagRefresh) {
+      const id = String((c as Json).id);
+      try {
+        const d = await ghlFetch("GET", `/contacts/${id}`, token);
+        const detail = (d.contact ?? d) as Json;
+        const tags = Array.isArray(detail.tags) ? detail.tags : null;
+        if (tags && tags.length > 0) {
+          await admin
+            .from("ghl_contacts")
+            .update({ tags })
+            .eq("property_id", property_id)
+            .eq("ghl_contact_id", id);
+          tagRefreshed++;
+        }
+      } catch (_e) { /* swallow per-contact errors */ }
+    }
+    counts.contacts_tag_refresh_attempted = needsTagRefresh.length;
+    counts.contacts_tag_refresh_updated = tagRefreshed;
   }, undefined);
 
   // ===== 4. CONVERSATIONS + MESSAGES (classified) ===================

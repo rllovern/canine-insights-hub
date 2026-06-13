@@ -19,6 +19,7 @@ type Row = {
   last_activity_at: string | null;
   ghl_deep_link: string | null;
   reason: string | null;
+  tag_names: string[] | null;
 };
 
 type TabDef = {
@@ -32,6 +33,7 @@ const TABS: TabDef[] = [
   { id: "never_responded", label: "Needs First Response", empty: "Every lead in the window has a human response. Nice." },
   { id: "critical_stale",  label: "Critical Stale",       empty: "No critical-stale leads. Stay sharp.", showStage: true },
   { id: "unassigned",      label: "Unassigned",           empty: "Every lead has an owner.", showStage: true },
+  { id: "disqualified_by_tag", label: "Disqualified (tag)", empty: "No leads disqualified by tag in this window.", showStage: true },
 ];
 
 const MAX_INLINE = 8;
@@ -126,6 +128,7 @@ export function ActionQueue({
                 {def.showStage && <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">Stage</th>}
                 <th className="text-left font-medium px-3 py-1.5">Age</th>
                 <th className="text-left font-medium px-3 py-1.5 hidden md:table-cell">Last activity</th>
+                <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">Tags</th>
                 <th className="text-left font-medium px-3 py-1.5 hidden xl:table-cell">Reason</th>
                 <th className="px-3 py-1.5 text-right">Action</th>
               </tr>
@@ -155,6 +158,26 @@ export function ActionQueue({
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-muted-foreground tabular-nums whitespace-nowrap">
                       {last ? formatDistanceToNowStrict(last, { addSuffix: true }) : "—"}
+                    </td>
+                    <td className="px-3 py-1.5 hidden lg:table-cell max-w-[200px]">
+                      {r.tag_names && r.tag_names.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {r.tag_names.slice(0, 3).map((t) => (
+                            <span
+                              key={t}
+                              className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground/80 max-w-[120px] truncate"
+                              title={t}
+                            >
+                              {t}
+                            </span>
+                          ))}
+                          {r.tag_names.length > 3 && (
+                            <span className="text-[10px] text-muted-foreground">+{r.tag_names.length - 3}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-1.5 hidden xl:table-cell text-muted-foreground max-w-[260px]">
                       <span className="truncate block" title={r.reason ?? undefined}>{r.reason ?? "—"}</span>
