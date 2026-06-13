@@ -565,6 +565,15 @@ serve(async (req) => {
     const to = (body.to as string | undefined) ?? null;
     let sessionId = body.sessionId as string | undefined;
 
+    console.log("[Jarvis Edge Context Debug]", {
+      propertyId,
+      propertyName: body.propertyName ?? null,
+      from,
+      to,
+      sessionId: sessionId ?? null,
+      pageContext: body.pageContext ?? null,
+    });
+
     const supabase = svc();
 
     // Verify property access if provided
