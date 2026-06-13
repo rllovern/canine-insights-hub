@@ -368,6 +368,53 @@ function csvFromTable(t: TableSpec): string {
   return `${head}\n${body}`;
 }
 
+function mergeSpeedToLeadSummaryCards(cards: SummaryCard[]): SummaryCard[] {
+  if (!cards.length) return cards;
+  const txt = (v: unknown) => String(v ?? "").toLowerCase();
+  const has = (card: SummaryCard, needle: RegExp) =>
+    needle.test([card.label, card.value, card.hint, card.detail].map(txt).join(" "));
+  const isUnavailable = (card: SummaryCard) => has(card, /\bunavailable\b|\bno data\b|\bmissing\b/);
+  const isStl = (card: SummaryCard) => has(card, /speed[-\s]?to[-\s]?lead|\bstl\b/);
+  const isFormAverage = (card: SummaryCard) =>
+    has(card, /\baverage\b/) && has(card, /\bform\b/) && !has(card, /response rate/) && !isUnavailable(card);
+  const isFormResponseRate = (card: SummaryCard) =>
+    has(card, /response rate/) && has(card, /\bform\b|\bhuman\b/);
+
+  const unavailableStlIdx = cards.findIndex((card) => isStl(card) && isUnavailable(card));
+  const formAverageIdx = cards.findIndex(isFormAverage);
+  const responseRateIdx = cards.findIndex(isFormResponseRate);
+  if (formAverageIdx === -1 || (unavailableStlIdx === -1 && responseRateIdx === -1)) return cards;
+
+  const speedCard = unavailableStlIdx >= 0 ? cards[unavailableStlIdx] : cards[formAverageIdx];
+  const averageCard = cards[formAverageIdx];
+  const responseRateCard = responseRateIdx >= 0 ? cards[responseRateIdx] : undefined;
+  const rateText = responseRateCard
+    ? `Human response rate: ${responseRateCard.value}${responseRateCard.detail ? ` · ${responseRateCard.detail}` : ""}`
+    : undefined;
+  const detailParts = [rateText, averageCard.detail, averageCard.hint]
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean);
+  const label = has(speedCard, /taylor/) || has(averageCard, /taylor/)
+    ? "Taylor form average speed-to-lead"
+    : "Form average speed-to-lead";
+  const merged: SummaryCard = {
+    ...speedCard,
+    ...averageCard,
+    label,
+    value: averageCard.value,
+    hint: detailParts[0] ?? averageCard.hint ?? speedCard.hint,
+    detail: detailParts.slice(1).join(" · ") || speedCard.detail,
+    status: averageCard.status ?? speedCard.status,
+    tone: averageCard.tone ?? speedCard.tone,
+    action_payload: averageCard.action_payload ?? speedCard.action_payload ?? responseRateCard?.action_payload,
+  };
+
+  const drop = new Set([unavailableStlIdx, formAverageIdx, responseRateIdx].filter((idx) => idx >= 0));
+  const next = cards.filter((_, idx) => !drop.has(idx));
+  next.splice(Math.min(unavailableStlIdx >= 0 ? unavailableStlIdx : formAverageIdx, next.length), 0, merged);
+  return next;
+}
+
 export function normalizeReportSchema(report: ReportSchema): ReportSchema {
   const safe = (report ?? {}) as ReportSchema;
   const charts = (Array.isArray(safe.charts) ? safe.charts : []).map((raw) => {
@@ -411,7 +458,7 @@ export function normalizeReportSchema(report: ReportSchema): ReportSchema {
     type: "report",
     title: safe.title ?? "Report",
     scope: (safe.scope ?? {}) as ReportSchema["scope"],
-    summary_cards: Array.isArray(safe.summary_cards) ? safe.summary_cards : [],
+    summary_cards: mergeSpeedToLeadSummaryCards(Array.isArray(safe.summary_cards) ? safe.summary_cards : []),
     charts,
     tables,
     recommendations: Array.isArray(safe.recommendations) ? safe.recommendations : [],
