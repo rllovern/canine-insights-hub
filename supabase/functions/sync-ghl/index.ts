@@ -19,6 +19,9 @@ const GHL_VERSION = "2021-07-28";
 const MAX_RPS = 8;             // ceiling per probe report
 const MAX_RETRIES = 5;
 const BACKOFF_BASE_MS = 2000;  // 2s, 4s, 8s, 16s, 32s
+const MAX_CONVERSATION_SEARCH_PAGES = 100;
+const MAX_MESSAGE_PAGES_PER_CONVERSATION = 25;
+const MAX_OPPORTUNITY_PAGES = 100;
 
 type Json = Record<string, unknown>;
 
@@ -108,6 +111,29 @@ function messageChannel(m: Json): string | null {
   if (mt.includes("GMB")) return "gmb";
   if (mt.includes("WEBCHAT") || mt.includes("LIVE_CHAT")) return "webchat";
   return mt ? mt.toLowerCase().replace(/^type_/, "") : null;
+}
+
+function messagesFromPayload(j: Json): { messages: Json[]; nextPage: boolean | null; lastMessageId: string | null } {
+  const inner = j.messages as Json | Json[] | undefined;
+  const messages: Json[] = Array.isArray(inner) ? inner as Json[]
+    : Array.isArray((inner as Json | undefined)?.messages) ? ((inner as Json).messages as Json[])
+    : [];
+  const source = (Array.isArray(inner) ? j : (inner ?? j)) as Json;
+  const nextRaw = source.nextPage ?? source.next_page ?? source.hasMore ?? source.has_more ?? null;
+  const nextPage = nextRaw == null ? null : nextRaw === true || nextRaw === 1 || String(nextRaw).toLowerCase() === "true";
+  const lastMessageId = String(source.lastMessageId ?? source.last_message_id ?? messages[messages.length - 1]?.id ?? "") || null;
+  return { messages, nextPage, lastMessageId };
+}
+
+function normalizedMessageMeta(m: Json): Json | null {
+  const meta = ((m.meta as Json | undefined) ?? {}) as Json;
+  const call = ((meta.call as Json | undefined) ?? {}) as Json;
+  const duration = call.duration ?? m.duration ?? m.callDuration ?? m.call_duration ?? m.callDurationSeconds ?? m.call_duration_seconds;
+  const status = call.status ?? m.status ?? m.callStatus ?? m.call_status;
+  const nextCall = { ...call } as Json;
+  if (duration != null) nextCall.duration = duration;
+  if (status != null) nextCall.status = status;
+  return Object.keys(nextCall).length ? { ...meta, call: nextCall } : (Object.keys(meta).length ? meta : null);
 }
 
 // ---------- Appointment status normalization ------------------------
