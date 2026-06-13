@@ -5,6 +5,7 @@ import { ChartCard } from "@/components/dashboard/ChartCard";
 import { DualAxisChart } from "@/components/dashboard/DualAxisChart";
 import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLineChart";
 import { AccountChangeHistory } from "@/components/dashboard/AccountChangeHistory";
+import { AccountStability } from "@/components/dashboard/AccountStability";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fillDateRange } from "@/lib/metrics";
@@ -153,6 +154,9 @@ export default function Dashboard() {
           </ChartCard>
         </div>
       </div>
+
+      <SectionDivider title="Account Stability" subtitle="Estimated stabilization impact from recent Google Ads changes" />
+      <AccountStability propertyId={activeProperty.id} />
 
       <SectionDivider title="Account Change History" subtitle="Recent edits made inside the Google Ads account" />
       <AccountChangeHistory propertyId={activeProperty.id} />
