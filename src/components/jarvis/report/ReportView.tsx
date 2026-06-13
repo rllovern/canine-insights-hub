@@ -462,20 +462,40 @@ function ReportViewInner({
 }) {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [clientSafe, setClientSafe] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const view = useMemo(() => (clientSafe ? toClientSafe(schema) : schema), [clientSafe, schema]);
+  const filenameBase = (schema.title || "jarvis-report").replace(/\W+/g, "-").toLowerCase();
 
   const copySummary = async () => {
-    await navigator.clipboard.writeText(summarize(schema));
+    await navigator.clipboard.writeText(summarize(view));
     toast({ title: "Summary copied" });
   };
   const exportCsv = () => {
-    const t = schema.tables?.[0];
-    if (!t) { toast({ title: "No table to export" }); return; }
-    const blob = new Blob([csvFromTable(t)], { type: "text/csv" });
+    const tables = view.tables ?? [];
+    if (!tables.length) { toast({ title: "No table to export" }); return; }
+    const csv = tables
+      .map((t, i) => {
+        const heading = t.title ? `# ${t.title}` : `# Table ${i + 1}`;
+        return `${heading}\n${csvFromTable(t)}`;
+      })
+      .join("\n\n");
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `${schema.title.replace(/\W+/g, "-").toLowerCase()}.csv`;
+    a.href = url; a.download = `${filenameBase}${clientSafe ? "-client" : ""}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+  const exportPdf = async () => {
+    if (!reportRef.current) return;
+    try {
+      await exportNodeToPdf(reportRef.current, `${filenameBase}${clientSafe ? "-client" : ""}.pdf`);
+    } catch (e) {
+      console.error("[ReportView] PDF export failed", e);
+      toast({ title: "PDF export failed", description: (e as Error).message });
+    }
   };
   const save = async () => {
     if (!reportId || !onSave) return;
@@ -485,40 +505,61 @@ function ReportViewInner({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" ref={reportRef}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">Jarvis report</div>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <h2 className="text-lg font-semibold">{schema.title}</h2>
-            {schema.status && (
-              <Badge variant="outline" className={cn("text-[10px] uppercase tracking-wide", severityBadgeClass[schema.status.severity])}>
-                {schema.status.label}
-              </Badge>
-            )}
-            {schema.confidence && (
-              <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                {schema.confidence.level} confidence
+          <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            Jarvis report
+            {clientSafe && (
+              <Badge variant="outline" className="text-[10px] uppercase tracking-wide border-primary/40 text-primary">
+                Client view
               </Badge>
             )}
           </div>
-          {schema.subtitle && <div className="text-sm text-muted-foreground">{schema.subtitle}</div>}
-          {schema.status?.explanation && (
-            <div className="text-xs text-muted-foreground mt-1">{schema.status.explanation}</div>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <h2 className="text-lg font-semibold">{view.title}</h2>
+            {view.status && (
+              <Badge variant="outline" className={cn("text-[10px] uppercase tracking-wide", severityBadgeClass[view.status.severity])}>
+                {view.status.label}
+              </Badge>
+            )}
+            {view.confidence && (
+              <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                {view.confidence.level} confidence
+              </Badge>
+            )}
+          </div>
+          {view.subtitle && <div className="text-sm text-muted-foreground">{view.subtitle}</div>}
+          {view.status?.explanation && (
+            <div className="text-xs text-muted-foreground mt-1">{view.status.explanation}</div>
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
+          <Button
+            size="sm"
+            variant={clientSafe ? "default" : "outline"}
+            onClick={() => setClientSafe((v) => !v)}
+            title="Strip internal-only fields (spam, bad-lead, internal notes) for client sharing"
+          >
+            {clientSafe ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+            {clientSafe ? "Full view" : "Client view"}
+          </Button>
           <Button size="sm" variant="outline" onClick={save} disabled={!reportId || saving}>
             <Check className="size-3.5" /> Save
           </Button>
           <Button size="sm" variant="outline" onClick={copySummary}>
             <Copy className="size-3.5" /> Copy summary
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setEvidenceOpen((v) => !v)}>
-            <Info className="size-3.5" /> Evidence
-          </Button>
-          <Button size="sm" variant="outline" onClick={exportCsv} disabled={!schema.tables?.length}>
+          {!clientSafe && (
+            <Button size="sm" variant="outline" onClick={() => setEvidenceOpen((v) => !v)}>
+              <Info className="size-3.5" /> Evidence
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={exportCsv} disabled={!view.tables?.length}>
             <Download className="size-3.5" /> CSV
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportPdf}>
+            <FileText className="size-3.5" /> PDF
           </Button>
           <Button size="sm" variant="outline" disabled title="Alerts coming in Phase 2">
             <BellPlus className="size-3.5" /> Create alert
@@ -529,34 +570,34 @@ function ReportViewInner({
       {/* Scope strip */}
       <Card className="p-3 bg-muted/30 border-dashed">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {schema.scope.property_name && <span><b className="text-foreground">Property:</b> {schema.scope.property_name}</span>}
-          {schema.scope.date_range && (
-            <span><b className="text-foreground">Range:</b> {schema.scope.date_range.from.slice(0,10)} → {schema.scope.date_range.to.slice(0,10)}</span>
+          {view.scope.property_name && <span><b className="text-foreground">Property:</b> {view.scope.property_name}</span>}
+          {view.scope.date_range && (
+            <span><b className="text-foreground">Range:</b> {view.scope.date_range.from.slice(0,10)} → {view.scope.date_range.to.slice(0,10)}</span>
           )}
-          {schema.comparison_range && (
-            <span><b className="text-foreground">vs:</b> {schema.comparison_range.from.slice(0,10)} → {schema.comparison_range.to.slice(0,10)}</span>
+          {view.comparison_range && (
+            <span><b className="text-foreground">vs:</b> {view.comparison_range.from.slice(0,10)} → {view.comparison_range.to.slice(0,10)}</span>
           )}
-          {schema.scope.sources_used?.length ? (
-            <span><b className="text-foreground">Sources:</b> {schema.scope.sources_used.join(", ")}</span>
+          {view.scope.sources_used?.length ? (
+            <span><b className="text-foreground">Sources:</b> {view.scope.sources_used.join(", ")}</span>
           ) : null}
-          {schema.scope.matching_method && (
-            <span><b className="text-foreground">Method:</b> {schema.scope.matching_method}</span>
+          {!clientSafe && view.scope.matching_method && (
+            <span><b className="text-foreground">Method:</b> {view.scope.matching_method}</span>
           )}
         </div>
-        {(schema.scope.caveats?.length || schema.caveats?.length) ? (
+        {(view.scope.caveats?.length || view.caveats?.length) ? (
           <div className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
             <AlertTriangle className="size-3.5 mt-0.5" />
-            <div>{[...(schema.scope.caveats ?? []), ...(schema.caveats ?? [])].join(" · ")}</div>
+            <div>{[...(view.scope.caveats ?? []), ...(view.caveats ?? [])].join(" · ")}</div>
           </div>
         ) : null}
       </Card>
 
-      {schema.summary_cards?.length ? <SummaryCards cards={schema.summary_cards} /> : null}
-      {schema.charts?.map((c, i) => <ReportChart key={i} spec={c} />)}
-      {schema.tables?.map((t, i) => <ReportTable key={i} spec={t} />)}
-      {schema.recommendations?.length ? <Recommendations items={schema.recommendations} /> : null}
+      {view.summary_cards?.length ? <SummaryCards cards={view.summary_cards} /> : null}
+      {view.charts?.map((c, i) => <ReportChart key={i} spec={c} />)}
+      {view.tables?.map((t, i) => <ReportTable key={i} spec={t} />)}
+      {view.recommendations?.length ? <Recommendations items={view.recommendations} /> : null}
 
-      {evidenceOpen && (
+      {evidenceOpen && !clientSafe && (
         <Card className="p-3">
           <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Evidence</div>
           <pre className="text-[11px] overflow-x-auto whitespace-pre-wrap break-words bg-muted/40 p-2 rounded max-h-80">
@@ -565,10 +606,10 @@ function ReportViewInner({
         </Card>
       )}
 
-      {schema.scope.sync_freshness && (
+      {!clientSafe && view.scope.sync_freshness && (
         <div className="text-[11px] text-muted-foreground">
           Data freshness ·{" "}
-          {Object.entries(schema.scope.sync_freshness).map(([k, v]) => (
+          {Object.entries(view.scope.sync_freshness).map(([k, v]) => (
             <span key={k} className="mr-3">{k}: {v ? new Date(v).toLocaleString() : "never"}</span>
           ))}
         </div>
