@@ -499,9 +499,15 @@ export type Database = {
           first_ai_response_at: string | null
           first_any_response_at: string | null
           first_automation_response_at: string | null
+          first_human_answered_inbound_at: string | null
+          first_human_engagement_at: string | null
+          first_human_engagement_type: string | null
+          first_human_outbound_at: string | null
           first_human_response_at: string | null
           first_human_response_channel: string | null
+          handled_by_stage: boolean
           human_attempt_count: number
+          human_call_duration_seconds: number | null
           human_speed_to_lead_seconds_business: number | null
           human_speed_to_lead_seconds_raw: number | null
           id: string
@@ -514,6 +520,7 @@ export type Database = {
           lost_reason_normalized: string | null
           lost_reason_raw: string | null
           monetary_value: number | null
+          needs_first_response: boolean
           opportunity_id: string | null
           pipeline_id: string | null
           property_id: string
@@ -537,9 +544,15 @@ export type Database = {
           first_ai_response_at?: string | null
           first_any_response_at?: string | null
           first_automation_response_at?: string | null
+          first_human_answered_inbound_at?: string | null
+          first_human_engagement_at?: string | null
+          first_human_engagement_type?: string | null
+          first_human_outbound_at?: string | null
           first_human_response_at?: string | null
           first_human_response_channel?: string | null
+          handled_by_stage?: boolean
           human_attempt_count?: number
+          human_call_duration_seconds?: number | null
           human_speed_to_lead_seconds_business?: number | null
           human_speed_to_lead_seconds_raw?: number | null
           id?: string
@@ -552,6 +565,7 @@ export type Database = {
           lost_reason_normalized?: string | null
           lost_reason_raw?: string | null
           monetary_value?: number | null
+          needs_first_response?: boolean
           opportunity_id?: string | null
           pipeline_id?: string | null
           property_id: string
@@ -575,9 +589,15 @@ export type Database = {
           first_ai_response_at?: string | null
           first_any_response_at?: string | null
           first_automation_response_at?: string | null
+          first_human_answered_inbound_at?: string | null
+          first_human_engagement_at?: string | null
+          first_human_engagement_type?: string | null
+          first_human_outbound_at?: string | null
           first_human_response_at?: string | null
           first_human_response_channel?: string | null
+          handled_by_stage?: boolean
           human_attempt_count?: number
+          human_call_duration_seconds?: number | null
           human_speed_to_lead_seconds_business?: number | null
           human_speed_to_lead_seconds_raw?: number | null
           id?: string
@@ -590,6 +610,7 @@ export type Database = {
           lost_reason_normalized?: string | null
           lost_reason_raw?: string | null
           monetary_value?: number | null
+          needs_first_response?: boolean
           opportunity_id?: string | null
           pipeline_id?: string | null
           property_id?: string
@@ -1276,6 +1297,7 @@ export type Database = {
           confirmed_at: string | null
           confirmed_by: string | null
           confirmed_by_user: boolean
+          counts_as_human_handled: boolean
           created_at: string
           ghl_pipeline_id: string | null
           ghl_stage_id: string
@@ -1284,6 +1306,7 @@ export type Database = {
           suggested_canonical_stage:
             | Database["public"]["Enums"]["ghl_canonical_stage"]
             | null
+          suppresses_needs_first_response: boolean
           updated_at: string
         }
         Insert: {
@@ -1291,6 +1314,7 @@ export type Database = {
           confirmed_at?: string | null
           confirmed_by?: string | null
           confirmed_by_user?: boolean
+          counts_as_human_handled?: boolean
           created_at?: string
           ghl_pipeline_id?: string | null
           ghl_stage_id: string
@@ -1299,6 +1323,7 @@ export type Database = {
           suggested_canonical_stage?:
             | Database["public"]["Enums"]["ghl_canonical_stage"]
             | null
+          suppresses_needs_first_response?: boolean
           updated_at?: string
         }
         Update: {
@@ -1306,6 +1331,7 @@ export type Database = {
           confirmed_at?: string | null
           confirmed_by?: string | null
           confirmed_by_user?: boolean
+          counts_as_human_handled?: boolean
           created_at?: string
           ghl_pipeline_id?: string | null
           ghl_stage_id?: string
@@ -1314,6 +1340,7 @@ export type Database = {
           suggested_canonical_stage?:
             | Database["public"]["Enums"]["ghl_canonical_stage"]
             | null
+          suppresses_needs_first_response?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -1736,6 +1763,7 @@ export type Database = {
           phone: string
           property_id: string
           property_name: string
+          reason: string
           speed_to_lead_seconds: number
           stage_id: string
           stage_name: string
