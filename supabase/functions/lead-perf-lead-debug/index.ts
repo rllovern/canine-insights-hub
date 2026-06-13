@@ -159,18 +159,33 @@ Deno.serve(async (req) => {
   const localMessages = (localMessagesRaw ?? []) as Json[];
 
   // Find every live conversation for this contact, then walk all message pages.
+  // Prefer contact-scoped search so a one-lead diagnostic does not scan the whole location.
   const conversations: Json[] = [];
-  let skip = 0;
   let conversationPages = 0;
-  while (conversationPages < MAX_CONVERSATION_SEARCH_PAGES) {
-    const j = await ghl("GET", `/conversations/search?locationId=${locationId}&limit=100&skip=${skip}`, token);
+  let usedContactScopedConversationSearch = true;
+  try {
+    const j = await ghl("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(contact_id)}&limit=100`, token);
     const list = ((j.conversations as Json[]) ?? []);
     conversations.push(...list.filter((c) => String((c as Json).contactId ?? "") === contact_id));
     conversationPages++;
-    if (list.length < 100) break;
-    skip += list.length;
+  } catch (_e) {
+    usedContactScopedConversationSearch = false;
   }
-  if (conversationPages >= MAX_CONVERSATION_SEARCH_PAGES) (report.warnings as string[]).push("conversation_search_capped");
+  if (!conversations.length) {
+    usedContactScopedConversationSearch = false;
+    let skip = 0;
+    conversationPages = 0;
+    while (conversationPages < MAX_CONVERSATION_SEARCH_PAGES) {
+      const j = await ghl("GET", `/conversations/search?locationId=${locationId}&limit=100&skip=${skip}`, token);
+      const list = ((j.conversations as Json[]) ?? []);
+      conversations.push(...list.filter((c) => String((c as Json).contactId ?? "") === contact_id));
+      conversationPages++;
+      if (list.length < 100) break;
+      skip += list.length;
+    }
+    if (conversationPages >= MAX_CONVERSATION_SEARCH_PAGES) (report.warnings as string[]).push("conversation_search_capped");
+  }
+  report.conversation_search = { used_contact_scoped_search: usedContactScopedConversationSearch, pages: conversationPages, conversations_found: conversations.length };
 
   const liveMessages: Json[] = [];
   const liveMessageIds = new Set<string>();
