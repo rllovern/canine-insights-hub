@@ -486,7 +486,15 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const messages = (body.messages ?? []) as UIMessage[];
+    console.log("jarvis body keys:", Object.keys(body));
+    const rawMessages = body.messages ?? body.uiMessages ?? (body.message ? [body.message] : null);
+    if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Request body missing 'messages' array", got: Object.keys(body) }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const messages = rawMessages as UIMessage[];
     const propertyId = (body.propertyId as string | undefined) ?? null;
     const from = (body.from as string | undefined) ?? null;
     const to = (body.to as string | undefined) ?? null;
