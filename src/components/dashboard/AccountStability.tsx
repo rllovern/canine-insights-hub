@@ -187,19 +187,20 @@ function StatusTimeline({
   const pct = Math.min(100, Math.max(0, ((now.getTime() - start.getTime()) / totalMs) * 100));
   return (
     <div className="rounded-lg border border-border bg-card p-3">
-      <div className="flex items-center justify-between text-[10.5px] uppercase tracking-wide text-muted-foreground mb-2">
-        <span>Last Major Change</span>
-        <span>Current Status</span>
-        <span>Next Optimization Review</span>
-      </div>
-      <div className="relative h-2 rounded-full bg-muted">
+      <div className="relative h-2 rounded-full bg-muted mt-6">
         <div className="absolute inset-y-0 left-0 rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
-        <div className="absolute -top-1 left-0 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-destructive" />
+        <div className="absolute -top-1 left-0 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-destructive">
+          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9.5px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">Change made</span>
+        </div>
         <div
           className="absolute -top-1 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-primary"
           style={{ left: `${pct}%` }}
-        />
-        <div className="absolute -top-1 right-0 h-4 w-4 translate-x-1/2 rounded-full border-2 border-background bg-emerald-500" />
+        >
+          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9.5px] uppercase tracking-wide text-foreground whitespace-nowrap">Now</span>
+        </div>
+        <div className="absolute -top-1 right-0 h-4 w-4 translate-x-1/2 rounded-full border-2 border-background bg-emerald-500">
+          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9.5px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">Review</span>
+        </div>
       </div>
       <div className="mt-2 flex items-center justify-between text-[11px]">
         <span className="text-foreground">{lastChangeAt ? format(lastChangeAt, "MMM d") : "—"}</span>
@@ -224,22 +225,37 @@ function ChangeSparkline({ events, days = 30 }: { events: Classified[]; days?: n
       buckets[idx].total += 1;
     }
   }
+  const totals = events.reduce(
+    (acc, e) => { acc[e.impact] += 1; return acc; },
+    { high: 0, medium: 0, low: 0 } as Record<Impact, number>,
+  );
+  const structural = totals.high + totals.medium;
   const max = Math.max(1, ...buckets.map((b) => b.total));
   return (
     <div className="rounded-lg border border-border bg-card p-3">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
         <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Change Activity · last {days} days</div>
-        <div className="text-[10px] text-muted-foreground">{events.length} changes</div>
+        <div className="flex items-center gap-3 text-[10.5px] text-muted-foreground">
+          <span><span className="text-foreground font-semibold">{events.length}</span> total</span>
+          <span><span className="text-foreground font-semibold">{structural}</span> structural</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-destructive" />{totals.high} high</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />{totals.medium} med</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/50" />{totals.low} low/admin</span>
+        </div>
       </div>
-      <div className="flex items-end gap-[2px] h-10">
+      <div className="flex items-end gap-[3px] h-14">
         {buckets.map((b, i) => {
-          const h = (b.total / max) * 100;
+          const h = b.total === 0 ? 4 : Math.max(12, (b.total / max) * 100);
           const top: Impact = b.high > 0 ? "high" : b.medium > 0 ? "medium" : "low";
           return (
-            <div key={i} className="flex-1 flex items-end" title={`${format(b.day, "MMM d")}: ${b.total} change${b.total === 1 ? "" : "s"}`}>
+            <div
+              key={i}
+              className="flex-1 flex items-end h-full"
+              title={`${format(b.day, "MMM d")}: ${b.total} change${b.total === 1 ? "" : "s"} (H${b.high}/M${b.medium}/L${b.low})`}
+            >
               <div
-                className={`w-full rounded-sm ${b.total === 0 ? "bg-muted/40" : impactBarClass(top)}`}
-                style={{ height: `${b.total === 0 ? 6 : Math.max(10, h)}%` }}
+                className={`w-full rounded-sm ${b.total === 0 ? "bg-muted/50" : impactBarClass(top)}`}
+                style={{ height: `${h}%`, opacity: b.total === 0 ? 0.6 : 1 }}
               />
             </div>
           );
@@ -395,13 +411,17 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
                 <CountdownRing daysLeft={accountDaysLeft} total={windowTotal} impact={lastMajor?.impact ?? "low"} />
                 <div className="min-w-0">
                   <div className="text-sm font-semibold">
-                    {accountDaysLeft > 0 ? `${accountDaysLeft} days left` : "No active window"}
+                    {accountDaysLeft > 0 ? `${accountDaysLeft} days remaining` : "No active window"}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    {windowTotal > 0 ? `Day ${currentDay} of ${windowTotal}` : "—"}
+                    {windowTotal > 0 ? `${windowTotal}-day window` : "—"}
+                    {lastMajor && <> · {capitalize(lastMajor.impact)} impact</>}
                   </div>
-                  {lastMajor && (
-                    <div className="text-[10.5px] text-muted-foreground">{capitalize(lastMajor.impact)}-impact window</div>
+                  {lastMajor && windowTotal > 0 && (
+                    <div className="text-[10.5px] text-muted-foreground">
+                      Started {format(new Date(lastMajor.change_date_time), "MMM d")}
+                      {reviewDate && <> · Review {format(reviewDate, "MMM d")}</>}
+                    </div>
                   )}
                 </div>
               </div>
@@ -434,7 +454,7 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Campaign</TableHead>
+                  <TableHead>Campaign / Scope</TableHead>
                   <TableHead>Last Major Change</TableHead>
                   <TableHead>Change Type</TableHead>
                   <TableHead>Impact</TableHead>
@@ -461,10 +481,19 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDistanceToNow(new Date(c.change_date_time), { addSuffix: true })}</TableCell>
                       <TableCell className="text-xs truncate max-w-[220px]">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                          {c.reason}
-                        </span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1.5 cursor-help">
+                                <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                                {c.reason}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs text-xs">
+                              {reasonTooltip(c.reason)}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </TableCell>
                       <TableCell><Badge variant={impactTone(c.impact)} className="h-5 text-[10px] uppercase">{c.impact}</Badge></TableCell>
                       <TableCell className="text-xs">
@@ -502,4 +531,21 @@ function daysLeft(c: Classified, now: Date): number {
 
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function reasonTooltip(reason: string): string {
+  const r = reason.toLowerCase();
+  if (r.includes("budget")) return "Budget changes reset pacing models; expect delivery to fluctuate while bidding recalibrates.";
+  if (r.includes("bid") || r.includes("cpa") || r.includes("roas")) return "Bid strategy or target changes trigger a Google Ads learning period while Smart Bidding re-models conversions.";
+  if (r.includes("conversion")) return "Conversion goal/action changes alter what the bidder optimizes for, restarting learning across affected campaigns.";
+  if (r.includes("landing") || r.includes("url")) return "Landing page/URL changes can affect Quality Score and asset learning until new performance data accrues.";
+  if (r.includes("ad/asset") || r.includes("asset") || r.includes("ad ")) return "Ad/asset changes restart asset-level learning while Google tests new creative combinations.";
+  if (r.includes("audience")) return "Audience signal changes shift who the auction prioritizes; expect short-term delivery and CPA swings.";
+  if (r.includes("ad group criterion")) return "Ad group targeting changes can affect auction behavior at the ad group level.";
+  if (r.includes("campaign criterion")) return "Targeting/criteria changes (locations, languages, devices, negatives) can affect delivery and require restabilization.";
+  if (r.includes("location") || r.includes("geo")) return "Geo/location targeting changes change the eligible auction pool and require restabilization.";
+  if (r.includes("campaign created")) return "New campaigns enter a full learning phase as Google gathers initial conversion data.";
+  if (r.includes("status")) return "Pausing/enabling campaigns interrupts learning; resumed campaigns may need to restabilize.";
+  if (r.includes("ad group created")) return "New ad groups require initial learning before performance stabilizes.";
+  return "Structural change — may briefly affect delivery while Google Ads restabilizes.";
 }
