@@ -20,6 +20,7 @@ import type { ReportSchema } from "@/lib/jarvis/reportSchema";
 import { isReportSchema } from "@/lib/jarvis/reportSchema";
 import { Star, ExternalLink, Trash2, MessageSquare } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 
 type ReportRow = {
   id: string;
@@ -122,7 +123,17 @@ export default function Reports() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <PageHeader title="Reports" description="Saved Jarvis reports and recent runs." />
+      <PageHeader
+        title="Reports"
+        description="Saved Jarvis reports and recent runs."
+        actions={
+          <AskJarvisButton
+            prompt="Generate a fresh report for the active property. Ask me what kind if it's ambiguous."
+            label="New report with Jarvis"
+            variant="default"
+          />
+        }
+      />
 
       <Card className="p-3">
         <div className="flex flex-wrap gap-2 items-center">
