@@ -273,11 +273,21 @@ function ReportTable({ spec }: { spec: TableSpec }) {
   );
 }
 
-const sevIcon = { info: Info, warn: AlertTriangle, critical: AlertTriangle };
-const sevClass = {
+const sevIcon: Record<string, typeof Info> = {
+  info: Info,
+  good: Info,
+  warn: AlertTriangle,
+  warning: AlertTriangle,
+  critical: AlertTriangle,
+  neutral: Info,
+};
+const sevClass: Record<string, string> = {
   info: "text-muted-foreground",
+  good: "text-emerald-500",
   warn: "text-amber-500",
+  warning: "text-amber-500",
   critical: "text-destructive",
+  neutral: "text-muted-foreground",
 };
 
 function Recommendations({ items }: { items: Recommendation[] }) {
@@ -286,10 +296,12 @@ function Recommendations({ items }: { items: Recommendation[] }) {
       <div className="text-sm font-medium mb-2">Recommendations</div>
       <ul className="space-y-2">
         {items.map((r, i) => {
-          const Icon = sevIcon[r.severity ?? "info"];
+          const sev = (r.severity ?? "info") as string;
+          const Icon = sevIcon[sev] ?? Info;
+          const cls = sevClass[sev] ?? sevClass.info;
           return (
             <li key={i} className="flex gap-2 text-sm">
-              <Icon className={cn("size-4 mt-0.5 shrink-0", sevClass[r.severity ?? "info"])} />
+              <Icon className={cn("size-4 mt-0.5 shrink-0", cls)} />
               <div>
                 <div className="font-medium">{r.title}</div>
                 {r.detail && <div className="text-xs text-muted-foreground mt-0.5">{r.detail}</div>}
