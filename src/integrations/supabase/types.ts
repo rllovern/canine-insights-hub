@@ -495,6 +495,7 @@ export type Database = {
             | Database["public"]["Enums"]["ghl_canonical_stage"]
             | null
           contact_id: string
+          contact_record_updated_at: string | null
           created_at: string
           disqualification_reason: string | null
           first_ai_response_at: string | null
@@ -517,6 +518,9 @@ export type Database = {
           is_stale: boolean
           last_activity_at: string | null
           last_human_activity_at: string | null
+          last_meaningful_activity_at: string | null
+          last_meaningful_activity_type: string | null
+          last_synced_at: string | null
           lead_created_at: string
           lost_at: string | null
           lost_reason_normalized: string | null
@@ -546,6 +550,7 @@ export type Database = {
             | Database["public"]["Enums"]["ghl_canonical_stage"]
             | null
           contact_id: string
+          contact_record_updated_at?: string | null
           created_at?: string
           disqualification_reason?: string | null
           first_ai_response_at?: string | null
@@ -568,6 +573,9 @@ export type Database = {
           is_stale?: boolean
           last_activity_at?: string | null
           last_human_activity_at?: string | null
+          last_meaningful_activity_at?: string | null
+          last_meaningful_activity_type?: string | null
+          last_synced_at?: string | null
           lead_created_at: string
           lost_at?: string | null
           lost_reason_normalized?: string | null
@@ -597,6 +605,7 @@ export type Database = {
             | Database["public"]["Enums"]["ghl_canonical_stage"]
             | null
           contact_id?: string
+          contact_record_updated_at?: string | null
           created_at?: string
           disqualification_reason?: string | null
           first_ai_response_at?: string | null
@@ -619,6 +628,9 @@ export type Database = {
           is_stale?: boolean
           last_activity_at?: string | null
           last_human_activity_at?: string | null
+          last_meaningful_activity_at?: string | null
+          last_meaningful_activity_type?: string | null
+          last_synced_at?: string | null
           lead_created_at?: string
           lost_at?: string | null
           lost_reason_normalized?: string | null
