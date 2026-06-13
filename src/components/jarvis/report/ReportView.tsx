@@ -519,6 +519,7 @@ function ReportViewInner({
   onSave?: (id: string) => Promise<void> | void;
 }) {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [drillTable, setDrillTable] = useState<TableSpec | null>(null);
   const [saving, setSaving] = useState(false);
   const [clientSafe, setClientSafe] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
@@ -560,6 +561,21 @@ function ReportViewInner({
     setSaving(true);
     try { await onSave(reportId); toast({ title: "Report saved" }); }
     finally { setSaving(false); }
+  };
+  const onSummaryAction = (card: SummaryCard) => {
+    const payload = card.action_payload;
+    if (!payload) return;
+    if (payload.type === "open_evidence" || payload.type === "open_debug") {
+      setEvidenceOpen(true);
+      toast({ title: payload.label ?? card.label, description: payload.reason });
+      return;
+    }
+    const table = tableForAction(view, card);
+    if (!table) {
+      toast({ title: "No drill-in available", description: payload.reason });
+      return;
+    }
+    setDrillTable(table);
   };
 
   return (
@@ -650,7 +666,16 @@ function ReportViewInner({
         ) : null}
       </Card>
 
-      {view.summary_cards?.length ? <SummaryCards cards={view.summary_cards} /> : null}
+      {view.summary_cards?.length ? <SummaryCards cards={view.summary_cards} onAction={onSummaryAction} /> : null}
+      {drillTable && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Drill-in</div>
+            <Button size="sm" variant="ghost" onClick={() => setDrillTable(null)}>Close</Button>
+          </div>
+          <ReportTable spec={drillTable} />
+        </div>
+      )}
       {view.charts?.map((c, i) => <ReportChart key={i} spec={c} />)}
       {view.tables?.map((t, i) => <ReportTable key={i} spec={t} />)}
       {view.recommendations?.length ? <Recommendations items={view.recommendations} /> : null}
