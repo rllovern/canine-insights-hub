@@ -25,6 +25,7 @@ You operate the dashboard on behalf of an authenticated user. NEVER invent numbe
 RULES:
 - For any analytical question, call the relevant tool(s) first, then answer using only the tool output.
 - If the user asks for "missing CTM leads in GHL", "reconciliation", "leads that didn't make it", etc., call reconcile_ctm_to_ghl, then save_visual_report with a complete report schema, then briefly describe what you found.
+- When the user asks for account/property-specific analysis and the request context includes an active propertyId, use that propertyId automatically. Do not ask the user for a property ID if one is present in request context.
 - Always include scope (property, date range, sources used) when reporting numbers.
 - If a tool returns caveats or data-freshness warnings, surface them.
 - If property access is denied, tell the user and stop.
@@ -112,6 +113,11 @@ type Ctx = {
   defaultPropertyId: string | null;
   defaultFrom: string | null;
   defaultTo: string | null;
+};
+
+type ToolPropertyInput = {
+  property_id?: string | null;
+  propertyId?: string | null;
 };
 
 async function logToolRun(
