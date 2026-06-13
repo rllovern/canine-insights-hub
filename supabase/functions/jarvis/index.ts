@@ -53,17 +53,16 @@ async function authUser(req: Request) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-  console.log("[Jarvis Edge Auth Debug]", {
-    hasAuthHeader: !!authHeader,
-    authHeaderStartsBearer: authHeader.startsWith("Bearer "),
-    tokenPrefix: token.slice(0, 12),
-    hasApikeyHeader: !!apikeyHeader,
-  });
-  console.log("[Jarvis Edge Env Debug]", {
-    supabaseHost: supabaseUrl ? new URL(supabaseUrl).host : null,
-    hasAnonKey: !!supabaseAnonKey,
-    hasServiceRoleKey: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
-  });
+  if (DEBUG) {
+    console.log("[Jarvis Edge Auth Debug]", {
+      hasAuthHeader: !!authHeader,
+      authHeaderStartsBearer: authHeader.startsWith("Bearer "),
+      hasApikeyHeader: !!apikeyHeader,
+      supabaseHost: supabaseUrl ? new URL(supabaseUrl).host : null,
+      hasAnonKey: !!supabaseAnonKey,
+      hasServiceRoleKey: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+    });
+  }
 
   if (!token || !authHeader.startsWith("Bearer ")) {
     return { user: null, error: "Missing Authorization Bearer token", detail: null };
@@ -74,11 +73,13 @@ async function authUser(req: Request) {
   });
   const { data: { user }, error: userError } = await supabaseUserClient.auth.getUser();
 
-  console.log("[Jarvis Edge User Debug]", {
-    hasUser: !!user,
-    userId: user?.id,
-    userErrorMessage: userError?.message,
-  });
+  if (DEBUG) {
+    console.log("[Jarvis Edge User Debug]", {
+      hasUser: !!user,
+      userId: user?.id,
+      userErrorMessage: userError?.message,
+    });
+  }
 
   if (userError || !user) {
     return { user: null, error: "Invalid user session", detail: userError?.message ?? null };
@@ -164,6 +165,7 @@ function wrap<I, O>(
 }
 
 function logToolContext(name: string, input: ToolPropertyInput, ctx: Ctx) {
+  if (!DEBUG) return;
   console.log("[Jarvis Tool Context]", {
     toolName: name,
     inputPropertyId: input?.property_id ?? input?.propertyId ?? null,
