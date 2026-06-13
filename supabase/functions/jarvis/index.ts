@@ -588,14 +588,29 @@ serve(async (req) => {
       );
     }
     const messages = rawMessages as UIMessage[];
-    const propertyId = (body.propertyId as string | undefined) ?? null;
-    const from = (body.from as string | undefined) ?? null;
-    const to = (body.to as string | undefined) ?? null;
+    const activePropertyId =
+      (body.propertyId as string | undefined) ??
+      (body.property_id as string | undefined) ??
+      (body.context?.propertyId as string | undefined) ??
+      (body.context?.property_id as string | undefined) ??
+      null;
+    const propertyId = activePropertyId;
+    const bodyDateRange = body.dateRange ?? body.context?.dateRange ?? null;
+    const from = (body.from as string | undefined) ?? (bodyDateRange?.from as string | undefined) ?? null;
+    const to = (body.to as string | undefined) ?? (bodyDateRange?.to as string | undefined) ?? null;
     let sessionId = body.sessionId as string | undefined;
+
+    console.log("[Jarvis Edge Body Context]", {
+      propertyId: body?.propertyId ?? null,
+      contextPropertyId: body?.context?.propertyId ?? null,
+      propertyName: body?.propertyName ?? body?.context?.propertyName ?? null,
+      dateRange: body?.dateRange ?? body?.context?.dateRange ?? null,
+      messageCount: body?.messages?.length,
+    });
 
     console.log("[Jarvis Edge Context Debug]", {
       propertyId,
-      propertyName: body.propertyName ?? null,
+      propertyName: body.propertyName ?? body.context?.propertyName ?? null,
       from,
       to,
       sessionId: sessionId ?? null,
