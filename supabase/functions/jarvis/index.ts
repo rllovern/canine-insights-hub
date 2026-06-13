@@ -865,7 +865,7 @@ function buildTools(ctx: Ctx) {
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const to = new Date();
         const from = new Date(to.getTime() - i.days * 86400_000);
-        const { data, error } = await ctx.supabase.rpc("lead_perf_drill", {
+        const { data, error } = await ctx.userSupabase.rpc("lead_perf_drill", {
           _issue_type: i.queue_type, _property_ids: [id],
           _from: from.toISOString(), _to: to.toISOString(), _limit: i.limit,
         });
@@ -977,7 +977,7 @@ function buildTools(ctx: Ctx) {
           ctx.supabase.from("sync_runs")
             .select("source,status,error_message,started_at")
             .eq("property_id", id).order("started_at", { ascending: false }).limit(50),
-          ctx.supabase.rpc("lead_perf_quality", {
+          ctx.userSupabase.rpc("lead_perf_quality", {
             _property_ids: [id],
             _from: new Date(from).toISOString(), _to: new Date(to + "T23:59:59Z").toISOString(),
           }),
@@ -1054,9 +1054,9 @@ function buildTools(ctx: Ctx) {
         const prevToStr = from.toISOString().slice(0, 10);
         const [summary, speed, handling, pipeline, prev] = await Promise.all([
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: fromStr, _to: toStr }),
-          ctx.supabase.rpc("lead_perf_speed", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
-          ctx.supabase.rpc("lead_perf_handling", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
-          ctx.supabase.rpc("lead_perf_pipeline", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
+          ctx.userSupabase.rpc("lead_perf_speed", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
+          ctx.userSupabase.rpc("lead_perf_handling", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
+          ctx.userSupabase.rpc("lead_perf_pipeline", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: prevFromStr, _to: prevToStr }),
         ]);
         return {
