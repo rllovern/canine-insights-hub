@@ -117,17 +117,9 @@ export function JarvisChat() {
     () =>
       new DefaultChatTransport({
         api: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis`,
-        prepareSendMessagesRequest: async ({ messages, id, api }) => {
-          const freshToken = await getFreshAccessToken();
-          if (!freshToken) throw new Error("Please sign in again.");
-
+        prepareSendMessagesRequest: ({ messages, id, api }) => {
           return {
             api,
-            headers: {
-              Authorization: `Bearer ${freshToken}`,
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              "Content-Type": "application/json",
-            },
             body: {
             id,
             messages,
@@ -139,7 +131,15 @@ export function JarvisChat() {
           };
         },
         fetch: async (url, init) => {
-          const r = await fetch(url as RequestInfo, init);
+          const freshToken = await getFreshAccessToken();
+          if (!freshToken) {
+            throw new Error("Please sign in again.");
+          }
+          const headers = new Headers(init?.headers ?? {});
+          headers.set("Authorization", `Bearer ${freshToken}`);
+          headers.set("apikey", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+          headers.set("Content-Type", "application/json");
+          const r = await fetch(url as RequestInfo, { ...init, headers });
           const sid = r.headers.get("x-session-id");
           if (sid && sid !== sessionId) {
             setSessionId(sid);
