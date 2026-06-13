@@ -392,12 +392,38 @@ Deno.serve(async (req) => {
       skip += list.length;
     }
     if (conversationPages >= MAX_CONVERSATION_SEARCH_PAGES) conversationSearchCapped = true;
+    const contactSet = new Set(contactIds);
+    const targetedConversationSamples: Json[] = [];
+    let targetedConversationLookups = 0;
+    let targetedConversationsAdded = 0;
+
+    // Location-wide conversation search can miss older conversations when the
+    // location has more than the safety-capped pages. Hydrate every in-window
+    // contact directly by contactId so old leads with visible GHL activity do
+    // not end up with zero local messages.
+    for (const cid of contactIds) {
+      const alreadyHasConversation = Array.from(convMap.values()).some((conv) => String((conv as Json).contactId ?? "") === cid);
+      if (alreadyHasConversation) continue;
+      targetedConversationLookups++;
+      const j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(cid)}&limit=100`, token);
+      const list = ((j.conversations as Json[]) ?? []).filter((conv) => String((conv as Json).contactId ?? "") === cid);
+      for (const conv of list) {
+        const id = String((conv as Json).id ?? "");
+        if (!id || convMap.has(id)) continue;
+        convMap.set(id, conv);
+        targetedConversationsAdded++;
+      }
+      if (list.length && targetedConversationSamples.length < 10) targetedConversationSamples.push({ contact_id: cid, conversations_found: list.length });
+    }
+
     const convs = Array.from(convMap.values());
     counts.conversations = convs.length;
     counts.conversation_pages = conversationPages;
     counts.conversation_search_capped = conversationSearchCapped;
+    counts.targeted_conversation_lookups = targetedConversationLookups;
+    counts.targeted_conversations_added = targetedConversationsAdded;
+    samples.targeted_conversation_hydration = targetedConversationSamples;
 
-    const contactSet = new Set(contactIds);
     const msgRows: Json[] = [];
     let firstHumanSample: Json | null = null;
     let firstAutoSample: Json | null = null;
