@@ -3,7 +3,9 @@ import { ChartCard } from "./ChartCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
+import {
+  Info, Target, Image as ImageIcon, DollarSign, Gauge, Settings2, Crosshair, Users, Link2, CheckCircle2, AlertTriangle, Circle,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow, format, addDays, differenceInDays } from "date-fns";
 import {
@@ -86,6 +88,31 @@ function impactTone(i: Impact): "default" | "secondary" | "destructive" | "outli
   return "outline";
 }
 
+function impactBarClass(i: Impact): string {
+  if (i === "high") return "bg-destructive";
+  if (i === "medium") return "bg-amber-500";
+  return "bg-muted-foreground/50";
+}
+
+function impactDotClass(i: Impact): string {
+  if (i === "high") return "bg-destructive";
+  if (i === "medium") return "bg-amber-500";
+  return "bg-muted-foreground/60";
+}
+
+function reasonIcon(reason: string) {
+  const r = reason.toLowerCase();
+  if (r.includes("budget")) return DollarSign;
+  if (r.includes("bid") || r.includes("cpa") || r.includes("roas")) return Gauge;
+  if (r.includes("conversion")) return CheckCircle2;
+  if (r.includes("landing") || r.includes("url")) return Link2;
+  if (r.includes("ad/asset") || r.includes("asset") || r.includes("ad ")) return ImageIcon;
+  if (r.includes("audience")) return Users;
+  if (r.includes("location") || r.includes("geo") || r.includes("targeting") || r.includes("criterion")) return Crosshair;
+  if (r.includes("campaign created") || r.includes("status")) return Target;
+  return Settings2;
+}
+
 function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "High Risk Learning Reset") return "destructive";
   if (status === "Stabilizing") return "secondary";
@@ -93,12 +120,135 @@ function statusBadgeVariant(status: string): "default" | "secondary" | "destruct
   return "outline";
 }
 
-function StatCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
+function StatCard({ label, value, sub, children }: { label: string; value?: React.ReactNode; sub?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border bg-card p-3 min-w-0">
       <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 text-sm font-semibold text-foreground truncate">{value}</div>
+      {value !== undefined && <div className="mt-1 text-sm font-semibold text-foreground truncate">{value}</div>}
+      {children}
       {sub && <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>}
+    </div>
+  );
+}
+
+function CountdownRing({ daysLeft, total, impact }: { daysLeft: number; total: number; impact: Impact }) {
+  const size = 72;
+  const stroke = 8;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = total > 0 ? Math.min(1, Math.max(0, (total - daysLeft) / total)) : 1;
+  const offset = c * (1 - pct);
+  const color = impact === "high" ? "hsl(var(--destructive))" : impact === "medium" ? "rgb(245 158 11)" : "hsl(var(--muted-foreground))";
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="hsl(var(--muted))" strokeWidth={stroke} fill="none" />
+        <circle
+          cx={size / 2} cy={size / 2} r={r}
+          stroke={color} strokeWidth={stroke} fill="none"
+          strokeDasharray={c} strokeDashoffset={offset}
+          strokeLinecap="round"
+          style={{ transition: "stroke-dashoffset 600ms ease" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="text-sm font-semibold leading-none">{total > 0 ? daysLeft : "—"}</div>
+        <div className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">{total > 0 ? "days" : "done"}</div>
+      </div>
+    </div>
+  );
+}
+
+function SeverityBars({ counts }: { counts: { high: number; medium: number; low: number } }) {
+  const total = counts.high + counts.medium + counts.low || 1;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className="bg-destructive" style={{ width: `${(counts.high / total) * 100}%` }} />
+        <div className="bg-amber-500" style={{ width: `${(counts.medium / total) * 100}%` }} />
+        <div className="bg-muted-foreground/50" style={{ width: `${(counts.low / total) * 100}%` }} />
+      </div>
+      <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-destructive" />HIGH {counts.high}</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />MED {counts.medium}</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/50" />LOW {counts.low}</span>
+      </div>
+    </div>
+  );
+}
+
+function StatusTimeline({
+  lastChangeAt, reviewDate, status,
+}: { lastChangeAt: Date | null; reviewDate: Date | null; status: string }) {
+  const now = new Date();
+  const start = lastChangeAt ?? now;
+  const end = reviewDate ?? addDays(start, 7);
+  const totalMs = Math.max(1, end.getTime() - start.getTime());
+  const pct = Math.min(100, Math.max(0, ((now.getTime() - start.getTime()) / totalMs) * 100));
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-center justify-between text-[10.5px] uppercase tracking-wide text-muted-foreground mb-2">
+        <span>Last Major Change</span>
+        <span>Current Status</span>
+        <span>Next Optimization Review</span>
+      </div>
+      <div className="relative h-2 rounded-full bg-muted">
+        <div className="absolute inset-y-0 left-0 rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
+        <div className="absolute -top-1 left-0 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-destructive" />
+        <div
+          className="absolute -top-1 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-primary"
+          style={{ left: `${pct}%` }}
+        />
+        <div className="absolute -top-1 right-0 h-4 w-4 translate-x-1/2 rounded-full border-2 border-background bg-emerald-500" />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[11px]">
+        <span className="text-foreground">{lastChangeAt ? format(lastChangeAt, "MMM d") : "—"}</span>
+        <span className="text-muted-foreground">{status}</span>
+        <span className="text-foreground">{reviewDate ? format(reviewDate, "MMM d") : "—"}</span>
+      </div>
+    </div>
+  );
+}
+
+function ChangeSparkline({ events, days = 30 }: { events: Classified[]; days?: number }) {
+  const now = new Date();
+  const buckets = Array.from({ length: days }, (_, i) => {
+    const day = addDays(now, -(days - 1 - i));
+    return { day, high: 0, medium: 0, low: 0, total: 0 };
+  });
+  for (const e of events) {
+    const d = new Date(e.change_date_time);
+    const idx = days - 1 - differenceInDays(now, d);
+    if (idx >= 0 && idx < days) {
+      buckets[idx][e.impact] += 1;
+      buckets[idx].total += 1;
+    }
+  }
+  const max = Math.max(1, ...buckets.map((b) => b.total));
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Change Activity · last {days} days</div>
+        <div className="text-[10px] text-muted-foreground">{events.length} changes</div>
+      </div>
+      <div className="flex items-end gap-[2px] h-10">
+        {buckets.map((b, i) => {
+          const h = (b.total / max) * 100;
+          const top: Impact = b.high > 0 ? "high" : b.medium > 0 ? "medium" : "low";
+          return (
+            <div key={i} className="flex-1 flex items-end" title={`${format(b.day, "MMM d")}: ${b.total} change${b.total === 1 ? "" : "s"}`}>
+              <div
+                className={`w-full rounded-sm ${b.total === 0 ? "bg-muted/40" : impactBarClass(top)}`}
+                style={{ height: `${b.total === 0 ? 6 : Math.max(10, h)}%` }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex justify-between text-[9.5px] text-muted-foreground">
+        <span>{format(buckets[0].day, "MMM d")}</span>
+        <span>{format(buckets[buckets.length - 1].day, "MMM d")}</span>
+      </div>
     </div>
   );
 }
@@ -164,6 +314,13 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
   const impactedCount = stabilizing.length;
   const accountDaysLeft = stabilizing.reduce((m, c) => Math.max(m, daysLeft(c, now)), 0);
   const reviewDate = lastMajor ? addDays(new Date(lastMajor.change_date_time), lastMajor.windowDays || 7) : null;
+  const lastChangeAt = lastMajor ? new Date(lastMajor.change_date_time) : null;
+
+  const severityCounts = useMemo(() => {
+    const counts = { high: 0, medium: 0, low: 0 };
+    for (const c of stabilizing) counts[c.impact] += 1;
+    return counts;
+  }, [stabilizing]);
 
   const status = useMemo(() => {
     if (!lastMajor || !events?.length) return "Ready for Optimization";
@@ -173,11 +330,10 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
     return "Stable";
   }, [lastMajor, events, accountDaysLeft, now]);
 
-  const daysCardSub = useMemo(() => {
-    if (accountDaysLeft <= 0 || !lastMajor) return "No active stabilization";
-    const day = Math.max(1, (lastMajor.windowDays || 7) - accountDaysLeft + 1);
-    return `Day ${day} of ${lastMajor.windowDays} · ${capitalize(lastMajor.impact)}-impact change`;
-  }, [accountDaysLeft, lastMajor]);
+  const windowTotal = lastMajor?.windowDays ?? 0;
+  const currentDay = lastMajor && windowTotal > 0
+    ? Math.max(1, Math.min(windowTotal, windowTotal - accountDaysLeft + 1))
+    : 0;
 
   return (
     <ChartCard
@@ -214,45 +370,64 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
       {error && <div className="p-2 text-xs text-destructive">Could not load stability: {error}</div>}
       {!loading && !error && events && (
         <>
+          <div className="mb-3">
+            <StatusTimeline lastChangeAt={lastChangeAt} reviewDate={reviewDate} status={status} />
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <StatCard
-              label="Last Major Change"
-              value={lastMajor ? formatDistanceToNow(new Date(lastMajor.change_date_time), { addSuffix: true }) : "None in 30 days"}
-              sub={lastMajor ? (
-                <>
-                  <div className="truncate">{lastMajor.reason}</div>
-                  <div className="truncate">{lastMajor.campaign_name ?? "Account-level change"}</div>
-                  {lastMajor.user_email && <div className="truncate">{lastMajor.user_email}</div>}
-                </>
-              ) : "Account is quiet"}
-            />
-            <StatCard
-              label="Days Left in Stabilization"
-              value={accountDaysLeft > 0 ? `${accountDaysLeft} days left` : "—"}
-              sub={daysCardSub}
-            />
+            <StatCard label="Last Major Change">
+              {lastMajor ? (
+                <div className="mt-1 flex items-start gap-2">
+                  {(() => { const I = reasonIcon(lastMajor.reason); return <I className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />; })()}
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold truncate">{formatDistanceToNow(new Date(lastMajor.change_date_time), { addSuffix: true })}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{lastMajor.reason}</div>
+                    <div className="text-[10.5px] text-muted-foreground truncate">{lastMajor.campaign_name ?? "Account-level change"}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-1 text-sm font-semibold">None in 30 days</div>
+              )}
+            </StatCard>
+
+            <StatCard label="Stabilization Countdown">
+              <div className="mt-1 flex items-center gap-3">
+                <CountdownRing daysLeft={accountDaysLeft} total={windowTotal} impact={lastMajor?.impact ?? "low"} />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">
+                    {accountDaysLeft > 0 ? `${accountDaysLeft} days left` : "No active window"}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {windowTotal > 0 ? `Day ${currentDay} of ${windowTotal}` : "—"}
+                  </div>
+                  {lastMajor && (
+                    <div className="text-[10.5px] text-muted-foreground">{capitalize(lastMajor.impact)}-impact window</div>
+                  )}
+                </div>
+              </div>
+            </StatCard>
+
             <StatCard
               label="Next Optimization Review"
               value={reviewDate ? format(reviewDate, "MMM d") : "—"}
               sub={reviewDate
-                ? `Review performance on ${format(reviewDate, "MMM d")}. Avoid major structural edits until then unless spend or lead quality is clearly broken.`
-                : "No upcoming review"
-              }
+                ? <>In {Math.max(0, differenceInDays(reviewDate, now))} days · hold structural edits</>
+                : "No upcoming review"}
             />
-            <StatCard
-              label="Impacted Campaigns"
-              value={`${impactedCount} affected`}
-              sub={impactedCount > 0
-                ? (
-                  <div className="flex flex-col gap-0.5">
-                    {stabilizing.map((c) => (
-                      <div key={c.campaignKey} className="truncate">{c.campaign_name ?? c.campaignKey}</div>
-                    ))}
-                  </div>
-                )
-                : "No campaigns currently stabilizing"
-              }
-            />
+
+            <StatCard label="Impacted Campaigns">
+              <div className="mt-1 flex items-baseline gap-2">
+                <div className="text-lg font-semibold leading-none">{impactedCount}</div>
+                <div className="text-[11px] text-muted-foreground">affected</div>
+              </div>
+              <div className="mt-2">
+                <SeverityBars counts={severityCounts} />
+              </div>
+            </StatCard>
+          </div>
+
+          <div className="mt-3">
+            <ChangeSparkline events={classified} days={30} />
           </div>
 
           <div className="mt-4 overflow-x-auto">
@@ -263,7 +438,7 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
                   <TableHead>Last Major Change</TableHead>
                   <TableHead>Change Type</TableHead>
                   <TableHead>Impact</TableHead>
-                  <TableHead>Days Left</TableHead>
+                  <TableHead className="w-[180px]">Stabilization</TableHead>
                   <TableHead>Next Review</TableHead>
                 </TableRow>
               </TableHeader>
@@ -271,16 +446,41 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
                 {perCampaign.length === 0 && (
                   <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-6">No changes in the last 30 days.</TableCell></TableRow>
                 )}
-                {perCampaign.map((c) => {
+                {perCampaign.map((c, idx) => {
                   const dl = c.windowDays > 0 ? daysLeft(c, now) : 0;
                   const review = c.windowDays > 0 ? addDays(new Date(c.change_date_time), c.windowDays) : null;
+                  const pct = c.windowDays > 0 ? Math.min(100, Math.max(0, ((c.windowDays - dl) / c.windowDays) * 100)) : 100;
+                  const Icon = reasonIcon(c.reason);
                   return (
-                    <TableRow key={c.campaignKey}>
-                      <TableCell className="text-xs font-medium truncate max-w-[220px]">{c.campaign_name ?? c.campaignKey}</TableCell>
+                    <TableRow key={c.campaignKey} className={idx % 2 === 1 ? "bg-muted/30" : ""}>
+                      <TableCell className="text-xs font-medium truncate max-w-[220px]">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className={`h-1.5 w-1.5 rounded-full ${impactDotClass(c.impact)}`} />
+                          {c.campaign_name ?? c.campaignKey}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDistanceToNow(new Date(c.change_date_time), { addSuffix: true })}</TableCell>
-                      <TableCell className="text-xs truncate max-w-[220px]">{c.reason}</TableCell>
+                      <TableCell className="text-xs truncate max-w-[220px]">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                          {c.reason}
+                        </span>
+                      </TableCell>
                       <TableCell><Badge variant={impactTone(c.impact)} className="h-5 text-[10px] uppercase">{c.impact}</Badge></TableCell>
-                      <TableCell className="text-xs tabular-nums">{c.windowDays === 0 ? "—" : dl > 0 ? `${dl} days` : "Done"}</TableCell>
+                      <TableCell className="text-xs">
+                        {c.windowDays === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-24 rounded-full bg-muted overflow-hidden">
+                              <div className={`h-full ${impactBarClass(c.impact)}`} style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="tabular-nums text-[11px] text-muted-foreground whitespace-nowrap">
+                              {dl > 0 ? `${dl}d left` : "Done"}
+                            </span>
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs whitespace-nowrap">{review ? format(review, "MMM d") : "—"}</TableCell>
                     </TableRow>
                   );
