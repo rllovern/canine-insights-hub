@@ -389,6 +389,44 @@ export function JarvisChat() {
               Powered by GPT-5.5 · {activeProperty?.name ?? "No property"} · {effectiveFrom} → {effectiveTo}
             </div>
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="ghost" className="gap-1.5">
+                <History className="size-3.5" />
+                Recent
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-1">
+              {recentSessions.length === 0 ? (
+                <div className="px-2 py-3 text-xs text-muted-foreground">No sessions yet.</div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto">
+                  {recentSessions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSessionId(s.id);
+                        setActiveReport(null);
+                        const n = new URLSearchParams(params);
+                        n.set("session", s.id);
+                        n.delete("q");
+                        setParams(n, { replace: true });
+                      }}
+                      className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted/60 ${
+                        s.id === sessionId ? "bg-muted/60" : ""
+                      }`}
+                    >
+                      <div className="truncate font-medium">{s.title || "Untitled session"}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {new Date(s.updated_at).toLocaleString()}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
           <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); setActiveReport(null); setParams({}, { replace: true }); }}>
             New session
           </Button>
@@ -402,6 +440,36 @@ export function JarvisChat() {
                 title="Sign in to use Jarvis"
                 description="Jarvis needs an authenticated session to query your account data."
               />
+            ) : noAccessibleProperties ? (
+              <ConversationEmptyState
+                icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
+                title="No properties available"
+                description="Your account doesn't have access to any properties yet. Ask an admin to grant access."
+              />
+            ) : needsPropertySelection ? (
+              <ConversationEmptyState
+                icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
+                title="Select a property to start using Jarvis"
+                description="Jarvis needs to know which property to analyze."
+              >
+                <div className="mt-4 w-full max-w-xs">
+                  <Select
+                    onValueChange={(id) => {
+                      const p = properties.find((x) => x.id === id);
+                      if (p) setActiveProperty(p);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a property…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {properties.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </ConversationEmptyState>
             ) : messages.length === 0 ? (
               <ConversationEmptyState
                 icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
