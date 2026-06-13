@@ -496,6 +496,7 @@ export type Database = {
             | null
           contact_id: string
           created_at: string
+          disqualification_reason: string | null
           first_ai_response_at: string | null
           first_any_response_at: string | null
           first_automation_response_at: string | null
@@ -511,6 +512,7 @@ export type Database = {
           human_speed_to_lead_seconds_business: number | null
           human_speed_to_lead_seconds_raw: number | null
           id: string
+          is_disqualified: boolean
           is_open: boolean
           is_stale: boolean
           last_activity_at: string | null
@@ -526,6 +528,9 @@ export type Database = {
           pipeline_id: string | null
           property_id: string
           stage_id: string | null
+          suppresses_needs_first_response_by_tag: boolean
+          suppressing_tag_names: string[] | null
+          tag_names: string[] | null
           total_touch_count: number
           updated_at: string
           won_at: string | null
@@ -542,6 +547,7 @@ export type Database = {
             | null
           contact_id: string
           created_at?: string
+          disqualification_reason?: string | null
           first_ai_response_at?: string | null
           first_any_response_at?: string | null
           first_automation_response_at?: string | null
@@ -557,6 +563,7 @@ export type Database = {
           human_speed_to_lead_seconds_business?: number | null
           human_speed_to_lead_seconds_raw?: number | null
           id?: string
+          is_disqualified?: boolean
           is_open?: boolean
           is_stale?: boolean
           last_activity_at?: string | null
@@ -572,6 +579,9 @@ export type Database = {
           pipeline_id?: string | null
           property_id: string
           stage_id?: string | null
+          suppresses_needs_first_response_by_tag?: boolean
+          suppressing_tag_names?: string[] | null
+          tag_names?: string[] | null
           total_touch_count?: number
           updated_at?: string
           won_at?: string | null
@@ -588,6 +598,7 @@ export type Database = {
             | null
           contact_id?: string
           created_at?: string
+          disqualification_reason?: string | null
           first_ai_response_at?: string | null
           first_any_response_at?: string | null
           first_automation_response_at?: string | null
@@ -603,6 +614,7 @@ export type Database = {
           human_speed_to_lead_seconds_business?: number | null
           human_speed_to_lead_seconds_raw?: number | null
           id?: string
+          is_disqualified?: boolean
           is_open?: boolean
           is_stale?: boolean
           last_activity_at?: string | null
@@ -618,6 +630,9 @@ export type Database = {
           pipeline_id?: string | null
           property_id?: string
           stage_id?: string | null
+          suppresses_needs_first_response_by_tag?: boolean
+          suppressing_tag_names?: string[] | null
+          tag_names?: string[] | null
           total_touch_count?: number
           updated_at?: string
           won_at?: string | null
@@ -1110,6 +1125,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      lead_perf_suppression_tags: {
+        Row: {
+          created_at: string
+          disqualifies: boolean
+          label: string
+          reason_label: string
+          tag_normalized: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          disqualifies?: boolean
+          label: string
+          reason_label?: string
+          tag_normalized: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          disqualifies?: boolean
+          label?: string
+          reason_label?: string
+          tag_normalized?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       properties: {
         Row: {
@@ -1770,6 +1812,7 @@ export type Database = {
           speed_to_lead_seconds: number
           stage_id: string
           stage_name: string
+          tag_names: string[]
         }[]
       }
       lead_perf_handling: {
@@ -1788,6 +1831,7 @@ export type Database = {
         Args: { _from: string; _property_ids: string[]; _to: string }
         Returns: Json
       }
+      normalize_tag: { Args: { _t: string }; Returns: string }
       public_ai_assistant_context: {
         Args: { _from: string; _to: string; _token: string }
         Returns: Json
