@@ -25,6 +25,7 @@ You operate the dashboard on behalf of an authenticated user. NEVER invent numbe
 RULES:
 - For any analytical question, call the relevant tool(s) first, then answer using only the tool output.
 - If the user asks for "missing CTM leads in GHL", "reconciliation", "leads that didn't make it", etc., call reconcile_ctm_to_ghl, then save_visual_report with a complete report schema, then briefly describe what you found.
+- When the user asks for account/property-specific analysis and the request context includes an active propertyId, use that propertyId automatically. Do not ask the user for a property ID if one is present in request context.
 - Always include scope (property, date range, sources used) when reporting numbers.
 - If a tool returns caveats or data-freshness warnings, surface them.
 - If property access is denied, tell the user and stop.
@@ -114,6 +115,11 @@ type Ctx = {
   defaultTo: string | null;
 };
 
+type ToolPropertyInput = {
+  property_id?: string | null;
+  propertyId?: string | null;
+};
+
 async function logToolRun(
   ctx: Ctx,
   name: string,
@@ -153,8 +159,20 @@ function wrap<I, O>(
   };
 }
 
-function resolveProperty(ctx: Ctx, p?: string | null) {
-  const id = p ?? ctx.defaultPropertyId;
+function logToolContext(name: string, input: ToolPropertyInput, ctx: Ctx) {
+  console.log("[Jarvis Tool Context]", {
+    toolName: name,
+    inputPropertyId: input?.property_id ?? input?.propertyId ?? null,
+    fallbackPropertyIdFromSession: ctx.defaultPropertyId,
+  });
+}
+
+function resolveProperty(ctx: Ctx, input?: string | ToolPropertyInput | null, toolName?: string) {
+  const raw = typeof input === "string" || input == null
+    ? input
+    : input.property_id ?? input.propertyId ?? null;
+  if (toolName && typeof input !== "string") logToolContext(toolName, input ?? {}, ctx);
+  const id = raw ?? ctx.defaultPropertyId;
   if (!id) throw new Error("no property specified and no active property in context");
   return id;
 }
@@ -180,14 +198,16 @@ function buildTools(ctx: Ctx) {
         "Get the active property's name, connected data sources, and sync freshness. Always call this first when starting a new line of inquiry about a property.",
       inputSchema: z.object({
         property_id: z.string().uuid().optional().describe("Defaults to active dashboard property"),
+        propertyId: z.string().uuid().optional().describe("Alias for property_id; defaults to active dashboard property"),
       }),
-      execute: wrap(ctx, "get_property_context", async ({ property_id }) => {
-        const id = property_id ?? ctx.defaultPropertyId;
+      execute: wrap(ctx, "get_property_context", async (input) => {
+        logToolContext("get_property_context", input, ctx);
+        const id = input.property_id ?? input.propertyId ?? ctx.defaultPropertyId;
         if (!id) {
           return {
             ok: false,
             error: "missing_property_id",
-            message: "No property_id was provided to get_property_context.",
+            message: "No property selected.",
           };
         }
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
@@ -303,10 +323,19 @@ function buildTools(ctx: Ctx) {
         "Reconcile CTM calls against GHL contacts/messages/lead_facts/opportunities. Phone-or-email identity match, ±15min strong activity, same-day loose activity. Returns full classification.",
       inputSchema: z.object({
         property_id: z.string().uuid().optional(),
+        propertyId: z.string().uuid().optional(),
         days: z.number().int().min(1).max(90).default(10),
       }),
       execute: wrap(ctx, "reconcile_ctm_to_ghl", async (i) => {
-        const id = resolveProperty(ctx, i.property_id);
+        logToolContext("reconcile_ctm_to_ghl", i, ctx);
+        const id = i.property_id ?? i.propertyId ?? ctx.defaultPropertyId;
+        if (!id) {
+          return {
+            ok: false,
+            error: "missing_property_id",
+            message: "No property selected.",
+          };
+        }
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const toD = new Date();
         const fromD = new Date(toD.getTime() - i.days * 86400_000);
@@ -567,14 +596,29 @@ serve(async (req) => {
       );
     }
     const messages = rawMessages as UIMessage[];
-    const propertyId = (body.propertyId as string | undefined) ?? null;
-    const from = (body.from as string | undefined) ?? null;
-    const to = (body.to as string | undefined) ?? null;
+    const activePropertyId =
+      (body.propertyId as string | undefined) ??
+      (body.property_id as string | undefined) ??
+      (body.context?.propertyId as string | undefined) ??
+      (body.context?.property_id as string | undefined) ??
+      null;
+    const propertyId = activePropertyId;
+    const bodyDateRange = body.dateRange ?? body.context?.dateRange ?? null;
+    const from = (body.from as string | undefined) ?? (bodyDateRange?.from as string | undefined) ?? null;
+    const to = (body.to as string | undefined) ?? (bodyDateRange?.to as string | undefined) ?? null;
     let sessionId = body.sessionId as string | undefined;
+
+    console.log("[Jarvis Edge Body Context]", {
+      propertyId: body?.propertyId ?? null,
+      contextPropertyId: body?.context?.propertyId ?? null,
+      propertyName: body?.propertyName ?? body?.context?.propertyName ?? null,
+      dateRange: body?.dateRange ?? body?.context?.dateRange ?? null,
+      messageCount: body?.messages?.length,
+    });
 
     console.log("[Jarvis Edge Context Debug]", {
       propertyId,
-      propertyName: body.propertyName ?? null,
+      propertyName: body.propertyName ?? body.context?.propertyName ?? null,
       from,
       to,
       sessionId: sessionId ?? null,
@@ -655,9 +699,8 @@ serve(async (req) => {
       stopWhen: stepCountIs(50),
     });
 
-    return result.toUIMessageStreamResponse({
+    const streamResponse = result.toUIMessageStreamResponse({
       originalMessages: messages,
-      headers: { ...corsHeaders, "x-session-id": sessionId! },
       onFinish: async ({ responseMessage }) => {
         try {
           const text = responseMessage.parts
@@ -674,6 +717,14 @@ serve(async (req) => {
           console.error("persist assistant failed", e);
         }
       },
+    });
+    const responseHeaders = new Headers(streamResponse.headers);
+    for (const [key, value] of Object.entries(corsHeaders)) responseHeaders.set(key, value);
+    responseHeaders.set("x-session-id", sessionId!);
+    return new Response(streamResponse.body, {
+      status: streamResponse.status,
+      statusText: streamResponse.statusText,
+      headers: responseHeaders,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
