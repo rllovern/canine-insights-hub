@@ -245,15 +245,44 @@ export function JarvisChat() {
     [setParams],
   );
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, setMessages } = useChat({
     id: sessionId ?? "new",
     transport,
     onError: (e) => toast({ title: "Jarvis error", description: e.message, variant: "destructive" }),
   });
-  // useChat doesn't expose setMessages in the destructure above due to typing;
-  // pull it via a second call shape:
-  const chatApi = useChat as unknown as never;
-  void chatApi;
+
+  // Restore message history when loading an existing session
+  const restoredForSession = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionId || !accessToken) return;
+    if (restoredForSession.current === sessionId) return;
+    if (messages.length > 0) {
+      restoredForSession.current = sessionId;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error: e } = await supabase
+        .from("ai_agent_messages")
+        .select("id,role,content,parts_json,created_at")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true });
+      if (cancelled || e || !data || data.length === 0) return;
+      const restored: UIMessage[] = data.map((row) => {
+        const parts = Array.isArray(row.parts_json) && row.parts_json.length > 0
+          ? (row.parts_json as UIMessage["parts"])
+          : [{ type: "text", text: row.content ?? "" }] as UIMessage["parts"];
+        return {
+          id: row.id,
+          role: (row.role === "assistant" ? "assistant" : "user") as UIMessage["role"],
+          parts,
+        };
+      });
+      restoredForSession.current = sessionId;
+      setMessages(restored);
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, accessToken, messages.length, setMessages]);
 
   // Auto-send prefilled query from Cmd+K — wait for property to hydrate
   useEffect(() => {
