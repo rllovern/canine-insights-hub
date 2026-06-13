@@ -138,6 +138,7 @@ async function assertPropertyAccess(
 
 type Ctx = {
   supabase: ReturnType<typeof svc>;
+  userSupabase: ReturnType<typeof svc>;
   userId: string;
   sessionId: string;
   defaultPropertyId: string | null;
@@ -282,10 +283,10 @@ function buildTools(ctx: Ctx) {
         const to = new Date();
         const from = new Date(to.getTime() - i.days * 86400_000);
         const [speed, handling] = await Promise.all([
-          ctx.supabase.rpc("lead_perf_speed", {
+          ctx.userSupabase.rpc("lead_perf_speed", {
             _property_ids: [id], _from: from.toISOString(), _to: to.toISOString(),
           }),
-          ctx.supabase.rpc("lead_perf_handling", {
+          ctx.userSupabase.rpc("lead_perf_handling", {
             _property_ids: [id], _from: from.toISOString(), _to: to.toISOString(),
           }),
         ]);
@@ -822,11 +823,11 @@ function buildTools(ctx: Ctx) {
         const from = new Date(to.getTime() - i.days * 86400_000);
         const args = { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() };
         const [speed, handling, pipeline, agents, quality] = await Promise.all([
-          ctx.supabase.rpc("lead_perf_speed", args),
-          ctx.supabase.rpc("lead_perf_handling", args),
-          ctx.supabase.rpc("lead_perf_pipeline", args),
-          ctx.supabase.rpc("lead_perf_agents", args),
-          ctx.supabase.rpc("lead_perf_quality", args),
+          ctx.userSupabase.rpc("lead_perf_speed", args),
+          ctx.userSupabase.rpc("lead_perf_handling", args),
+          ctx.userSupabase.rpc("lead_perf_pipeline", args),
+          ctx.userSupabase.rpc("lead_perf_agents", args),
+          ctx.userSupabase.rpc("lead_perf_quality", args),
         ]);
         const { data: ghlSrc } = await ctx.supabase.from("property_data_sources")
           .select("last_synced_at").eq("property_id", id).eq("source", "ghl").maybeSingle();
@@ -864,7 +865,7 @@ function buildTools(ctx: Ctx) {
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const to = new Date();
         const from = new Date(to.getTime() - i.days * 86400_000);
-        const { data, error } = await ctx.supabase.rpc("lead_perf_drill", {
+        const { data, error } = await ctx.userSupabase.rpc("lead_perf_drill", {
           _issue_type: i.queue_type, _property_ids: [id],
           _from: from.toISOString(), _to: to.toISOString(), _limit: i.limit,
         });
@@ -976,7 +977,7 @@ function buildTools(ctx: Ctx) {
           ctx.supabase.from("sync_runs")
             .select("source,status,error_message,started_at")
             .eq("property_id", id).order("started_at", { ascending: false }).limit(50),
-          ctx.supabase.rpc("lead_perf_quality", {
+          ctx.userSupabase.rpc("lead_perf_quality", {
             _property_ids: [id],
             _from: new Date(from).toISOString(), _to: new Date(to + "T23:59:59Z").toISOString(),
           }),
@@ -1053,9 +1054,9 @@ function buildTools(ctx: Ctx) {
         const prevToStr = from.toISOString().slice(0, 10);
         const [summary, speed, handling, pipeline, prev] = await Promise.all([
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: fromStr, _to: toStr }),
-          ctx.supabase.rpc("lead_perf_speed", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
-          ctx.supabase.rpc("lead_perf_handling", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
-          ctx.supabase.rpc("lead_perf_pipeline", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
+          ctx.userSupabase.rpc("lead_perf_speed", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
+          ctx.userSupabase.rpc("lead_perf_handling", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
+          ctx.userSupabase.rpc("lead_perf_pipeline", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: prevFromStr, _to: prevToStr }),
         ]);
         return {
@@ -1173,6 +1174,12 @@ serve(async (req) => {
     }
 
     const supabase = svc();
+    const userJwt = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const userSupabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: `Bearer ${userJwt}` } } },
+    );
 
     // Verify property access if provided
     if (propertyId) {
@@ -1223,6 +1230,7 @@ serve(async (req) => {
 
     const ctx: Ctx = {
       supabase,
+      userSupabase,
       userId: user.id,
       sessionId: sessionId!,
       defaultPropertyId: propertyId,
