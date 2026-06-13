@@ -182,7 +182,14 @@ function buildTools(ctx: Ctx) {
         property_id: z.string().uuid().optional().describe("Defaults to active dashboard property"),
       }),
       execute: wrap(ctx, "get_property_context", async ({ property_id }) => {
-        const id = resolveProperty(ctx, property_id);
+        const id = property_id ?? ctx.defaultPropertyId;
+        if (!id) {
+          return {
+            ok: false,
+            error: "missing_property_id",
+            message: "No property_id was provided to get_property_context.",
+          };
+        }
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const [{ data: p }, { data: srcs }] = await Promise.all([
           ctx.supabase.from("properties").select("id,name,slug,timezone").eq("id", id).maybeSingle(),
