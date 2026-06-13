@@ -1,62 +1,61 @@
-## Plan: prove the Jarvis auth chain end-to-end
+## Root cause
 
-1. **Frontend diagnostics before send**
-   - In `JarvisChat`, add a development-only `[Jarvis Auth Debug]` log immediately before the AI SDK transport sends a request.
-   - Log only sanitized session data: session presence, token prefix, expiry, seconds remaining, user id, and session error.
-   - Update the Jarvis request headers to explicitly include:
-     - `Authorization: Bearer <fresh access token>`
-     - `apikey: <publishable anon key>`
-     - `Content-Type: application/json`
-   - Add a friendlier missing-session error: “Please sign in again.”
+The "Pending" badge is the UI state `input-streaming` from `src/components/ai-elements/tool.tsx` (label map: `"input-streaming": "Pending"`). It means the model started a tool call but the tool never returned an output — the stream was cut off mid-execution.
 
-2. **Edge function diagnostics at request entry**
-   - In `supabase/functions/jarvis/index.ts`, make `OPTIONS` return before auth validation with status `204` and full CORS headers.
-   - Add temporary sanitized `[Jarvis Edge Auth Debug]` logging at the top of the handler:
-     - whether Authorization exists
-     - whether it starts with Bearer
-     - token prefix only
-     - whether apikey exists
-   - Ensure every response, including auth failures, includes CORS headers.
+The edge logs prove it:
 
-3. **Replace auth validation with explicit anon-key + Bearer validation**
-   - Replace the current `getClaims()` auth path with the requested `createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { Authorization: Bearer token })` + `auth.getUser()` path.
-   - Log sanitized `[Jarvis Edge User Debug]` results:
-     - `hasUser`
-     - `userId`
-     - `userErrorMessage`
-   - Keep the service-role client only after user validation succeeds.
+```
+[Jarvis Tool Context] toolName: "reconcile_ctm_to_ghl" ...
+CPU Time exceeded
+shutdown
+```
 
-4. **Add isolated auth-only proof endpoint**
-   - Add temporary `supabase/functions/jarvis-auth-debug/index.ts`.
-   - It will not call Jarvis, tools, or the AI model.
-   - It will read the Authorization header, validate the user with anon-key + Bearer token, and return:
-     ```json
-     {
-       "hasAuthHeader": true,
-       "hasUser": true,
-       "userId": "...",
-       "expiresInSeconds": 1234
-     }
-     ```
-   - It will also use the same CORS headers and sanitized logging.
+`reconcile_ctm_to_ghl` in `supabase/functions/jarvis/index.ts` runs into the Supabase Edge Runtime CPU budget and the worker is killed before it can return. Because the tool never produces output, `save_visual_report` is never called either, and the AI SDK stream ends with the last tool part still in `input-streaming` / `input-available`. The UI therefore renders "Pending" (or "Running") forever.
 
-5. **Environment consistency proof**
-   - Add sanitized edge logs that compare project host/ref shape only, not secret values:
-     - backend `SUPABASE_URL` host
-     - whether `SUPABASE_ANON_KEY` exists
-     - whether `SUPABASE_SERVICE_ROLE_KEY` exists
-   - Frontend already uses the project URL from Vite env; we’ll confirm the request URL matches the backend URL in the network request.
+Why it's blowing the CPU budget:
 
-6. **Validation path before declaring fixed**
-   - Use the browser/network/debug tools to prove:
-     - frontend session exists before send
-     - Jarvis request includes Authorization and apikey headers
-     - edge function receives Authorization and apikey
-     - edge function validates the user successfully
-     - `jarvis-auth-debug` succeeds independently
-     - normal Jarvis request proceeds past auth
-   - Then test both preview and deployed app paths as far as the available tools allow.
+- `ghl_contacts` is fetched with `.limit(50000)` and NO date filter — full property contact dump.
+- `ghl_lead_facts` and `ghl_opportunities` are fetched with `.limit(50000)` each.
+- `ghl_messages` is fetched with `.limit(100000)`.
+- All of this is then walked in nested JS loops with `new Date(...).getTime()` per row.
 
-## Current known signal
+For a property like Ashtabula this trivially exceeds the per-invocation CPU budget. It is not a bug in the report renderer or in property context — those are working (logs show `inputPropertyId: ea92c5ce-...` resolved correctly).
 
-The latest captured request already shows an `Authorization` header, but it does **not** show an `apikey` header, and the captured JWT appears expired at request time. This plan will prove whether refresh, header forwarding, backend env, or validation is the actual break point instead of guessing.
+## Plan
+
+### 1. Make `reconcile_ctm_to_ghl` finish inside the CPU budget
+
+In `supabase/functions/jarvis/index.ts`:
+
+- Restrict `ghl_contacts` to phone/email values that actually appear in the window's CTM calls instead of pulling the whole property:
+  1. Fetch CTM calls first (already capped at 2000).
+  2. Build the set of normalized phones and emails from those calls.
+  3. Query `ghl_contacts` with `.or("phone.in.(...),email.in.(...)")` in chunks (≤ ~200 values per `.in`).
+- Lower hard caps: `ghl_lead_facts` and `ghl_opportunities` → `.limit(5000)` (window-scoped), `ghl_messages` → `.limit(20000)`.
+- Reduce default `days` from `10` to `7`; keep `max(90)` but warn via caveats when the window is large.
+- Precompute `callTs` and `callDay` per call once; precompute `msgTs` / `msgDay` per message once into a typed array so the inner loop is O(1) per candidate instead of re-parsing dates.
+- Short-circuit per-call ranking: as soon as a candidate scores `opportunity`, stop iterating remaining candidates.
+- Add a soft time guard: capture `performance.now()` at the start; if processing exceeds ~8s, stop classifying further calls and add a caveat `"Partial result: stopped after N calls due to time budget"` so the tool always returns and `save_visual_report` can run.
+
+### 2. Make stuck tool calls visible instead of permanently "Pending"
+
+In `src/components/jarvis/JarvisChat.tsx` (and the AI SDK chat status handling there):
+
+- When the chat status transitions to `error` or the stream ends with any tool part still in `input-streaming` / `input-available`, render that tool part as `output-error` locally with the message: "Tool run was interrupted (likely exceeded compute budget). Try a narrower window."
+- Surface a single non-blocking toast: "Reconciliation didn't finish — try `days: 7` or a single source."
+
+No change to `tool.tsx` label map; we just stop leaving parts in the streaming state on stream termination.
+
+### 3. Verification
+
+- Redeploy `jarvis` edge function.
+- From `/assistant` with Ashtabula selected, ask: "Run the CTM↔GHL reconciliation for the last 7 days."
+- Confirm in edge logs: `reconcile_ctm_to_ghl` completes with a result object, `save_visual_report` is then called, no `CPU Time exceeded`.
+- Confirm in UI: tool badges progress Pending → Running → Completed, and the report renders via `ReportView`.
+- Force a timeout case (e.g. `days: 90` on a large property) and confirm the UI shows an error badge + toast instead of an indefinite "Pending".
+
+### Out of scope
+
+- Auth path (verified working: `hasUser: true`, token valid for 1503s).
+- Property context plumbing (verified working: `inputPropertyId` matches selection).
+- Report renderer crash safety (already handled by `ReportErrorBoundary`).
