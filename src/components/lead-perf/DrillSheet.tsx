@@ -26,6 +26,8 @@ type Row = {
   human_attempt_count: number | null;
   issue_type: string;
   ghl_deep_link: string | null;
+  reason: string | null;
+  tag_names: string[] | null;
 };
 
 export function DrillSheet({
@@ -92,6 +94,7 @@ export function DrillSheet({
                   <TableHead>Agent</TableHead>
                   <TableHead>Stage</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead>Tags</TableHead>
                   <TableHead className="text-right">STL</TableHead>
                   <TableHead className="text-right">Attempts</TableHead>
                   <TableHead></TableHead>
@@ -116,6 +119,15 @@ export function DrillSheet({
                     </TableCell>
                     <TableCell className="text-xs">
                       {r.lead_created_at ? new Date(r.lead_created_at).toLocaleDateString() : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {r.tag_names && r.tag_names.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 max-w-[180px]">
+                          {r.tag_names.slice(0, 4).map((t) => (
+                            <span key={t} className="inline-flex rounded-full bg-muted px-1.5 py-0.5 text-[10px] truncate max-w-[100px]" title={t}>{t}</span>
+                          ))}
+                        </div>
+                      ) : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell className="text-right text-xs tabular-nums">{formatDuration(r.speed_to_lead_seconds)}</TableCell>
                     <TableCell className="text-right text-xs tabular-nums">{r.human_attempt_count ?? "—"}</TableCell>
