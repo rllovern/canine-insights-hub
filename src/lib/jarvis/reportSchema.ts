@@ -33,6 +33,13 @@ export type SummaryCard = {
   tone?: "neutral" | "good" | "warn" | "bad"; // legacy
   hint?: string;
   detail?: string;
+  action_payload?: {
+    type: "open_table" | "open_evidence" | "open_debug";
+    table_title?: string;
+    row_filter?: Record<string, string | number | boolean | null>;
+    label?: string;
+    reason?: string;
+  };
 };
 
 export type ChartType =
