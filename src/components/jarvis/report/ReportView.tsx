@@ -297,6 +297,28 @@ function ReportTable({ spec }: { spec: TableSpec }) {
   );
 }
 
+function tableForAction(schema: ReportSchema, card: SummaryCard): TableSpec | null {
+  const payload = card.action_payload;
+  if (!payload || payload.type !== "open_table") return null;
+  const tables = schema.tables ?? [];
+  const base = payload.table_title
+    ? tables.find((t) => t.title === payload.table_title || t.title?.toLowerCase().includes(payload.table_title!.toLowerCase()))
+    : tables[0];
+  if (!base) return null;
+  const filters = payload.row_filter ?? {};
+  const entries = Object.entries(filters).filter(([, v]) => v !== undefined);
+  const rows = entries.length
+    ? (base.rows ?? []).filter((row) => entries.every(([k, v]) => row[k] === v))
+    : (base.rows ?? []);
+  return {
+    ...base,
+    title: payload.label ?? `${card.label} drill-in`,
+    description: payload.reason ?? base.description,
+    rows,
+    empty: "No matching drill-in rows.",
+  };
+}
+
 const sevIcon: Record<string, typeof Info> = {
   info: Info,
   good: Info,
