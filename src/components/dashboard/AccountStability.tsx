@@ -224,22 +224,37 @@ function ChangeSparkline({ events, days = 30 }: { events: Classified[]; days?: n
       buckets[idx].total += 1;
     }
   }
+  const totals = events.reduce(
+    (acc, e) => { acc[e.impact] += 1; return acc; },
+    { high: 0, medium: 0, low: 0 } as Record<Impact, number>,
+  );
+  const structural = totals.high + totals.medium;
   const max = Math.max(1, ...buckets.map((b) => b.total));
   return (
     <div className="rounded-lg border border-border bg-card p-3">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
         <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Change Activity · last {days} days</div>
-        <div className="text-[10px] text-muted-foreground">{events.length} changes</div>
+        <div className="flex items-center gap-3 text-[10.5px] text-muted-foreground">
+          <span><span className="text-foreground font-semibold">{events.length}</span> total</span>
+          <span><span className="text-foreground font-semibold">{structural}</span> structural</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-destructive" />{totals.high} high</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />{totals.medium} med</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/50" />{totals.low} low/admin</span>
+        </div>
       </div>
-      <div className="flex items-end gap-[2px] h-10">
+      <div className="flex items-end gap-[3px] h-14">
         {buckets.map((b, i) => {
-          const h = (b.total / max) * 100;
+          const h = b.total === 0 ? 4 : Math.max(12, (b.total / max) * 100);
           const top: Impact = b.high > 0 ? "high" : b.medium > 0 ? "medium" : "low";
           return (
-            <div key={i} className="flex-1 flex items-end" title={`${format(b.day, "MMM d")}: ${b.total} change${b.total === 1 ? "" : "s"}`}>
+            <div
+              key={i}
+              className="flex-1 flex items-end h-full"
+              title={`${format(b.day, "MMM d")}: ${b.total} change${b.total === 1 ? "" : "s"} (H${b.high}/M${b.medium}/L${b.low})`}
+            >
               <div
-                className={`w-full rounded-sm ${b.total === 0 ? "bg-muted/40" : impactBarClass(top)}`}
-                style={{ height: `${b.total === 0 ? 6 : Math.max(10, h)}%` }}
+                className={`w-full rounded-sm ${b.total === 0 ? "bg-muted/50" : impactBarClass(top)}`}
+                style={{ height: `${h}%`, opacity: b.total === 0 ? 0.6 : 1 }}
               />
             </div>
           );
