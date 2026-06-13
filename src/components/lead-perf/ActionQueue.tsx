@@ -12,11 +12,15 @@ type Row = {
   property_name: string | null;
   contact_id: string | null;
   contact_name: string | null;
+  phone: string | null;
+  email: string | null;
   agent_name: string | null;
+  agent_is_default: boolean | null;
   lead_created_at: string | null;
   stage_name: string | null;
   canonical_stage: string | null;
   last_activity_at: string | null;
+  last_activity_type: string | null;
   ghl_deep_link: string | null;
   reason: string | null;
   tag_names: string[] | null;
@@ -37,6 +41,25 @@ const TABS: TabDef[] = [
 ];
 
 const MAX_INLINE = 8;
+
+function formatPhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `(${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`;
+  }
+  return raw;
+}
+
+function leadIdentity(r: Row): string {
+  if (r.contact_name && r.contact_name.trim()) return r.contact_name.trim();
+  const phone = formatPhone(r.phone);
+  if (phone) return phone;
+  if (r.email) return r.email;
+  if (r.contact_id) return `Contact ${r.contact_id.slice(0, 6)}…`;
+  return "Unknown Lead";
+}
 
 export function ActionQueue({
   propertyIds, from, to, onDrill,
@@ -140,13 +163,22 @@ export function ActionQueue({
                 return (
                   <tr key={(r.contact_id ?? "x") + i} className="border-b last:border-0 hover:bg-muted/40">
                     <td className="px-3 py-1.5 max-w-[200px]">
-                      <div className="truncate font-medium">{r.contact_name ?? "—"}</div>
+                      <div className="truncate font-medium">{leadIdentity(r)}</div>
                       {r.property_name && (propertyIds === null || (propertyIds?.length ?? 0) > 1) && (
                         <div className="text-[10.5px] text-muted-foreground truncate">{r.property_name}</div>
                       )}
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-muted-foreground truncate max-w-[140px]">
-                      {r.agent_name ?? <span className="italic text-muted-foreground/60">unassigned</span>}
+                      {r.agent_name ? (
+                        <span>
+                          {r.agent_name}
+                          {r.agent_is_default && (
+                            <span className="ml-1 text-[10px] text-muted-foreground/70">(default)</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="italic text-muted-foreground/60">unassigned</span>
+                      )}
                     </td>
                     {def.showStage && (
                       <td className="px-3 py-1.5 hidden lg:table-cell text-muted-foreground truncate max-w-[140px]">
@@ -157,7 +189,16 @@ export function ActionQueue({
                       {created ? formatDistanceToNowStrict(created, { addSuffix: false }) : "—"}
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-muted-foreground tabular-nums whitespace-nowrap">
-                      {last ? formatDistanceToNowStrict(last, { addSuffix: true }) : "—"}
+                      {last ? (
+                        <span>
+                          {formatDistanceToNowStrict(last, { addSuffix: true })}
+                          {r.last_activity_type && (
+                            <span className="ml-1 text-muted-foreground/70">· {r.last_activity_type}</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="italic text-muted-foreground/60">No activity after lead created</span>
+                      )}
                     </td>
                     <td className="px-3 py-1.5 hidden lg:table-cell max-w-[200px]">
                       {r.tag_names && r.tag_names.length > 0 ? (
