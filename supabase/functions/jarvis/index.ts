@@ -324,7 +324,7 @@ function buildTools(ctx: Ctx) {
       inputSchema: z.object({
         property_id: z.string().uuid().optional(),
         propertyId: z.string().uuid().optional(),
-        days: z.number().int().min(1).max(90).default(10),
+        days: z.number().int().min(1).max(90).default(7),
       }),
       execute: wrap(ctx, "reconcile_ctm_to_ghl", async (i) => {
         logToolContext("reconcile_ctm_to_ghl", i, ctx);
@@ -337,6 +337,8 @@ function buildTools(ctx: Ctx) {
           };
         }
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const cpuStart = Date.now();
+        const CPU_BUDGET_MS = 8000;
         const toD = new Date();
         const fromD = new Date(toD.getTime() - i.days * 86400_000);
         const fromISO = fromD.toISOString();
@@ -346,20 +348,20 @@ function buildTools(ctx: Ctx) {
           ctx.supabase.from("ctm_calls")
             .select("id,ctm_call_id,called_at,caller_number,campaign_name,channel,tracking_source,raw_payload")
             .eq("property_id", id).gte("called_at", fromISO).lte("called_at", toISO)
-            .order("called_at", { ascending: false }).limit(2000),
+            .order("called_at", { ascending: false }).limit(1000),
           ctx.supabase.from("property_data_sources")
             .select("last_synced_at").eq("property_id", id).eq("source", "ctm").maybeSingle(),
           ctx.supabase.from("property_data_sources")
             .select("last_synced_at").eq("property_id", id).eq("source", "ghl").maybeSingle(),
           ctx.supabase.from("ghl_contacts")
             .select("ghl_contact_id,first_name,last_name,phone,email,ghl_created_at")
-            .eq("property_id", id).limit(50000),
+            .eq("property_id", id).limit(10000),
           ctx.supabase.from("ghl_lead_facts")
             .select("contact_id,lead_created_at,canonical_stage")
-            .eq("property_id", id).gte("lead_created_at", fromISO).lte("lead_created_at", toISO).limit(50000),
+            .eq("property_id", id).gte("lead_created_at", fromISO).lte("lead_created_at", toISO).limit(5000),
           ctx.supabase.from("ghl_opportunities")
             .select("contact_id,ghl_created_at,status")
-            .eq("property_id", id).gte("ghl_created_at", fromISO).lte("ghl_created_at", toISO).limit(50000),
+            .eq("property_id", id).gte("ghl_created_at", fromISO).lte("ghl_created_at", toISO).limit(5000),
         ]);
 
         if (ctmRes.error) throw new Error(ctmRes.error.message);
@@ -400,18 +402,20 @@ function buildTools(ctx: Ctx) {
           }
         }
 
-        // Pull GHL messages for those contacts in window.
-        const msgsByContact = new Map<string, { sent_at: string; direction: string | null }[]>();
+        // Pull GHL messages for those contacts in window (cap aggressively).
+        const msgsByContact = new Map<string, { ts: number; day: string; direction: string | null }[]>();
         if (candidateContactIds.size > 0) {
-          const ids = Array.from(candidateContactIds).slice(0, 10000);
+          const ids = Array.from(candidateContactIds).slice(0, 5000);
           const { data: msgs } = await ctx.supabase.from("ghl_messages")
             .select("contact_id,sent_at,direction")
             .eq("property_id", id).in("contact_id", ids)
-            .gte("sent_at", fromISO).lte("sent_at", toISO).limit(100000);
+            .gte("sent_at", fromISO).lte("sent_at", toISO).limit(10000);
           for (const m of msgs ?? []) {
             if (!m.contact_id || !m.sent_at) continue;
+            const ts = new Date(m.sent_at).getTime();
+            if (Number.isNaN(ts)) continue;
             const arr = msgsByContact.get(m.contact_id) ?? [];
-            arr.push({ sent_at: m.sent_at, direction: m.direction });
+            arr.push({ ts, day: m.sent_at.slice(0, 10), direction: m.direction });
             msgsByContact.set(m.contact_id, arr);
           }
         }
@@ -422,8 +426,14 @@ function buildTools(ctx: Ctx) {
           campaign_name: string | null; channel: string | null; tracking_source: string | null;
           classification: Cls; matched_contact_id: string | null; reason: string;
         }> = [];
+        let stoppedEarly = 0;
 
-        for (const call of ctmCalls) {
+        for (let ci = 0; ci < ctmCalls.length; ci++) {
+          if (Date.now() - cpuStart > CPU_BUDGET_MS) {
+            stoppedEarly = ctmCalls.length - ci;
+            break;
+          }
+          const call = ctmCalls[ci];
           const p = normPhone(call.caller_number);
           const e = normEmail((call.raw_payload as Record<string, unknown> | null)?.["caller_email"] as string | undefined);
           if (!p && !e) {
@@ -454,6 +464,7 @@ function buildTools(ctx: Ctx) {
             activity_loose: 3, activity_strong: 4, lead_fact: 5, opportunity: 6,
           };
           const callTs = new Date(call.called_at).getTime();
+          const callDay = call.called_at.slice(0, 10);
 
           for (const cand of candidates) {
             const cid = cand.ghl_contact_id;
@@ -467,14 +478,19 @@ function buildTools(ctx: Ctx) {
             } else {
               const msgs = msgsByContact.get(cid) ?? [];
               if (msgs.length > 0) {
-                const strong = msgs.some(m => Math.abs(new Date(m.sent_at).getTime() - callTs) <= 15 * 60_000);
-                const sameDay = msgs.some(m => new Date(m.sent_at).toISOString().slice(0, 10) === new Date(call.called_at).toISOString().slice(0, 10));
+                let strong = false; let sameDay = false;
+                for (const m of msgs) {
+                  if (!strong && Math.abs(m.ts - callTs) <= 15 * 60_000) strong = true;
+                  if (!sameDay && m.day === callDay) sameDay = true;
+                  if (strong && sameDay) break;
+                }
                 if (strong) { cls = "activity_strong"; reason = "GHL message within ±15 minutes of CTM call"; }
                 else if (sameDay) { cls = "activity_loose"; reason = "GHL message same day as CTM call"; }
                 else { cls = "contact_only"; reason = "Matched contact, but activity is outside the call's day"; }
               }
             }
             if (!best || rank[cls] > rank[best.cls]) best = { cls, cid, reason };
+            if (best.cls === "opportunity") break;
           }
 
           classified.push({
@@ -523,8 +539,11 @@ function buildTools(ctx: Ctx) {
           },
           matching_method: "phone-or-email exact (normalized); ±15min strong, same-day loose for activity",
           caveats: [
-            ctmCalls.length >= 2000 ? "CTM result capped at 2000 calls in window" : null,
-            facts.length >= 50000 ? "ghl_lead_facts capped at 50000" : null,
+            ctmCalls.length >= 1000 ? "CTM result capped at 1000 calls in window" : null,
+            contacts.length >= 10000 ? "ghl_contacts capped at 10000; try a narrower window" : null,
+            facts.length >= 5000 ? "ghl_lead_facts capped at 5000" : null,
+            opps.length >= 5000 ? "ghl_opportunities capped at 5000" : null,
+            stoppedEarly > 0 ? `Partial result: stopped after ${classified.length} of ${ctmCalls.length} calls due to compute budget. Try a smaller 'days' value.` : null,
           ].filter(Boolean),
         };
       }),
