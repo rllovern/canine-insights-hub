@@ -318,9 +318,8 @@ Deno.serve(async (req) => {
       cursor = sa;
       pages++;
     }
-    });
 
-    const rows = inRange.map((c) => {
+    const rows = buffer.map((c) => {
       const a = c as Json;
       const id = String(a.id);
       const createdAt = (a.dateAdded ?? a.createdAt) as string | null;
@@ -341,14 +340,14 @@ Deno.serve(async (req) => {
       };
     });
     counts.contacts_total_pulled = buffer.length;
-    counts.contacts_in_window = await upsertChunked(admin, "ghl_contacts", rows, "property_id,ghl_contact_id");
-    samples.contact = inRange[0] ?? null;
+    counts.contacts_synced = await upsertChunked(admin, "ghl_contacts", rows, "property_id,ghl_contact_id");
+    samples.contact = buffer[0] ?? null;
 
     // Tag refresh fallback: /contacts/search sometimes returns stale or empty tags.
     // For contacts in the window whose tags came back empty, fetch the detail
     // endpoint (cap to avoid burning the API budget).
     const TAG_REFRESH_CAP = 300;
-    const needsTagRefresh = inRange
+    const needsTagRefresh = buffer
       .filter((c) => {
         const t = (c as Json).tags;
         return !Array.isArray(t) || t.length === 0;
@@ -407,14 +406,16 @@ Deno.serve(async (req) => {
     let totalMessagePages = 0;
     const cappedConversations: Json[] = [];
     const perConversation: Json[] = [];
-    const classCounts: Record<string, number> = { human: 0, automation: 0, system: 0, customer: 0, unknown: 0 };
+    const classCounts: Record<string, number> = { human: 0, automation: 0, ai: 0, system: 0, customer: 0, unknown: 0 };
 
     for (const c of convs) {
       const cAny = c as Json;
       const conversationId = String(cAny.id ?? "");
       const contactId = String(cAny.contactId ?? "");
       if (!conversationId) continue;
-      if (contactId && !contactSet.has(contactId)) continue;
+      const lastMsgAt = cAny.lastMessageTimestamp ? new Date(Number(cAny.lastMessageTimestamp)).getTime() : 0;
+      const isRecent = lastMsgAt >= dateFrom.getTime();
+      if (contactId && !contactSet.has(contactId) && !isRecent) continue;
 
       const seenMessageIds = new Set<string>();
       let lastMessageId: string | null = null;
