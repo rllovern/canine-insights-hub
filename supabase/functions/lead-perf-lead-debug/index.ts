@@ -285,12 +285,15 @@ Deno.serve(async (req) => {
     return isAnsweredInboundCall(m as Json) && (!leadCreated || sent >= leadCreated);
   });
 
+  const localSummary = { ...summarizeMessages(localMessages), five_min_54_call_exists_locally_before_resync: localHas354 };
+  const liveSummary = {
+    ...summarizeMessages(liveMessages),
+    conversations: conversations.map((c) => ({ id: (c as Json).id, contact_id: (c as Json).contactId })),
+    five_min_54_call_exists_live: liveHas354,
+  };
   report.contact_lead_fact = fact;
-  report.local_db_messages = summarizeMessages(localMessages);
-  report.live_ghl_messages = summarizeMessages(liveMessages);
-  report.live_ghl_messages.conversations = conversations.map((c) => ({ id: (c as Json).id, contact_id: (c as Json).contactId }));
-  report.live_ghl_messages.five_min_54_call_exists_live = liveHas354;
-  report.local_db_messages.five_min_54_call_exists_locally_before_resync = localHas354;
+  report.local_db_messages = localSummary;
+  report.live_ghl_messages = liveSummary;
   report.opportunity_verification = {
     live_opportunity_exists: liveOpportunities.length > 0,
     db_opportunity_exists: (dbOpps ?? []).length > 0,
