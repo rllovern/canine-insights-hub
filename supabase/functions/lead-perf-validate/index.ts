@@ -25,6 +25,67 @@ async function ghl(method: string, path: string, token: string, body?: Json): Pr
   try { return JSON.parse(text) as Json; } catch { return {}; }
 }
 
+function messagesFromPayload(j: Json): { messages: Json[]; nextPage: boolean | null; lastMessageId: string | null } {
+  const inner = j.messages as Json | Json[] | undefined;
+  const messages: Json[] = Array.isArray(inner) ? inner as Json[]
+    : Array.isArray((inner as Json | undefined)?.messages) ? ((inner as Json).messages as Json[])
+    : [];
+  const source = (Array.isArray(inner) ? j : (inner ?? j)) as Json;
+  const nextRaw = source.nextPage ?? source.next_page ?? source.hasMore ?? source.has_more ?? null;
+  const nextPage = nextRaw == null ? null : nextRaw === true || nextRaw === 1 || String(nextRaw).toLowerCase() === "true";
+  const lastMessageId = String(source.lastMessageId ?? source.last_message_id ?? messages[messages.length - 1]?.id ?? "") || null;
+  return { messages, nextPage, lastMessageId };
+}
+
+function msgDuration(m: Json): number {
+  const raw = ((m.meta as Json | undefined)?.call as Json | undefined)?.duration
+    ?? (m.raw as Json | undefined)?.duration
+    ?? (m.raw as Json | undefined)?.callDuration
+    ?? m.duration
+    ?? m.callDuration;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function msgStatus(m: Json): string {
+  return String(((m.meta as Json | undefined)?.call as Json | undefined)?.status
+    ?? (m.raw as Json | undefined)?.status
+    ?? m.status
+    ?? m.callStatus
+    ?? "").toLowerCase();
+}
+
+function isCall(m: Json): boolean { return String((m.message_type ?? m.messageType) ?? "").toUpperCase() === "TYPE_CALL"; }
+function isInbound(m: Json): boolean { return String(m.direction ?? "").toLowerCase() === "inbound"; }
+function isAnsweredInboundCall(m: Json): boolean {
+  return isCall(m) && isInbound(m) && ["completed", "answered", "in-progress"].includes(msgStatus(m)) && msgDuration(m) >= 30;
+}
+
+async function fetchConversationMessages(token: string, conversationId: string) {
+  const MAX_PAGES = 25;
+  const messages: Json[] = [];
+  const seen = new Set<string>();
+  let lastMessageId: string | null = null;
+  let pages = 0;
+  let capped = false;
+  while (pages < MAX_PAGES) {
+    const qs = new URLSearchParams({ limit: "100" });
+    if (lastMessageId) qs.set("lastMessageId", lastMessageId);
+    const page = messagesFromPayload(await ghl("GET", `/conversations/${conversationId}/messages?${qs.toString()}`, token));
+    pages++;
+    let added = 0;
+    for (const m of page.messages) {
+      const id = String((m as Json).id ?? "");
+      if (!id || seen.has(id)) continue;
+      seen.add(id); added++; messages.push(m);
+    }
+    lastMessageId = page.lastMessageId;
+    if (!page.messages.length || added === 0 || page.nextPage === false || (page.nextPage == null && page.messages.length < 100) || !lastMessageId) break;
+  }
+  if (pages >= MAX_PAGES) capped = true;
+  return { messages, pages, capped };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -140,6 +201,101 @@ Deno.serve(async (req) => {
     };
   }
   report.db = db;
+
+  // ---- Pagination completeness checks --------------------------------
+  const completeness: Json = { warnings: [] as string[] };
+  const { data: exact100 } = await admin.from("ghl_messages")
+    .select("conversation_id, contact_id")
+    .eq("property_id", property_id)
+    .not("conversation_id", "is", null)
+    .limit(1000);
+  const localConvCounts = new Map<string, { contact_id: string | null; n: number }>();
+  for (const m of exact100 ?? []) {
+    const id = String((m as Json).conversation_id ?? "");
+    if (!id) continue;
+    const prev = localConvCounts.get(id) ?? { contact_id: ((m as Json).contact_id as string | null) ?? null, n: 0 };
+    prev.n += 1;
+    localConvCounts.set(id, prev);
+  }
+  const suspicious100 = Array.from(localConvCounts.entries()).filter(([, v]) => v.n === 100).map(([conversation_id, v]) => ({ conversation_id, contact_id: v.contact_id, local_message_count: v.n }));
+  completeness.conversations_with_exactly_100_messages = suspicious100;
+  if (suspicious100.length) (completeness.warnings as string[]).push("Conversations with exactly 100 local messages need live pagination proof.");
+
+  const { data: needsRows } = await admin.from("ghl_lead_facts")
+    .select("contact_id, lead_created_at, stage_id, needs_first_response_reason")
+    .eq("property_id", property_id)
+    .eq("needs_first_response", true)
+    .limit(25);
+  const needContactIds = new Set((needsRows ?? []).map((r) => String((r as Json).contact_id ?? "")).filter(Boolean));
+  const liveConvByContact = new Map<string, Json[]>();
+  let convSkip = 0;
+  let convPages = 0;
+  let conversationSearchCapped = false;
+  while (needContactIds.size && convPages < 100) {
+    const j = await ghl("GET", `/conversations/search?locationId=${locationId}&limit=100&skip=${convSkip}`, token);
+    const list = ((j.conversations as Json[]) ?? []);
+    for (const c of list) {
+      const cid = String((c as Json).contactId ?? "");
+      if (!needContactIds.has(cid)) continue;
+      liveConvByContact.set(cid, [...(liveConvByContact.get(cid) ?? []), c]);
+    }
+    convPages++;
+    if (list.length < 100) break;
+    convSkip += list.length;
+  }
+  if (convPages >= 100) conversationSearchCapped = true;
+
+  const localVsLive: Json[] = [];
+  const nfrWithLiveAnsweredCalls: Json[] = [];
+  for (const row of needsRows ?? []) {
+    const cid = String((row as Json).contact_id ?? "");
+    const conversations = liveConvByContact.get(cid) ?? [];
+    const liveMessages: Json[] = [];
+    let capped = false;
+    for (const c of conversations) {
+      const fetched = await fetchConversationMessages(token, String((c as Json).id));
+      capped = capped || fetched.capped;
+      liveMessages.push(...fetched.messages.map((m) => ({ ...(m as Json), conversation_id: (c as Json).id, contact_id: cid })));
+    }
+    const { count: localN } = await admin.from("ghl_messages").select("*", { count: "exact", head: true }).eq("property_id", property_id).eq("contact_id", cid);
+    if ((localN ?? 0) !== liveMessages.length) localVsLive.push({ contact_id: cid, local_message_count: localN ?? 0, live_message_count: liveMessages.length, pagination_capped: capped });
+    const leadCreated = new Date(String((row as Json).lead_created_at ?? 0)).getTime();
+    const answered = liveMessages.filter((m) => isAnsweredInboundCall(m) && new Date(String((m as Json).dateAdded ?? "")).getTime() >= leadCreated);
+    if (answered.length) nfrWithLiveAnsweredCalls.push({ contact_id: cid, lead_created_at: (row as Json).lead_created_at, current_reason: (row as Json).needs_first_response_reason, answered_inbound_calls: answered.map((m) => ({ id: (m as Json).id, conversation_id: (m as Json).conversation_id, dateAdded: (m as Json).dateAdded, duration: msgDuration(m), status: msgStatus(m) })) });
+  }
+
+  const liveHandledOpps: Json[] = [];
+  const liveOppsForNeeds: Json[] = [];
+  let oppPage = 1;
+  let oppPaginationCapped = false;
+  while (needContactIds.size && oppPage <= 100) {
+    const j = await ghl("POST", "/opportunities/search", token, { locationId, limit: 100, page: oppPage });
+    const list = ((j.opportunities as Json[]) ?? []);
+    liveOppsForNeeds.push(...list.filter((o) => needContactIds.has(String((o as Json).contactId ?? ""))));
+    if (list.length < 100) break;
+    oppPage++;
+  }
+  if (oppPage > 100) oppPaginationCapped = true;
+  if (liveOppsForNeeds.length) {
+    const liveStageIds = Array.from(new Set(liveOppsForNeeds.map((o) => String((o as Json).pipelineStageId ?? (o as Json).stageId ?? "")).filter(Boolean)));
+    const { data: liveMappings } = liveStageIds.length ? await admin.from("property_pipeline_mapping").select("ghl_stage_id, canonical_stage, suppresses_needs_first_response, confirmed_by_user").eq("property_id", property_id).in("ghl_stage_id", liveStageIds) : { data: [] };
+    const mapByStage = new Map((liveMappings ?? []).map((m) => [String((m as Json).ghl_stage_id), m as Json]));
+    for (const o of liveOppsForNeeds) {
+      const stageId = String((o as Json).pipelineStageId ?? (o as Json).stageId ?? "");
+      const mapping = mapByStage.get(stageId);
+      if (mapping?.suppresses_needs_first_response === true) liveHandledOpps.push({ contact_id: (o as Json).contactId, opportunity_id: (o as Json).id, live_stage_id: stageId, mapping });
+    }
+  }
+  completeness.local_message_count_differs_from_live = localVsLive;
+  completeness.needs_first_response_with_live_answered_inbound_calls = nfrWithLiveAnsweredCalls;
+  completeness.needs_first_response_with_live_handled_opportunities = liveHandledOpps;
+  completeness.endpoint_pagination = { conversation_search_capped: conversationSearchCapped, opportunity_pagination_capped: oppPaginationCapped };
+  if (conversationSearchCapped) (completeness.warnings as string[]).push("Conversation search pagination hit the validation safety cap.");
+  if (oppPaginationCapped) (completeness.warnings as string[]).push("Opportunity pagination hit the validation safety cap.");
+  if (localVsLive.length) (completeness.warnings as string[]).push("Some Needs First Response contacts have local/live message-count drift.");
+  if (nfrWithLiveAnsweredCalls.length) (completeness.warnings as string[]).push("Some Needs First Response contacts have live answered inbound calls.");
+  if (liveHandledOpps.length) (completeness.warnings as string[]).push("Some Needs First Response contacts have live handled stages.");
+  report.pagination_completeness = completeness;
 
   // ---- Sample rows for visual sanity-check ----
   const samples: Json = {};

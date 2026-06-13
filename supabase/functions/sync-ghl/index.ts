@@ -19,6 +19,9 @@ const GHL_VERSION = "2021-07-28";
 const MAX_RPS = 8;             // ceiling per probe report
 const MAX_RETRIES = 5;
 const BACKOFF_BASE_MS = 2000;  // 2s, 4s, 8s, 16s, 32s
+const MAX_CONVERSATION_SEARCH_PAGES = 100;
+const MAX_MESSAGE_PAGES_PER_CONVERSATION = 25;
+const MAX_OPPORTUNITY_PAGES = 100;
 
 type Json = Record<string, unknown>;
 
@@ -108,6 +111,29 @@ function messageChannel(m: Json): string | null {
   if (mt.includes("GMB")) return "gmb";
   if (mt.includes("WEBCHAT") || mt.includes("LIVE_CHAT")) return "webchat";
   return mt ? mt.toLowerCase().replace(/^type_/, "") : null;
+}
+
+function messagesFromPayload(j: Json): { messages: Json[]; nextPage: boolean | null; lastMessageId: string | null } {
+  const inner = j.messages as Json | Json[] | undefined;
+  const messages: Json[] = Array.isArray(inner) ? inner as Json[]
+    : Array.isArray((inner as Json | undefined)?.messages) ? ((inner as Json).messages as Json[])
+    : [];
+  const source = (Array.isArray(inner) ? j : (inner ?? j)) as Json;
+  const nextRaw = source.nextPage ?? source.next_page ?? source.hasMore ?? source.has_more ?? null;
+  const nextPage = nextRaw == null ? null : nextRaw === true || nextRaw === 1 || String(nextRaw).toLowerCase() === "true";
+  const lastMessageId = String(source.lastMessageId ?? source.last_message_id ?? messages[messages.length - 1]?.id ?? "") || null;
+  return { messages, nextPage, lastMessageId };
+}
+
+function normalizedMessageMeta(m: Json): Json | null {
+  const meta = ((m.meta as Json | undefined) ?? {}) as Json;
+  const call = ((meta.call as Json | undefined) ?? {}) as Json;
+  const duration = call.duration ?? m.duration ?? m.callDuration ?? m.call_duration ?? m.callDurationSeconds ?? m.call_duration_seconds;
+  const status = call.status ?? m.status ?? m.callStatus ?? m.call_status;
+  const nextCall = { ...call } as Json;
+  if (duration != null) nextCall.duration = duration;
+  if (status != null) nextCall.status = status;
+  return Object.keys(nextCall).length ? { ...meta, call: nextCall } : (Object.keys(meta).length ? meta : null);
 }
 
 // ---------- Appointment status normalization ------------------------
@@ -326,68 +352,110 @@ Deno.serve(async (req) => {
 
   // ===== 4. CONVERSATIONS + MESSAGES (classified) ===================
   await safe("conversations_messages", async () => {
-    // Pull conversations for the location, then walk each one for in-window contacts.
-    // The first implementation only read the first 100 conversations, which could
-    // miss older-but-still-in-window leads and leave answered calls unattached.
     const convMap = new Map<string, Json>();
     let skip = 0;
-    let pages = 0;
-    while (pages < 50) {
+    let conversationPages = 0;
+    let conversationSearchCapped = false;
+    while (conversationPages < MAX_CONVERSATION_SEARCH_PAGES) {
       const j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&limit=100&skip=${skip}`, token);
       const list = ((j.conversations as Json[]) ?? []);
       for (const conv of list) {
         const id = String((conv as Json).id ?? "");
         if (id) convMap.set(id, conv);
       }
+      conversationPages++;
       if (list.length < 100) break;
       skip += list.length;
-      pages++;
     }
+    if (conversationPages >= MAX_CONVERSATION_SEARCH_PAGES) conversationSearchCapped = true;
     const convs = Array.from(convMap.values());
     counts.conversations = convs.length;
-    counts.conversation_pages = pages + 1;
+    counts.conversation_pages = conversationPages;
+    counts.conversation_search_capped = conversationSearchCapped;
 
     const contactSet = new Set(contactIds);
     const msgRows: Json[] = [];
     let firstHumanSample: Json | null = null;
     let firstAutoSample: Json | null = null;
-    const classCounts: Record<string, number> = { human: 0, automation: 0, system: 0, unknown: 0 };
+    let messagePaginationCapped = false;
+    let conversationsExactly100 = 0;
+    let totalMessagePages = 0;
+    const cappedConversations: Json[] = [];
+    const perConversation: Json[] = [];
+    const classCounts: Record<string, number> = { human: 0, automation: 0, system: 0, customer: 0, unknown: 0 };
 
     for (const c of convs) {
       const cAny = c as Json;
+      const conversationId = String(cAny.id ?? "");
       const contactId = String(cAny.contactId ?? "");
+      if (!conversationId) continue;
       if (contactId && !contactSet.has(contactId)) continue;
-      const mj = await ghlFetch("GET", `/conversations/${cAny.id}/messages?limit=100`, token);
-      const inner = mj.messages as Json | undefined;
-      const messages: Json[] = Array.isArray(inner) ? inner as Json[]
-        : Array.isArray((inner as Json | undefined)?.messages) ? ((inner as Json).messages as Json[])
-        : [];
-      for (const m of messages) {
-        const mA = m as Json;
-        const cls = classifyMessage(mA);
-        classCounts[cls] = (classCounts[cls] ?? 0) + 1;
-        if (cls === "human" && !firstHumanSample) firstHumanSample = mA;
-        if (cls === "automation" && !firstAutoSample) firstAutoSample = mA;
-        msgRows.push({
-          property_id,
-          ghl_message_id: String(mA.id),
-          conversation_id: String(cAny.id),
-          contact_id: contactId || null,
-          direction: mA.direction ?? null,
-          channel: messageChannel(mA),
-          message_type: mA.messageType ?? null,
-          ghl_user_id: mA.userId ?? null,
-          response_source: cls,
-          source_raw: mA.source ?? null,
-          sent_at: mA.dateAdded ?? null,
-          body_preview: typeof mA.body === "string" ? (mA.body as string).slice(0, 280) : null,
-          meta: mA.meta ?? null,
-          raw: m,
-        });
+
+      const seenMessageIds = new Set<string>();
+      let lastMessageId: string | null = null;
+      let messagePages = 0;
+      let conversationMessageCount = 0;
+      let stoppedByNoMore = false;
+
+      while (messagePages < MAX_MESSAGE_PAGES_PER_CONVERSATION) {
+        const qs = new URLSearchParams({ limit: "100" });
+        if (lastMessageId) qs.set("lastMessageId", lastMessageId);
+        const mj = await ghlFetch("GET", `/conversations/${conversationId}/messages?${qs.toString()}`, token);
+        const page = messagesFromPayload(mj);
+        messagePages++;
+        totalMessagePages++;
+
+        for (const m of page.messages) {
+          const mA = m as Json;
+          const id = String(mA.id ?? "");
+          if (!id || seenMessageIds.has(id)) continue;
+          seenMessageIds.add(id);
+          const cls = classifyMessage(mA);
+          classCounts[cls] = (classCounts[cls] ?? 0) + 1;
+          if (cls === "human" && !firstHumanSample) firstHumanSample = mA;
+          if (cls === "automation" && !firstAutoSample) firstAutoSample = mA;
+          msgRows.push({
+            property_id,
+            ghl_message_id: id,
+            conversation_id: conversationId,
+            contact_id: contactId || null,
+            direction: mA.direction ?? null,
+            channel: messageChannel(mA),
+            message_type: mA.messageType ?? null,
+            ghl_user_id: mA.userId ?? null,
+            response_source: cls,
+            source_raw: mA.source ?? null,
+            sent_at: mA.dateAdded ?? null,
+            body_preview: typeof mA.body === "string" ? (mA.body as string).slice(0, 280) : null,
+            meta: normalizedMessageMeta(mA),
+            raw: m,
+          });
+        }
+
+        conversationMessageCount = seenMessageIds.size;
+        lastMessageId = page.lastMessageId;
+        if (!page.messages.length || page.nextPage === false || (page.nextPage == null && page.messages.length < 100)) {
+          stoppedByNoMore = true;
+          break;
+        }
+        if (!lastMessageId) break;
       }
+
+      if (conversationMessageCount === 100) conversationsExactly100++;
+      if (!stoppedByNoMore && messagePages >= MAX_MESSAGE_PAGES_PER_CONVERSATION) {
+        messagePaginationCapped = true;
+        cappedConversations.push({ conversation_id: conversationId, contact_id: contactId || null, messages_fetched: conversationMessageCount, pages: messagePages });
+      }
+      perConversation.push({ conversation_id: conversationId, contact_id: contactId || null, messages_fetched: conversationMessageCount, pages: messagePages, capped: !stoppedByNoMore && messagePages >= MAX_MESSAGE_PAGES_PER_CONVERSATION });
+      console.log("sync-ghl conversation messages", JSON.stringify({ property_id, conversation_id: conversationId, contact_id: contactId || null, messages_fetched: conversationMessageCount, pages: messagePages }));
     }
     counts.messages = await upsertChunked(admin, "ghl_messages", msgRows, "property_id,ghl_message_id");
     counts.messages_by_source = classCounts;
+    counts.conversation_message_pages = totalMessagePages;
+    counts.conversations_exactly_100_messages = conversationsExactly100;
+    counts.conversation_message_pagination_capped = messagePaginationCapped;
+    samples.conversation_message_pagination_capped = cappedConversations.slice(0, 10);
+    samples.conversation_message_counts = perConversation.slice(0, 25);
     samples.message_human = firstHumanSample;
     samples.message_automation = firstAutoSample;
   }, undefined);
@@ -396,14 +464,20 @@ Deno.serve(async (req) => {
   await safe("opportunities", async () => {
     let page = 1;
     const pulled: Json[] = [];
-    while (page <= 50) {
+    let opportunityPages = 0;
+    let opportunityPaginationCapped = false;
+    while (page <= MAX_OPPORTUNITY_PAGES) {
       const j = await ghlFetch("POST", "/opportunities/search", token, { locationId, limit: 100, page });
       const list = ((j.opportunities as Json[]) ?? []);
       pulled.push(...list);
+      opportunityPages++;
       if (list.length < 100) break;
       page++;
     }
+    if (page > MAX_OPPORTUNITY_PAGES) opportunityPaginationCapped = true;
     counts.opportunities_pulled = pulled.length;
+    counts.opportunity_pages = opportunityPages;
+    counts.opportunity_pagination_capped = opportunityPaginationCapped;
 
     // Existing rows for stage-diff
     const { data: existing } = await admin
