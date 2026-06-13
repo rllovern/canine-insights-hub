@@ -521,6 +521,7 @@ export type Database = {
           lost_reason_raw: string | null
           monetary_value: number | null
           needs_first_response: boolean
+          needs_first_response_reason: string | null
           opportunity_id: string | null
           pipeline_id: string | null
           property_id: string
@@ -566,6 +567,7 @@ export type Database = {
           lost_reason_raw?: string | null
           monetary_value?: number | null
           needs_first_response?: boolean
+          needs_first_response_reason?: string | null
           opportunity_id?: string | null
           pipeline_id?: string | null
           property_id: string
@@ -611,6 +613,7 @@ export type Database = {
           lost_reason_raw?: string | null
           monetary_value?: number | null
           needs_first_response?: boolean
+          needs_first_response_reason?: string | null
           opportunity_id?: string | null
           pipeline_id?: string | null
           property_id?: string
