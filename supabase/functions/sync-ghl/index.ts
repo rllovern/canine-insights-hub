@@ -301,6 +301,7 @@ Deno.serve(async (req) => {
   // ===== 3. CONTACTS (cursor pagination) ============================
   const contactIds: string[] = [];
   const contactCreatedAt = new Map<string, string>();
+  const contactLookup = new Map<string, { phone: string | null; email: string | null }>();
   await safe("contacts", async () => {
     let cursor: unknown[] | null = null;
     let pages = 0;
@@ -324,6 +325,7 @@ Deno.serve(async (req) => {
       const id = String(a.id);
       const createdAt = (a.dateAdded ?? a.createdAt) as string | null;
       if (createdAt) contactCreatedAt.set(id, createdAt);
+      contactLookup.set(id, { phone: (a.phone as string | null) ?? null, email: (a.email as string | null) ?? null });
       contactIds.push(id);
       return {
         property_id, ghl_location_id: locationId, ghl_contact_id: id,
