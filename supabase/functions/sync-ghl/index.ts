@@ -77,7 +77,7 @@ async function ghlFetch(method: string, path: string, token: string, body?: Json
 // ---------- Classification ------------------------------------------
 // Returns one of: human | automation | system | unknown.
 // AI is bucketed under 'automation' for v1.
-function classifyMessage(m: Json): "human" | "automation" | "system" | "customer" | "unknown" {
+function classifyMessage(m: Json): "human" | "automation" | "system" | "customer" | "unknown" | "ai" {
   const dir = String(m.direction ?? "").toLowerCase();
   const mt = String(m.messageType ?? "").toUpperCase();
   const src = String(m.source ?? "").toLowerCase();
@@ -92,6 +92,7 @@ function classifyMessage(m: Json): "human" | "automation" | "system" | "customer
   if (dir && dir !== "outbound") return "customer";
 
   // Outbound automation surfaces
+  if (src.includes("ai") || mt.includes("ai")) return "ai";
   if (src === "workflow" || src === "campaign" || src === "bulk_actions") return "automation";
 
   // userId present + not flagged as automation = a real human action
@@ -317,12 +318,6 @@ Deno.serve(async (req) => {
       cursor = sa;
       pages++;
     }
-
-    const inRange = buffer.filter((c) => {
-      const d = (c.dateAdded ?? c.createdAt) as string | undefined;
-      if (!d) return true;
-      const t = new Date(d).getTime();
-      return t >= dateFrom.getTime() && t <= dateTo.getTime();
     });
 
     const rows = inRange.map((c) => {
