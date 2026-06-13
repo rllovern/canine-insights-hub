@@ -89,6 +89,7 @@ Deno.serve(async (req) => {
 
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const sinceStr = toGoogleDateTime(since);
+    const nowStr = toGoogleDateTime(new Date());
 
     const query = `
       SELECT
@@ -100,11 +101,9 @@ Deno.serve(async (req) => {
         change_event.resource_change_operation,
         change_event.changed_fields,
         change_event.campaign,
-        change_event.ad_group,
-        change_event.feed,
-        change_event.asset
+        change_event.ad_group
       FROM change_event
-      WHERE change_event.change_date_time >= '${sinceStr}'
+      WHERE change_event.change_date_time BETWEEN '${sinceStr}' AND '${nowStr}'
       ORDER BY change_event.change_date_time DESC
       LIMIT ${limit}
     `;
