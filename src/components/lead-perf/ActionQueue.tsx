@@ -18,6 +18,7 @@ type Row = {
   canonical_stage: string | null;
   last_activity_at: string | null;
   ghl_deep_link: string | null;
+  reason: string | null;
 };
 
 type TabDef = {
@@ -125,6 +126,7 @@ export function ActionQueue({
                 {def.showStage && <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">Stage</th>}
                 <th className="text-left font-medium px-3 py-1.5">Age</th>
                 <th className="text-left font-medium px-3 py-1.5 hidden md:table-cell">Last activity</th>
+                <th className="text-left font-medium px-3 py-1.5 hidden xl:table-cell">Reason</th>
                 <th className="px-3 py-1.5 text-right">Action</th>
               </tr>
             </thead>
@@ -153,6 +155,9 @@ export function ActionQueue({
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-muted-foreground tabular-nums whitespace-nowrap">
                       {last ? formatDistanceToNowStrict(last, { addSuffix: true }) : "—"}
+                    </td>
+                    <td className="px-3 py-1.5 hidden xl:table-cell text-muted-foreground max-w-[260px]">
+                      <span className="truncate block" title={r.reason ?? undefined}>{r.reason ?? "—"}</span>
                     </td>
                     <td className="px-3 py-1.5 text-right whitespace-nowrap">
                       {r.ghl_deep_link ? (
