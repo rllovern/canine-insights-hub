@@ -1,21 +1,62 @@
-# Jarvis — Phase 1 build plan (approved with revisions)
+## Plan: prove the Jarvis auth chain end-to-end
 
-Scope: agent foundation + flagship CTM↔GHL reconciliation report. No alerts, no write actions.
+1. **Frontend diagnostics before send**
+   - In `JarvisChat`, add a development-only `[Jarvis Auth Debug]` log immediately before the AI SDK transport sends a request.
+   - Log only sanitized session data: session presence, token prefix, expiry, seconds remaining, user id, and session error.
+   - Update the Jarvis request headers to explicitly include:
+     - `Authorization: Bearer <fresh access token>`
+     - `apikey: <publishable anon key>`
+     - `Content-Type: application/json`
+   - Add a friendlier missing-session error: “Please sign in again.”
 
-## Revisions accepted
-- Reconciliation classifies each CTM row as: `unmatchable` | `missing` | `contact_only` | `activity_loose` | `activity_strong` | `lead_fact` | `opportunity`.
-- Identity = phone OR email exact (normalized). Timestamp proximity is secondary evidence (±15 min strong, same-day loose).
-- Every report carries scope/evidence: property, date range, sources used, sync freshness, matching method, unmatchable/contact-only/activity counts, caveats.
-- Explicit permission tests for cross-property, cross-user, internal-read-all, service-role writes.
-- Report header actions: Save · Copy summary · Open evidence · Export CSV · Create alert (disabled, "coming soon").
+2. **Edge function diagnostics at request entry**
+   - In `supabase/functions/jarvis/index.ts`, make `OPTIONS` return before auth validation with status `204` and full CORS headers.
+   - Add temporary sanitized `[Jarvis Edge Auth Debug]` logging at the top of the handler:
+     - whether Authorization exists
+     - whether it starts with Bearer
+     - token prefix only
+     - whether apikey exists
+   - Ensure every response, including auth failures, includes CORS headers.
 
-## Build
-1. Migration: `ai_agent_sessions`, `ai_agent_messages`, `ai_agent_tool_runs`, `ai_agent_reports` with GRANTs, RLS, owner-only + internal-read-all policies.
-2. Edge function `jarvis`: AI SDK `streamText` against Lovable AI Gateway (`google/gemini-3-flash-preview`), system prompt enforces tool use + evidence, persists messages + tool runs.
-3. Tools: `get_property_context`, `get_account_summary`, `get_lead_performance_snapshot`, `get_account_stability`, `reconcile_ctm_to_ghl`, `save_visual_report`.
-4. Report schema in `src/lib/jarvis/reportSchema.ts`; renderer in `src/components/jarvis/report/`.
-5. UI: replace `/assistant` with full-page Jarvis (chat + report drawer). Global `Cmd+K` `JarvisCommandBar` in `AppShell`.
-6. Threads: sessions in DB; active session id in URL `?session=…`.
+3. **Replace auth validation with explicit anon-key + Bearer validation**
+   - Replace the current `getClaims()` auth path with the requested `createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { Authorization: Bearer token })` + `auth.getUser()` path.
+   - Log sanitized `[Jarvis Edge User Debug]` results:
+     - `hasUser`
+     - `userId`
+     - `userErrorMessage`
+   - Keep the service-role client only after user validation succeeds.
 
-## Out of scope (later phases)
-Alerts, embedded "ask why" buttons, write/execute tools, push notifications, cross-property queries.
+4. **Add isolated auth-only proof endpoint**
+   - Add temporary `supabase/functions/jarvis-auth-debug/index.ts`.
+   - It will not call Jarvis, tools, or the AI model.
+   - It will read the Authorization header, validate the user with anon-key + Bearer token, and return:
+     ```json
+     {
+       "hasAuthHeader": true,
+       "hasUser": true,
+       "userId": "...",
+       "expiresInSeconds": 1234
+     }
+     ```
+   - It will also use the same CORS headers and sanitized logging.
+
+5. **Environment consistency proof**
+   - Add sanitized edge logs that compare project host/ref shape only, not secret values:
+     - backend `SUPABASE_URL` host
+     - whether `SUPABASE_ANON_KEY` exists
+     - whether `SUPABASE_SERVICE_ROLE_KEY` exists
+   - Frontend already uses the project URL from Vite env; we’ll confirm the request URL matches the backend URL in the network request.
+
+6. **Validation path before declaring fixed**
+   - Use the browser/network/debug tools to prove:
+     - frontend session exists before send
+     - Jarvis request includes Authorization and apikey headers
+     - edge function receives Authorization and apikey
+     - edge function validates the user successfully
+     - `jarvis-auth-debug` succeeds independently
+     - normal Jarvis request proceeds past auth
+   - Then test both preview and deployed app paths as far as the available tools allow.
+
+## Current known signal
+
+The latest captured request already shows an `Authorization` header, but it does **not** show an `apikey` header, and the captured JWT appears expired at request time. This plan will prove whether refresh, header forwarding, backend env, or validation is the actual break point instead of guessing.

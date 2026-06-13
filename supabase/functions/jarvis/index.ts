@@ -14,6 +14,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Expose-Headers": "x-session-id",
 };
 
@@ -41,16 +42,43 @@ function svc() {
 }
 
 async function authUser(req: Request) {
-  const h = req.headers.get("Authorization");
-  if (!h?.startsWith("Bearer ")) return null;
-  const token = h.slice(7);
-  const c = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-  );
-  const { data, error } = await c.auth.getClaims(token);
-  if (error || !data?.claims?.sub) return null;
-  return { id: data.claims.sub as string };
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const apikeyHeader = req.headers.get("apikey") ?? "";
+  const token = authHeader.replace("Bearer ", "");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+
+  console.log("[Jarvis Edge Auth Debug]", {
+    hasAuthHeader: !!authHeader,
+    authHeaderStartsBearer: authHeader.startsWith("Bearer "),
+    tokenPrefix: token.slice(0, 12),
+    hasApikeyHeader: !!apikeyHeader,
+  });
+  console.log("[Jarvis Edge Env Debug]", {
+    supabaseHost: supabaseUrl ? new URL(supabaseUrl).host : null,
+    hasAnonKey: !!supabaseAnonKey,
+    hasServiceRoleKey: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  });
+
+  if (!token || !authHeader.startsWith("Bearer ")) {
+    return { user: null, error: "Missing Authorization Bearer token", detail: null };
+  }
+
+  const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  const { data: { user }, error: userError } = await supabaseUserClient.auth.getUser();
+
+  console.log("[Jarvis Edge User Debug]", {
+    hasUser: !!user,
+    userId: user?.id,
+    userErrorMessage: userError?.message,
+  });
+
+  if (userError || !user) {
+    return { user: null, error: "Invalid user session", detail: userError?.message ?? null };
+  }
+  return { user: { id: user.id }, error: null, detail: null };
 }
 
 function normPhone(s: string | null | undefined) {
@@ -226,7 +254,40 @@ function buildTools(ctx: Ctx) {
           .lte("date", to.toISOString().slice(0, 10))
           .order("date");
         if (error) throw new Error(error.message);
-        return { property_id: id, days: i.days, rows: data ?? [] };
+        const rows = data ?? [];
+        const byDate = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
+        const bySource = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
+        for (const r of rows) {
+          const date = r.date;
+          const source = r.ad_source ?? "Unknown";
+          const add = (bucket: { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }) => {
+            bucket.cost += Number(r.cost ?? 0);
+            bucket.clicks += Number(r.clicks ?? 0);
+            bucket.impressions += Number(r.impressions ?? 0);
+            bucket.calls += Number(r.record_count ?? 0);
+            bucket.good_leads += Number(r.good_leads ?? 0);
+          };
+          if (!byDate.has(date)) byDate.set(date, { cost: 0, clicks: 0, impressions: 0, calls: 0, good_leads: 0 });
+          if (!bySource.has(source)) bySource.set(source, { cost: 0, clicks: 0, impressions: 0, calls: 0, good_leads: 0 });
+          add(byDate.get(date)!);
+          add(bySource.get(source)!);
+        }
+        const daily = [...byDate.entries()].map(([date, v]) => ({ date, ...v }));
+        const totals = daily.reduce((a, r) => ({
+          cost: a.cost + r.cost,
+          clicks: a.clicks + r.clicks,
+          impressions: a.impressions + r.impressions,
+          calls: a.calls + r.calls,
+          good_leads: a.good_leads + r.good_leads,
+        }), { cost: 0, clicks: 0, impressions: 0, calls: 0, good_leads: 0 });
+        return {
+          property_id: id,
+          days: i.days,
+          row_count: rows.length,
+          totals,
+          by_source: [...bySource.entries()].map(([source, v]) => ({ source, ...v })),
+          daily,
+        };
       }),
     }),
 
@@ -471,14 +532,17 @@ function buildTools(ctx: Ctx) {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
   try {
-    const user = await authUser(req);
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Missing or invalid user session. Please sign in and retry." }), {
+    const auth = await authUser(req);
+    if (!auth.user) {
+      return new Response(JSON.stringify({ error: auth.error, detail: auth.detail }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const user = auth.user;
     const key = Deno.env.get("LOVABLE_API_KEY");
     if (!key) {
       return new Response(JSON.stringify({ error: "LOVABLE_API_KEY missing" }), {
@@ -570,7 +634,7 @@ serve(async (req) => {
     const result = streamText({
       model: gateway("openai/gpt-5.5"),
       system: SYSTEM_PROMPT + contextHeader,
-      messages: convertToModelMessages(messages),
+      messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
       tools: buildTools(ctx),
       stopWhen: stepCountIs(50),
     });

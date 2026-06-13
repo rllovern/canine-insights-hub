@@ -38,6 +38,20 @@ type ReportRef = { id: string; schema: ReportSchema };
 
 async function getFreshAccessToken() {
   const { data: sessionData, error } = await supabase.auth.getSession();
+  if (import.meta.env.DEV) {
+    const session = sessionData.session;
+    console.log("[Jarvis Auth Debug]", {
+      hasSession: !!session,
+      hasAccessToken: !!session?.access_token,
+      tokenPrefix: session?.access_token?.slice(0, 12),
+      expiresAt: session?.expires_at,
+      expiresInSeconds: session?.expires_at
+        ? session.expires_at - Math.floor(Date.now() / 1000)
+        : null,
+      userId: session?.user?.id,
+      error,
+    });
+  }
   if (error || !sessionData.session?.access_token) return null;
 
   const expiresAt = sessionData.session.expires_at ?? 0;
@@ -45,6 +59,20 @@ async function getFreshAccessToken() {
   if (!needsRefresh) return sessionData.session.access_token;
 
   const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+  if (import.meta.env.DEV) {
+    const session = refreshData.session;
+    console.log("[Jarvis Auth Debug Refresh]", {
+      hasSession: !!session,
+      hasAccessToken: !!session?.access_token,
+      tokenPrefix: session?.access_token?.slice(0, 12),
+      expiresAt: session?.expires_at,
+      expiresInSeconds: session?.expires_at
+        ? session.expires_at - Math.floor(Date.now() / 1000)
+        : null,
+      userId: session?.user?.id,
+      error: refreshError,
+    });
+  }
   if (refreshError || !refreshData.session?.access_token) return null;
   return refreshData.session.access_token;
 }
@@ -91,11 +119,15 @@ export function JarvisChat() {
         api: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis`,
         prepareSendMessagesRequest: async ({ messages, id, api }) => {
           const freshToken = await getFreshAccessToken();
-          if (!freshToken) throw new Error("Missing or invalid user session. Please sign in and retry.");
+          if (!freshToken) throw new Error("Please sign in again.");
 
           return {
             api,
-            headers: { Authorization: `Bearer ${freshToken}` },
+            headers: {
+              Authorization: `Bearer ${freshToken}`,
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              "Content-Type": "application/json",
+            },
             body: {
             id,
             messages,
