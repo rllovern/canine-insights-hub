@@ -187,19 +187,20 @@ function StatusTimeline({
   const pct = Math.min(100, Math.max(0, ((now.getTime() - start.getTime()) / totalMs) * 100));
   return (
     <div className="rounded-lg border border-border bg-card p-3">
-      <div className="flex items-center justify-between text-[10.5px] uppercase tracking-wide text-muted-foreground mb-2">
-        <span>Last Major Change</span>
-        <span>Current Status</span>
-        <span>Next Optimization Review</span>
-      </div>
-      <div className="relative h-2 rounded-full bg-muted">
+      <div className="relative h-2 rounded-full bg-muted mt-6">
         <div className="absolute inset-y-0 left-0 rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
-        <div className="absolute -top-1 left-0 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-destructive" />
+        <div className="absolute -top-1 left-0 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-destructive">
+          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9.5px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">Change made</span>
+        </div>
         <div
           className="absolute -top-1 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-primary"
           style={{ left: `${pct}%` }}
-        />
-        <div className="absolute -top-1 right-0 h-4 w-4 translate-x-1/2 rounded-full border-2 border-background bg-emerald-500" />
+        >
+          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9.5px] uppercase tracking-wide text-foreground whitespace-nowrap">Now</span>
+        </div>
+        <div className="absolute -top-1 right-0 h-4 w-4 translate-x-1/2 rounded-full border-2 border-background bg-emerald-500">
+          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9.5px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">Review</span>
+        </div>
       </div>
       <div className="mt-2 flex items-center justify-between text-[11px]">
         <span className="text-foreground">{lastChangeAt ? format(lastChangeAt, "MMM d") : "—"}</span>
