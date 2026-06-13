@@ -70,12 +70,14 @@ export function JarvisChat() {
 
   const iso = useMemo(() => rangeToISO(range), [range]);
 
+  const accessToken = session?.access_token ?? null;
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis`,
         headers: () => ({
-          Authorization: `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${accessToken ?? ""}`,
         }),
         prepareSendMessagesRequest: ({ messages, id, headers, api }) => ({
           api,
@@ -100,7 +102,7 @@ export function JarvisChat() {
         },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session?.access_token, activeProperty?.id, iso.from, iso.to, sessionId],
+    [accessToken, activeProperty?.id, iso.from, iso.to, sessionId],
   );
 
   const { messages, sendMessage, status, error } = useChat({
@@ -132,6 +134,7 @@ export function JarvisChat() {
 
   const onSubmit = (msg: { text: string }, evt: React.FormEvent) => {
     evt.preventDefault();
+    if (!accessToken) return;
     const text = msg.text.trim();
     if (!text) return;
     sendMessage({ text });
@@ -139,6 +142,7 @@ export function JarvisChat() {
   };
 
   const isLoading = status === "submitted" || status === "streaming";
+  const disabled = !accessToken;
 
   const saveReport = async (id: string) => {
     const { error: e } = await supabase.from("ai_agent_reports").update({ saved: true }).eq("id", id);
@@ -164,7 +168,13 @@ export function JarvisChat() {
 
         <Conversation className="flex-1 min-h-0">
           <ConversationContent>
-            {messages.length === 0 ? (
+            {!accessToken ? (
+              <ConversationEmptyState
+                icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
+                title="Sign in to use Jarvis"
+                description="Jarvis needs an authenticated session to query your account data."
+              />
+            ) : messages.length === 0 ? (
               <ConversationEmptyState
                 icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
                 title="Ask Jarvis anything about this account"
@@ -175,8 +185,9 @@ export function JarvisChat() {
                     <button
                       key={p}
                       type="button"
+                      disabled={disabled}
                       onClick={() => sendMessage({ text: p })}
-                      className="text-left text-sm border rounded-md px-3 py-2 hover:bg-muted/50 transition"
+                      className="text-left text-sm border rounded-md px-3 py-2 hover:bg-muted/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {p}
                     </button>
@@ -231,10 +242,11 @@ export function JarvisChat() {
               ref={textareaRef as any}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask Jarvis... (e.g. reconcile CTM to GHL for last 14 days)"
+              placeholder={disabled ? "Sign in to chat with Jarvis…" : "Ask Jarvis... (e.g. reconcile CTM to GHL for last 14 days)"}
+              disabled={disabled}
             />
             <PromptInputFooter className="justify-end">
-              <PromptInputSubmit status={status} disabled={!input.trim() || isLoading} />
+              <PromptInputSubmit status={status} disabled={disabled || !input.trim() || isLoading} />
             </PromptInputFooter>
           </PromptInput>
         </div>
