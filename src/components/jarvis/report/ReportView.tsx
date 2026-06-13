@@ -5,7 +5,7 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts";
 import { Check, Copy, Download, AlertTriangle, Info, BellPlus } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type {
@@ -35,20 +35,40 @@ function SummaryCards({ cards }: { cards: SummaryCard[] }) {
 
 const palette = ["hsl(var(--primary))", "hsl(var(--accent))", "#10b981", "#f59e0b", "#ef4444", "#6366f1"];
 
+function EmptyReportBlock({ title, message }: { title?: string; message: string }) {
+  return (
+    <Card className="p-4">
+      {title && <div className="text-sm font-medium mb-2">{title}</div>}
+      <div className="text-xs text-muted-foreground py-6 text-center">{message}</div>
+    </Card>
+  );
+}
+
 function ReportChart({ spec }: { spec: ChartSpec }) {
+  const data = Array.isArray(spec?.data) ? spec.data : [];
+  const yKeys = Array.isArray(spec?.y) ? spec.y : [];
+  const xKey = typeof spec?.x === "string" ? spec.x : undefined;
+
+  if (!data.length || !yKeys.length || !xKey) {
+    if (typeof console !== "undefined") {
+      console.warn("[Jarvis ReportChart Invalid Payload]", spec);
+    }
+    return <EmptyReportBlock title={spec?.title} message="No chart data available for this report." />;
+  }
+
   const Comp = spec.type === "line" ? LineChart : spec.type === "area" ? AreaChart : BarChart;
   return (
     <Card className="p-4">
       {spec.title && <div className="text-sm font-medium mb-2">{spec.title}</div>}
       <div className="h-56">
         <ResponsiveContainer>
-          <Comp data={spec.data}>
+          <Comp data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey={spec.x} tick={{ fontSize: 11 }} />
+            <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip contentStyle={{ fontSize: 12, background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))" }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            {spec.y.map((k, i) => {
+            {yKeys.map((k, i) => {
               const color = palette[i % palette.length];
               if (spec.type === "line") return <Line key={k} type="monotone" dataKey={k} stroke={color} strokeWidth={2} dot={false} />;
               if (spec.type === "area") return <Area key={k} type="monotone" dataKey={k} stroke={color} fill={color} fillOpacity={0.2} />;
@@ -62,25 +82,27 @@ function ReportChart({ spec }: { spec: ChartSpec }) {
 }
 
 function ReportTable({ spec }: { spec: TableSpec }) {
+  const columns = Array.isArray(spec?.columns) ? spec.columns : [];
+  const rows = Array.isArray(spec?.rows) ? spec.rows : [];
   return (
     <Card className="p-4">
       {spec.title && <div className="text-sm font-medium mb-2">{spec.title}</div>}
-      {spec.rows.length === 0 ? (
+      {rows.length === 0 || columns.length === 0 ? (
         <div className="text-xs text-muted-foreground py-4 text-center">{spec.empty ?? "No rows"}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b text-muted-foreground">
-                {spec.columns.map((c) => (
+                {columns.map((c) => (
                   <th key={c.key} className={cn("py-2 px-2 font-medium", c.align === "right" ? "text-right" : "text-left")}>{c.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {spec.rows.slice(0, 50).map((row, i) => (
+              {rows.slice(0, 50).map((row, i) => (
                 <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
-                  {spec.columns.map((c) => (
+                  {columns.map((c) => (
                     <td key={c.key} className={cn("py-1.5 px-2 tabular-nums", c.align === "right" ? "text-right" : "text-left")}>
                       {row[c.key] == null ? "—" : String(row[c.key])}
                     </td>
@@ -89,8 +111,8 @@ function ReportTable({ spec }: { spec: TableSpec }) {
               ))}
             </tbody>
           </table>
-          {spec.rows.length > 50 && (
-            <div className="text-[11px] text-muted-foreground mt-2">Showing first 50 of {spec.rows.length} rows.</div>
+          {rows.length > 50 && (
+            <div className="text-[11px] text-muted-foreground mt-2">Showing first 50 of {rows.length} rows.</div>
           )}
         </div>
       )}
@@ -128,9 +150,68 @@ function Recommendations({ items }: { items: Recommendation[] }) {
 }
 
 function csvFromTable(t: TableSpec): string {
-  const head = t.columns.map((c) => `"${c.label}"`).join(",");
-  const body = t.rows.map((r) => t.columns.map((c) => `"${String(r[c.key] ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const columns = Array.isArray(t?.columns) ? t.columns : [];
+  const rows = Array.isArray(t?.rows) ? t.rows : [];
+  const head = columns.map((c) => `"${c.label}"`).join(",");
+  const body = rows.map((r) => columns.map((c) => `"${String(r[c.key] ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
   return `${head}\n${body}`;
+}
+
+export function normalizeReportSchema(report: ReportSchema): ReportSchema {
+  const safe = (report ?? {}) as ReportSchema;
+  const charts = (Array.isArray(safe.charts) ? safe.charts : []).map((c) => ({
+    ...c,
+    data: Array.isArray((c as ChartSpec)?.data) ? (c as ChartSpec).data : [],
+    y: Array.isArray((c as ChartSpec)?.y) ? (c as ChartSpec).y : [],
+  })) as ChartSpec[];
+  const tables = (Array.isArray(safe.tables) ? safe.tables : []).map((t) => ({
+    ...t,
+    columns: Array.isArray((t as TableSpec)?.columns) ? (t as TableSpec).columns : [],
+    rows: Array.isArray((t as TableSpec)?.rows) ? (t as TableSpec).rows : [],
+  })) as TableSpec[];
+  return {
+    ...safe,
+    type: "report",
+    title: safe.title ?? "Report",
+    scope: (safe.scope ?? {}) as ReportSchema["scope"],
+    summary_cards: Array.isArray(safe.summary_cards) ? safe.summary_cards : [],
+    charts,
+    tables,
+    recommendations: Array.isArray(safe.recommendations) ? safe.recommendations : [],
+  };
+}
+
+class ReportErrorBoundary extends React.Component<
+  { schema: ReportSchema; children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: unknown) {
+    console.error("[Jarvis ReportView Error]", error, info, this.props.schema);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <Card className="p-4 border-destructive/40 bg-destructive/5">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="size-4 text-destructive mt-0.5" />
+            <div className="flex-1">
+              <div className="text-sm font-medium">This report could not be rendered.</div>
+              <div className="text-xs text-muted-foreground mt-1">{this.state.error.message}</div>
+              <details className="mt-3">
+                <summary className="text-xs cursor-pointer text-muted-foreground">View raw report data</summary>
+                <pre className="mt-2 text-[11px] overflow-x-auto whitespace-pre-wrap break-words bg-muted/40 p-2 rounded max-h-80">
+                  {JSON.stringify(this.props.schema, null, 2)}
+                </pre>
+              </details>
+            </div>
+          </div>
+        </Card>
+      );
+    }
+    return this.props.children as React.ReactElement;
+  }
 }
 
 function summarize(s: ReportSchema): string {
@@ -139,7 +220,7 @@ function summarize(s: ReportSchema): string {
   return [s.title, cards, recs].filter(Boolean).join("\n\n");
 }
 
-export function ReportView({
+function ReportViewInner({
   schema,
   reportId,
   onSave,
