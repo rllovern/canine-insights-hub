@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { DashboardProvider } from "@/contexts/DashboardContext";
+import { JarvisCommandBar } from "@/components/jarvis/JarvisCommandBar";
 
 export function AppShell() {
   return (
@@ -14,6 +15,7 @@ export function AppShell() {
             <Outlet />
           </main>
         </div>
+        <JarvisCommandBar />
       </div>
     </DashboardProvider>
   );
