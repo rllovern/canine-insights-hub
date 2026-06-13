@@ -273,6 +273,37 @@ export function JarvisChat() {
   const isLoading = status === "submitted" || status === "streaming";
   const disabled = !accessToken;
 
+  // If the stream ends (status flips out of streaming) with a tool part still
+  // stuck in input-streaming/input-available, the worker was likely killed
+  // mid-execution (e.g. edge CPU budget). Surface this instead of leaving the
+  // badge stuck on "Pending".
+  const interruptedNoticeShown = useRef<string | null>(null);
+  useEffect(() => {
+    if (isLoading) return;
+    if (!messages.length) return;
+    const last = messages[messages.length - 1];
+    const stuck = (last.parts ?? []).find((p) => {
+      const t = (p as { type?: string }).type ?? "";
+      const s = (p as { state?: string }).state ?? "";
+      return (t.startsWith("tool-") || t === "dynamic-tool") &&
+        (s === "input-streaming" || s === "input-available");
+    });
+    if (!stuck) return;
+    const key = `${last.id}:${(stuck as { type?: string }).type}`;
+    if (interruptedNoticeShown.current === key) return;
+    interruptedNoticeShown.current = key;
+    const stuckAny = stuck as { state?: string; output?: unknown; errorText?: string };
+    stuckAny.state = "output-error";
+    stuckAny.errorText =
+      "Tool run was interrupted (likely exceeded compute budget). Try a narrower window (e.g. days: 7) or rerun.";
+    toast({
+      title: "Jarvis tool interrupted",
+      description:
+        "The last tool call didn't finish. Try a smaller window (e.g. last 7 days) and rerun.",
+      variant: "destructive",
+    });
+  }, [isLoading, messages]);
+
   const saveReport = async (id: string) => {
     const { error: e } = await supabase.from("ai_agent_reports").update({ saved: true }).eq("id", id);
     if (e) throw e;
