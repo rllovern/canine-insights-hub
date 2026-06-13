@@ -36,6 +36,18 @@ const QUICK_PROMPTS = [
 
 type ReportRef = { id: string; schema: ReportSchema };
 
+type LatestJarvisContext = {
+  propertyId: string | null;
+  propertyName: string | null;
+  propertySlug: string | null;
+  jarvisHeaderProperty: string;
+  from: string;
+  to: string;
+  compareFrom: string | null;
+  compareTo: string | null;
+  sessionId: string | null;
+};
+
 async function getFreshAccessToken() {
   const { data: sessionData, error } = await supabase.auth.getSession();
   if (import.meta.env.DEV) {
@@ -111,6 +123,7 @@ export function JarvisChat() {
   const [input, setInput] = useState("");
   const [activeReport, setActiveReport] = useState<ReportRef | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const latestContextRef = useRef<LatestJarvisContext | null>(null);
 
   const iso = useMemo(() => rangeToISO(range), [range]);
   const cmpIso = useMemo(
@@ -126,9 +139,26 @@ export function JarvisChat() {
     if (match) setActiveProperty(match);
   }, [urlPropertyId, properties, activeProperty?.id, setActiveProperty]);
 
+  const urlProperty = urlPropertyId ? properties.find((p) => p.id === urlPropertyId) ?? null : null;
+  const effectiveProperty =
+    (urlPropertyId && activeProperty?.id === urlPropertyId ? activeProperty : null) ??
+    urlProperty ??
+    (!urlPropertyId ? activeProperty : null);
   const effectiveFrom = urlFrom ?? iso.from;
   const effectiveTo = urlTo ?? iso.to;
-  const effectivePropertyId = activeProperty?.id ?? urlPropertyId ?? null;
+  const effectivePropertyId = urlPropertyId ?? activeProperty?.id ?? null;
+
+  latestContextRef.current = {
+    propertyId: effectivePropertyId,
+    propertyName: effectiveProperty?.name ?? null,
+    propertySlug: effectiveProperty?.slug ?? null,
+    jarvisHeaderProperty: activeProperty?.name ?? (urlPropertyId ? "Loading property..." : "No property"),
+    from: effectiveFrom,
+    to: effectiveTo,
+    compareFrom: cmpIso?.from ?? null,
+    compareTo: cmpIso?.to ?? null,
+    sessionId,
+  };
 
   const accessToken = session?.access_token ?? null;
 
@@ -137,38 +167,45 @@ export function JarvisChat() {
       new DefaultChatTransport({
         api: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis`,
         prepareSendMessagesRequest: ({ messages, id, api }) => {
+          const latest = latestContextRef.current;
+          const dateRange = { from: latest?.from ?? null, to: latest?.to ?? null };
+          const pageContext = {
+            route: window.location.pathname,
+            search: window.location.search,
+          };
           const payload = {
             id,
             messages,
-            propertyId: effectivePropertyId,
-            propertyName: activeProperty?.name ?? null,
-            propertySlug: (activeProperty as { slug?: string } | null)?.slug ?? null,
-            from: effectiveFrom,
-            to: effectiveTo,
-            compareFrom: cmpIso?.from ?? null,
-            compareTo: cmpIso?.to ?? null,
-            sessionId,
-            pageContext: {
-              route: window.location.pathname,
-              search: window.location.search,
+            propertyId: latest?.propertyId ?? null,
+            propertyName: latest?.propertyName ?? null,
+            propertySlug: latest?.propertySlug ?? null,
+            dateRange,
+            from: latest?.from ?? null,
+            to: latest?.to ?? null,
+            compareFrom: latest?.compareFrom ?? null,
+            compareTo: latest?.compareTo ?? null,
+            sessionId: latest?.sessionId ?? null,
+            pageContext,
+            context: {
+              propertyId: latest?.propertyId ?? null,
+              propertyName: latest?.propertyName ?? null,
+              propertySlug: latest?.propertySlug ?? null,
+              dateRange,
+              compareRange: latest?.compareFrom && latest?.compareTo
+                ? { from: latest.compareFrom, to: latest.compareTo }
+                : null,
+              pageContext,
             },
           };
           if (import.meta.env.DEV) {
-            console.log("[Jarvis Context Debug]", {
-              selectedPropertyFromDashboard: activeProperty,
-              propertyId: payload.propertyId,
-              propertyName: payload.propertyName,
-              propertySlug: payload.propertySlug,
-              dateRange: { from: payload.from, to: payload.to },
-              comparisonRange: { from: payload.compareFrom, to: payload.compareTo },
-              assistantRouteParams: Object.fromEntries(new URLSearchParams(window.location.search)),
-            });
-            console.log("[Jarvis Request Payload]", {
-              propertyId: payload.propertyId,
-              propertyName: payload.propertyName,
-              dateRange: { from: payload.from, to: payload.to },
-              pageContext: payload.pageContext,
-              messageCount: payload.messages?.length,
+            console.log("[Jarvis Context Before Send]", {
+              selectedPropertyId: latest?.propertyId ?? null,
+              selectedPropertyName: latest?.propertyName ?? null,
+              selectedPropertySlug: latest?.propertySlug ?? null,
+              jarvisHeaderProperty: latest?.jarvisHeaderProperty ?? "No property",
+              dateRange,
+              requestBodyPropertyId: payload?.propertyId,
+              requestBodyContext: payload?.context,
             });
           }
           return {
@@ -187,15 +224,14 @@ export function JarvisChat() {
           headers.set("Content-Type", "application/json");
           const r = await fetch(url as RequestInfo, { ...init, headers });
           const sid = r.headers.get("x-session-id");
-          if (sid && sid !== sessionId) {
+          if (sid && sid !== latestContextRef.current?.sessionId) {
             setSessionId(sid);
             setParams((p) => { const n = new URLSearchParams(p); n.set("session", sid); return n; }, { replace: true });
           }
           return r;
         },
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, effectivePropertyId, activeProperty?.name, effectiveFrom, effectiveTo, cmpIso?.from, cmpIso?.to, sessionId],
+    [setParams],
   );
 
   const { messages, sendMessage, status, error } = useChat({
@@ -251,7 +287,7 @@ export function JarvisChat() {
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold leading-tight">Jarvis</div>
             <div className="text-[11px] text-muted-foreground truncate">
-              Powered by GPT-5.5 · {activeProperty?.name ?? "No property"} · {iso.from} → {iso.to}
+              Powered by GPT-5.5 · {activeProperty?.name ?? "No property"} · {effectiveFrom} → {effectiveTo}
             </div>
           </div>
           <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); setActiveReport(null); setParams({}, { replace: true }); }}>
