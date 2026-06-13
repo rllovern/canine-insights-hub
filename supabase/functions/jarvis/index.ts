@@ -159,8 +159,20 @@ function wrap<I, O>(
   };
 }
 
-function resolveProperty(ctx: Ctx, p?: string | null) {
-  const id = p ?? ctx.defaultPropertyId;
+function logToolContext(name: string, input: ToolPropertyInput, ctx: Ctx) {
+  console.log("[Jarvis Tool Context]", {
+    toolName: name,
+    inputPropertyId: input?.property_id ?? input?.propertyId ?? null,
+    fallbackPropertyIdFromSession: ctx.defaultPropertyId,
+  });
+}
+
+function resolveProperty(ctx: Ctx, input?: string | ToolPropertyInput | null, toolName?: string) {
+  const raw = typeof input === "string" || input == null
+    ? input
+    : input.property_id ?? input.propertyId ?? null;
+  if (toolName && typeof input !== "string") logToolContext(toolName, input ?? {}, ctx);
+  const id = raw ?? ctx.defaultPropertyId;
   if (!id) throw new Error("no property specified and no active property in context");
   return id;
 }
