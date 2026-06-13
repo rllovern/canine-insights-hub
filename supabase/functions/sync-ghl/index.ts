@@ -464,14 +464,20 @@ Deno.serve(async (req) => {
   await safe("opportunities", async () => {
     let page = 1;
     const pulled: Json[] = [];
-    while (page <= 50) {
+    let opportunityPages = 0;
+    let opportunityPaginationCapped = false;
+    while (page <= MAX_OPPORTUNITY_PAGES) {
       const j = await ghlFetch("POST", "/opportunities/search", token, { locationId, limit: 100, page });
       const list = ((j.opportunities as Json[]) ?? []);
       pulled.push(...list);
+      opportunityPages++;
       if (list.length < 100) break;
       page++;
     }
+    if (page > MAX_OPPORTUNITY_PAGES) opportunityPaginationCapped = true;
     counts.opportunities_pulled = pulled.length;
+    counts.opportunity_pages = opportunityPages;
+    counts.opportunity_pagination_capped = opportunityPaginationCapped;
 
     // Existing rows for stage-diff
     const { data: existing } = await admin
