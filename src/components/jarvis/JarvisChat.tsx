@@ -22,6 +22,13 @@ import {
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import { History } from "lucide-react";
 import { ReportView } from "@/components/jarvis/report/ReportView";
 import { isReportSchema, type ReportSchema } from "@/lib/jarvis/reportSchema";
 import jarvisMark from "@/assets/jarvis-mark.png";
@@ -122,6 +129,10 @@ export function JarvisChat() {
   const didPrefill = useRef(false);
   const [input, setInput] = useState("");
   const [activeReport, setActiveReport] = useState<ReportRef | null>(null);
+  const [restoredReports, setRestoredReports] = useState<ReportRef[]>([]);
+  const [recentSessions, setRecentSessions] = useState<
+    { id: string; title: string | null; updated_at: string }[]
+  >([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const latestContextRef = useRef<LatestJarvisContext | null>(null);
 
@@ -234,11 +245,44 @@ export function JarvisChat() {
     [setParams],
   );
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, setMessages } = useChat({
     id: sessionId ?? "new",
     transport,
     onError: (e) => toast({ title: "Jarvis error", description: e.message, variant: "destructive" }),
   });
+
+  // Restore message history when loading an existing session
+  const restoredForSession = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionId || !accessToken) return;
+    if (restoredForSession.current === sessionId) return;
+    if (messages.length > 0) {
+      restoredForSession.current = sessionId;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error: e } = await supabase
+        .from("ai_agent_messages")
+        .select("id,role,content,parts_json,created_at")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true });
+      if (cancelled || e || !data || data.length === 0) return;
+      const restored: UIMessage[] = data.map((row) => {
+        const parts = Array.isArray(row.parts_json) && row.parts_json.length > 0
+          ? (row.parts_json as UIMessage["parts"])
+          : [{ type: "text", text: row.content ?? "" }] as UIMessage["parts"];
+        return {
+          id: row.id,
+          role: (row.role === "assistant" ? "assistant" : "user") as UIMessage["role"],
+          parts,
+        };
+      });
+      restoredForSession.current = sessionId;
+      setMessages(restored);
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, accessToken, messages.length, setMessages]);
 
   // Auto-send prefilled query from Cmd+K — wait for property to hydrate
   useEffect(() => {
@@ -252,12 +296,61 @@ export function JarvisChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQ, accessToken, effectivePropertyId]);
 
-  const reports = useMemo(() => extractReports(messages), [messages]);
+  const reportsFromMessages = useMemo(() => extractReports(messages), [messages]);
+  const reports = useMemo(() => {
+    const seen = new Set<string>();
+    const out: ReportRef[] = [];
+    for (const r of [...restoredReports, ...reportsFromMessages]) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push(r);
+    }
+    return out;
+  }, [restoredReports, reportsFromMessages]);
   useEffect(() => {
     if (reports.length && (!activeReport || activeReport.id !== reports[reports.length - 1].id)) {
       setActiveReport(reports[reports.length - 1]);
     }
   }, [reports, activeReport]);
+
+  // Restore reports for an existing session loaded via ?session=
+  useEffect(() => {
+    if (!sessionId || !accessToken) {
+      setRestoredReports([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error: e } = await supabase
+        .from("ai_agent_reports")
+        .select("id,schema_json")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true });
+      if (cancelled || e || !data) return;
+      const restored: ReportRef[] = [];
+      for (const row of data) {
+        if (isReportSchema(row.schema_json)) {
+          restored.push({ id: row.id, schema: row.schema_json as ReportSchema });
+        }
+      }
+      setRestoredReports(restored);
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, accessToken]);
+
+  // Load recent sessions for the dropdown
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("ai_agent_sessions")
+        .select("id,title,updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(15);
+      if (!cancelled && data) setRecentSessions(data);
+    })();
+  }, [accessToken, sessionId]);
 
   useEffect(() => { textareaRef.current?.focus(); }, [sessionId, status]);
 
@@ -271,7 +364,11 @@ export function JarvisChat() {
   };
 
   const isLoading = status === "submitted" || status === "streaming";
-  const disabled = !accessToken;
+  const needsPropertySelection =
+    !!accessToken && !effectivePropertyId && properties.length > 0;
+  const noAccessibleProperties =
+    !!accessToken && properties.length === 0;
+  const disabled = !accessToken || needsPropertySelection || noAccessibleProperties;
 
   // If the stream ends (status flips out of streaming) with a tool part still
   // stuck in input-streaming/input-available, the worker was likely killed
@@ -321,6 +418,44 @@ export function JarvisChat() {
               Powered by GPT-5.5 · {activeProperty?.name ?? "No property"} · {effectiveFrom} → {effectiveTo}
             </div>
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="ghost" className="gap-1.5">
+                <History className="size-3.5" />
+                Recent
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-1">
+              {recentSessions.length === 0 ? (
+                <div className="px-2 py-3 text-xs text-muted-foreground">No sessions yet.</div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto">
+                  {recentSessions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSessionId(s.id);
+                        setActiveReport(null);
+                        const n = new URLSearchParams(params);
+                        n.set("session", s.id);
+                        n.delete("q");
+                        setParams(n, { replace: true });
+                      }}
+                      className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted/60 ${
+                        s.id === sessionId ? "bg-muted/60" : ""
+                      }`}
+                    >
+                      <div className="truncate font-medium">{s.title || "Untitled session"}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {new Date(s.updated_at).toLocaleString()}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
           <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); setActiveReport(null); setParams({}, { replace: true }); }}>
             New session
           </Button>
@@ -334,6 +469,36 @@ export function JarvisChat() {
                 title="Sign in to use Jarvis"
                 description="Jarvis needs an authenticated session to query your account data."
               />
+            ) : noAccessibleProperties ? (
+              <ConversationEmptyState
+                icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
+                title="No properties available"
+                description="Your account doesn't have access to any properties yet. Ask an admin to grant access."
+              />
+            ) : needsPropertySelection ? (
+              <ConversationEmptyState
+                icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
+                title="Select a property to start using Jarvis"
+                description="Jarvis needs to know which property to analyze."
+              >
+                <div className="mt-4 w-full max-w-xs">
+                  <Select
+                    onValueChange={(id) => {
+                      const p = properties.find((x) => x.id === id);
+                      if (p) setActiveProperty(p);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a property…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {properties.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </ConversationEmptyState>
             ) : messages.length === 0 ? (
               <ConversationEmptyState
                 icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}

@@ -18,6 +18,8 @@ const corsHeaders = {
   "Access-Control-Expose-Headers": "x-session-id",
 };
 
+const DEBUG = Deno.env.get("JARVIS_DEBUG") === "1";
+
 const SYSTEM_PROMPT = `You are Jarvis, an AI Command Agent for an advertising/CRM analytics platform.
 
 You operate the dashboard on behalf of an authenticated user. NEVER invent numbers. ALWAYS call a tool to get data before answering.
@@ -53,17 +55,16 @@ async function authUser(req: Request) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-  console.log("[Jarvis Edge Auth Debug]", {
-    hasAuthHeader: !!authHeader,
-    authHeaderStartsBearer: authHeader.startsWith("Bearer "),
-    tokenPrefix: token.slice(0, 12),
-    hasApikeyHeader: !!apikeyHeader,
-  });
-  console.log("[Jarvis Edge Env Debug]", {
-    supabaseHost: supabaseUrl ? new URL(supabaseUrl).host : null,
-    hasAnonKey: !!supabaseAnonKey,
-    hasServiceRoleKey: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
-  });
+  if (DEBUG) {
+    console.log("[Jarvis Edge Auth Debug]", {
+      hasAuthHeader: !!authHeader,
+      authHeaderStartsBearer: authHeader.startsWith("Bearer "),
+      hasApikeyHeader: !!apikeyHeader,
+      supabaseHost: supabaseUrl ? new URL(supabaseUrl).host : null,
+      hasAnonKey: !!supabaseAnonKey,
+      hasServiceRoleKey: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+    });
+  }
 
   if (!token || !authHeader.startsWith("Bearer ")) {
     return { user: null, error: "Missing Authorization Bearer token", detail: null };
@@ -74,11 +75,13 @@ async function authUser(req: Request) {
   });
   const { data: { user }, error: userError } = await supabaseUserClient.auth.getUser();
 
-  console.log("[Jarvis Edge User Debug]", {
-    hasUser: !!user,
-    userId: user?.id,
-    userErrorMessage: userError?.message,
-  });
+  if (DEBUG) {
+    console.log("[Jarvis Edge User Debug]", {
+      hasUser: !!user,
+      userId: user?.id,
+      userErrorMessage: userError?.message,
+    });
+  }
 
   if (userError || !user) {
     return { user: null, error: "Invalid user session", detail: userError?.message ?? null };
@@ -164,6 +167,7 @@ function wrap<I, O>(
 }
 
 function logToolContext(name: string, input: ToolPropertyInput, ctx: Ctx) {
+  if (!DEBUG) return;
   console.log("[Jarvis Tool Context]", {
     toolName: name,
     inputPropertyId: input?.property_id ?? input?.propertyId ?? null,
@@ -610,7 +614,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    console.log("jarvis body keys:", Object.keys(body));
+    if (DEBUG) console.log("jarvis body keys:", Object.keys(body));
     const rawMessages = body.messages ?? body.uiMessages ?? (body.message ? [body.message] : null);
     if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
       return new Response(
@@ -631,22 +635,16 @@ serve(async (req) => {
     const to = (body.to as string | undefined) ?? (bodyDateRange?.to as string | undefined) ?? null;
     let sessionId = body.sessionId as string | undefined;
 
-    console.log("[Jarvis Edge Body Context]", {
-      propertyId: body?.propertyId ?? null,
-      contextPropertyId: body?.context?.propertyId ?? null,
-      propertyName: body?.propertyName ?? body?.context?.propertyName ?? null,
-      dateRange: body?.dateRange ?? body?.context?.dateRange ?? null,
-      messageCount: body?.messages?.length,
-    });
-
-    console.log("[Jarvis Edge Context Debug]", {
-      propertyId,
-      propertyName: body.propertyName ?? body.context?.propertyName ?? null,
-      from,
-      to,
-      sessionId: sessionId ?? null,
-      pageContext: body.pageContext ?? null,
-    });
+    if (DEBUG) {
+      console.log("[Jarvis Edge Context Debug]", {
+        propertyId,
+        propertyName: body.propertyName ?? body.context?.propertyName ?? null,
+        from,
+        to,
+        sessionId: sessionId ?? null,
+        messageCount: body?.messages?.length,
+      });
+    }
 
     const supabase = svc();
 
