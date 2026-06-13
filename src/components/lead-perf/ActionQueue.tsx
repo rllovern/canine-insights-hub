@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, ArrowRight } from "lucide-react";
+import { ExternalLink, ArrowRight, MoreHorizontal, RefreshCw, Bug } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { DrillIssue } from "@/lib/leadPerf";
 
@@ -61,6 +63,14 @@ function leadIdentity(r: Row): string {
   return "Unknown Lead";
 }
 
+function activityText(r: Row): string {
+  if (!r.last_activity_at) return "—";
+  const last = new Date(r.last_activity_at);
+  const age = formatDistanceToNowStrict(last, { addSuffix: false });
+  if (r.last_activity_type === "lead created") return `Lead created ${age} ago`;
+  return `${formatDistanceToNowStrict(last, { addSuffix: true })}${r.last_activity_type ? ` · ${r.last_activity_type}` : ""}`;
+}
+
 export function ActionQueue({
   propertyIds, from, to, onDrill,
 }: {
@@ -73,6 +83,8 @@ export function ActionQueue({
   const [cache, setCache] = useState<Record<string, Row[] | undefined>>({});
   const [loadingTab, setLoadingTab] = useState<DrillIssue | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [busyContact, setBusyContact] = useState<string | null>(null);
+  const { toast } = useToast();
 
   // Reset cache when scope/window changes
   useEffect(() => { setCache({}); setCounts({}); }, [propertyIds, from, to]);
@@ -105,6 +117,25 @@ export function ActionQueue({
   const def = TABS.find(t => t.id === active)!;
   const rows = cache[active];
   const visible = useMemo(() => rows?.slice(0, MAX_INLINE) ?? [], [rows]);
+
+  async function runLeadDiagnostic(row: Row, resync: boolean) {
+    if (!row.property_id || !row.contact_id) return;
+    setBusyContact(row.contact_id);
+    const { data, error } = await supabase.functions.invoke("lead-perf-lead-debug", {
+      body: { property_id: row.property_id, contact_id: row.contact_id, resync },
+    });
+    setBusyContact(null);
+    if (error) {
+      toast({ title: resync ? "Resync failed" : "Debug failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    console.info("lead debug report", data);
+    if (resync) {
+      setCache({});
+      setCounts({});
+    }
+    toast({ title: resync ? "Lead resynced" : "Debug report ready", description: resync ? "Queue data refreshed from live GHL activity." : "Report logged to the browser console." });
+  }
 
   return (
     <section className="rounded-xl border bg-card">
@@ -189,16 +220,7 @@ export function ActionQueue({
                       {created ? formatDistanceToNowStrict(created, { addSuffix: false }) : "—"}
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-muted-foreground tabular-nums whitespace-nowrap">
-                      {last ? (
-                        <span>
-                          {formatDistanceToNowStrict(last, { addSuffix: true })}
-                          {r.last_activity_type && (
-                            <span className="ml-1 text-muted-foreground/70">· {r.last_activity_type}</span>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="italic text-muted-foreground/60">—</span>
-                      )}
+                      {last ? activityText(r) : <span className="italic text-muted-foreground/60">—</span>}
                     </td>
                     <td className="px-3 py-1.5 hidden lg:table-cell max-w-[200px]">
                       {r.tag_names && r.tag_names.length > 0 ? (
@@ -224,18 +246,28 @@ export function ActionQueue({
                       <span className="truncate block" title={r.reason ?? undefined}>{r.reason ?? "—"}</span>
                     </td>
                     <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                      {r.ghl_deep_link ? (
-                        <a
-                          href={r.ghl_deep_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          Open in GHL <ExternalLink className="size-3" />
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="size-7" disabled={busyContact === r.contact_id}>
+                            {busyContact === r.contact_id ? <RefreshCw className="size-3 animate-spin" /> : <MoreHorizontal className="size-4" />}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {r.ghl_deep_link && (
+                            <DropdownMenuItem asChild>
+                              <a href={r.ghl_deep_link} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="mr-2 size-3" /> Open in GHL
+                              </a>
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => runLeadDiagnostic(r, true)} disabled={!r.contact_id}>
+                            <RefreshCw className="mr-2 size-3" /> Resync lead
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => runLeadDiagnostic(r, false)} disabled={!r.contact_id}>
+                            <Bug className="mr-2 size-3" /> Debug lead
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 );
