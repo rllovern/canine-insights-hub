@@ -6,10 +6,11 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   PieChart, Pie, Cell,
 } from "recharts";
-import { Check, Copy, Download, AlertTriangle, Info, BellPlus, ArrowUp, ArrowDown, Minus, ArrowUpDown } from "lucide-react";
-import React, { useMemo, useState } from "react";
+import { Check, Copy, Download, AlertTriangle, Info, BellPlus, ArrowUp, ArrowDown, Minus, ArrowUpDown, FileText, EyeOff, Eye } from "lucide-react";
+import React, { useMemo, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { exportNodeToPdf } from "@/lib/exportPdf";
 import type {
   ReportSchema, ChartSpec, TableSpec, TableColumn, SummaryCard, Recommendation, Severity,
 } from "@/lib/jarvis/reportSchema";
