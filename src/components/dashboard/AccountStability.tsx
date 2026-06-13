@@ -186,26 +186,33 @@ function StatusTimeline({
   const totalMs = Math.max(1, end.getTime() - start.getTime());
   const pct = Math.min(100, Math.max(0, ((now.getTime() - start.getTime()) / totalMs) * 100));
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <div className="relative h-2 rounded-full bg-muted mt-6">
+    <div className="rounded-lg border border-border bg-card px-6 py-3">
+      {/* Top labels */}
+      <div className="relative h-4 text-[11px]">
+        <span className="absolute left-0 top-0 text-muted-foreground">Change made</span>
+        <span
+          className="absolute top-0 -translate-x-1/2 font-medium text-foreground"
+          style={{ left: `${pct}%` }}
+        >
+          Now
+        </span>
+        <span className="absolute right-0 top-0 text-muted-foreground">Review</span>
+      </div>
+      {/* Bar */}
+      <div className="relative h-2 rounded-full bg-muted my-2">
         <div className="absolute inset-y-0 left-0 rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
-        <div className="absolute -top-1 left-0 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-destructive">
-          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9.5px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">Change made</span>
-        </div>
+        <div className="absolute -top-1 left-0 h-4 w-4 rounded-full border-2 border-background bg-destructive" />
         <div
           className="absolute -top-1 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-primary"
           style={{ left: `${pct}%` }}
-        >
-          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9.5px] uppercase tracking-wide text-foreground whitespace-nowrap">Now</span>
-        </div>
-        <div className="absolute -top-1 right-0 h-4 w-4 translate-x-1/2 rounded-full border-2 border-background bg-emerald-500">
-          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9.5px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">Review</span>
-        </div>
+        />
+        <div className="absolute -top-1 right-0 h-4 w-4 rounded-full border-2 border-background bg-emerald-500" />
       </div>
-      <div className="mt-2 flex items-center justify-between text-[11px]">
-        <span className="text-foreground">{lastChangeAt ? format(lastChangeAt, "MMM d") : "—"}</span>
-        <span className="text-muted-foreground">{status}</span>
-        <span className="text-foreground">{reviewDate ? format(reviewDate, "MMM d") : "—"}</span>
+      {/* Bottom labels */}
+      <div className="relative h-4 text-[11px]">
+        <span className="absolute left-0 top-0 text-foreground">{lastChangeAt ? format(lastChangeAt, "MMM d") : "—"}</span>
+        <span className="absolute left-1/2 top-0 -translate-x-1/2 text-muted-foreground">{status}</span>
+        <span className="absolute right-0 top-0 text-foreground">{reviewDate ? format(reviewDate, "MMM d") : "—"}</span>
       </div>
     </div>
   );
