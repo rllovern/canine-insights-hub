@@ -77,11 +77,17 @@ export function JarvisChat() {
         headers: () => ({
           Authorization: `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         }),
-        body: () => ({
-          propertyId: activeProperty?.id ?? null,
-          from: iso.from,
-          to: iso.to,
-          sessionId,
+        prepareSendMessagesRequest: ({ messages, id, headers, api }) => ({
+          api,
+          headers,
+          body: {
+            id,
+            messages,
+            propertyId: activeProperty?.id ?? null,
+            from: iso.from,
+            to: iso.to,
+            sessionId,
+          },
         }),
         fetch: async (url, init) => {
           const r = await fetch(url as RequestInfo, init);
