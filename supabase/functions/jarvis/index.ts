@@ -54,6 +54,7 @@ PHASE 2 — also include when available:
 - recommendations: each item may include action_type ("open_queue"|"export"|"save_report"|"create_alert_later"|"review_mapping"|"resync_later") and severity ("low"|"medium"|"high"). "create_alert_later" renders as a disabled "Coming in Phase 3" button.
 - actions: report-level actions. "create_alert_disabled" must be disabled with disabled_reason "Alerting ships in Phase 3".
 - summary_cards may include action_payload. Only include action_payload when there is a real drill-in table/evidence target. For speed-to-lead cards, add drill-ins to matching lead rows, responded rows, never-responded rows, and unavailable diagnostics.
+- For Taylor form speed-to-lead, do NOT split the answer into separate cards like "Taylor average speed-to-lead: Unavailable" and "Average for found form leads". Use one card labeled "Taylor form average speed-to-lead" with the average duration as the value and the form human response rate in the hint/detail.
 - speed-to-lead reports MUST include a lead-level table with: lead name / phone / email, lead type, created at, assigned/default owner, first human outbound at, first answered inbound at, first human engagement at, response type, response seconds, current stage, tags, GHL link.
 
 REPORT TYPES (use these report_type strings):
@@ -300,6 +301,58 @@ function sourceBundle(contact: Record<string, unknown> | undefined) {
   return [contact?.source, raw.source, attr.medium, attr.mediumId, attr.sessionSource, attr.url, lastAttr.medium, lastAttr.mediumId, lastAttr.sessionSource, lastAttr.url]
     .filter((v) => v != null && String(v).trim() !== "")
     .join(" · ");
+}
+
+function normalizeSpeedToLeadReportSchema(schema: Record<string, unknown>) {
+  const cards = Array.isArray(schema.summary_cards)
+    ? (schema.summary_cards as Array<Record<string, unknown>>)
+    : null;
+  if (!cards?.length) return schema;
+
+  const txt = (v: unknown) => String(v ?? "").toLowerCase();
+  const has = (card: Record<string, unknown>, needle: RegExp) =>
+    needle.test([card.label, card.value, card.hint, card.detail].map(txt).join(" "));
+  const isUnavailable = (card: Record<string, unknown>) => has(card, /\bunavailable\b|\bno data\b|\bmissing\b/);
+  const isStl = (card: Record<string, unknown>) => has(card, /speed[-\s]?to[-\s]?lead|\bstl\b/);
+  const isFormAverage = (card: Record<string, unknown>) =>
+    has(card, /\baverage\b/) && has(card, /\bform\b/) && !has(card, /response rate/) && !isUnavailable(card);
+  const isFormResponseRate = (card: Record<string, unknown>) =>
+    has(card, /response rate/) && has(card, /\bform\b|\bhuman\b/);
+
+  const unavailableStlIdx = cards.findIndex((card) => isStl(card) && isUnavailable(card));
+  const formAverageIdx = cards.findIndex(isFormAverage);
+  const responseRateIdx = cards.findIndex(isFormResponseRate);
+  if (formAverageIdx === -1 || (unavailableStlIdx === -1 && responseRateIdx === -1)) return schema;
+
+  const speedCard = unavailableStlIdx >= 0 ? cards[unavailableStlIdx] : cards[formAverageIdx];
+  const averageCard = cards[formAverageIdx];
+  const responseRateCard = responseRateIdx >= 0 ? cards[responseRateIdx] : null;
+  const rateText = responseRateCard
+    ? `Human response rate: ${responseRateCard.value ?? "—"}${responseRateCard.detail ? ` · ${responseRateCard.detail}` : ""}`
+    : null;
+  const detailParts = [rateText, averageCard.detail, averageCard.hint]
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean);
+  const label = has(speedCard, /taylor/) || has(averageCard, /taylor/)
+    ? "Taylor form average speed-to-lead"
+    : "Form average speed-to-lead";
+  const merged = {
+    ...speedCard,
+    ...averageCard,
+    label,
+    value: averageCard.value,
+    hint: detailParts[0] ?? averageCard.hint ?? speedCard.hint,
+    detail: detailParts.slice(1).join(" · ") || speedCard.detail,
+    status: averageCard.status ?? speedCard.status,
+    tone: averageCard.tone ?? speedCard.tone,
+    action_payload: averageCard.action_payload ?? speedCard.action_payload ?? responseRateCard?.action_payload,
+  };
+
+  const drop = new Set([unavailableStlIdx, formAverageIdx, responseRateIdx].filter((i) => i >= 0));
+  const insertAt = unavailableStlIdx >= 0 ? unavailableStlIdx : formAverageIdx;
+  const nextCards = cards.filter((_, idx) => !drop.has(idx));
+  nextCards.splice(Math.min(insertAt, nextCards.length), 0, merged);
+  return { ...schema, summary_cards: nextCards };
 }
 
 function buildTools(ctx: Ctx) {
