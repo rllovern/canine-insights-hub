@@ -254,7 +254,40 @@ function buildTools(ctx: Ctx) {
           .lte("date", to.toISOString().slice(0, 10))
           .order("date");
         if (error) throw new Error(error.message);
-        return { property_id: id, days: i.days, rows: data ?? [] };
+        const rows = data ?? [];
+        const byDate = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
+        const bySource = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
+        for (const r of rows) {
+          const date = r.date;
+          const source = r.ad_source ?? "Unknown";
+          const add = (bucket: { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }) => {
+            bucket.cost += Number(r.cost ?? 0);
+            bucket.clicks += Number(r.clicks ?? 0);
+            bucket.impressions += Number(r.impressions ?? 0);
+            bucket.calls += Number(r.record_count ?? 0);
+            bucket.good_leads += Number(r.good_leads ?? 0);
+          };
+          if (!byDate.has(date)) byDate.set(date, { cost: 0, clicks: 0, impressions: 0, calls: 0, good_leads: 0 });
+          if (!bySource.has(source)) bySource.set(source, { cost: 0, clicks: 0, impressions: 0, calls: 0, good_leads: 0 });
+          add(byDate.get(date)!);
+          add(bySource.get(source)!);
+        }
+        const daily = [...byDate.entries()].map(([date, v]) => ({ date, ...v }));
+        const totals = daily.reduce((a, r) => ({
+          cost: a.cost + r.cost,
+          clicks: a.clicks + r.clicks,
+          impressions: a.impressions + r.impressions,
+          calls: a.calls + r.calls,
+          good_leads: a.good_leads + r.good_leads,
+        }), { cost: 0, clicks: 0, impressions: 0, calls: 0, good_leads: 0 });
+        return {
+          property_id: id,
+          days: i.days,
+          row_count: rows.length,
+          totals,
+          by_source: [...bySource.entries()].map(([source, v]) => ({ source, ...v })),
+          daily,
+        };
       }),
     }),
 
