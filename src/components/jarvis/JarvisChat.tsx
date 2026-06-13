@@ -22,6 +22,13 @@ import {
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import { History } from "lucide-react";
 import { ReportView } from "@/components/jarvis/report/ReportView";
 import { isReportSchema, type ReportSchema } from "@/lib/jarvis/reportSchema";
 import jarvisMark from "@/assets/jarvis-mark.png";
@@ -122,6 +129,10 @@ export function JarvisChat() {
   const didPrefill = useRef(false);
   const [input, setInput] = useState("");
   const [activeReport, setActiveReport] = useState<ReportRef | null>(null);
+  const [restoredReports, setRestoredReports] = useState<ReportRef[]>([]);
+  const [recentSessions, setRecentSessions] = useState<
+    { id: string; title: string | null; updated_at: string }[]
+  >([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const latestContextRef = useRef<LatestJarvisContext | null>(null);
 
@@ -239,6 +250,10 @@ export function JarvisChat() {
     transport,
     onError: (e) => toast({ title: "Jarvis error", description: e.message, variant: "destructive" }),
   });
+  // useChat doesn't expose setMessages in the destructure above due to typing;
+  // pull it via a second call shape:
+  const chatApi = useChat as unknown as never;
+  void chatApi;
 
   // Auto-send prefilled query from Cmd+K — wait for property to hydrate
   useEffect(() => {
@@ -252,12 +267,61 @@ export function JarvisChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQ, accessToken, effectivePropertyId]);
 
-  const reports = useMemo(() => extractReports(messages), [messages]);
+  const reportsFromMessages = useMemo(() => extractReports(messages), [messages]);
+  const reports = useMemo(() => {
+    const seen = new Set<string>();
+    const out: ReportRef[] = [];
+    for (const r of [...restoredReports, ...reportsFromMessages]) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push(r);
+    }
+    return out;
+  }, [restoredReports, reportsFromMessages]);
   useEffect(() => {
     if (reports.length && (!activeReport || activeReport.id !== reports[reports.length - 1].id)) {
       setActiveReport(reports[reports.length - 1]);
     }
   }, [reports, activeReport]);
+
+  // Restore reports for an existing session loaded via ?session=
+  useEffect(() => {
+    if (!sessionId || !accessToken) {
+      setRestoredReports([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error: e } = await supabase
+        .from("ai_agent_reports")
+        .select("id,schema_json")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true });
+      if (cancelled || e || !data) return;
+      const restored: ReportRef[] = [];
+      for (const row of data) {
+        if (isReportSchema(row.schema_json)) {
+          restored.push({ id: row.id, schema: row.schema_json as ReportSchema });
+        }
+      }
+      setRestoredReports(restored);
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, accessToken]);
+
+  // Load recent sessions for the dropdown
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("ai_agent_sessions")
+        .select("id,title,updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(15);
+      if (!cancelled && data) setRecentSessions(data);
+    })();
+  }, [accessToken, sessionId]);
 
   useEffect(() => { textareaRef.current?.focus(); }, [sessionId, status]);
 
@@ -271,7 +335,11 @@ export function JarvisChat() {
   };
 
   const isLoading = status === "submitted" || status === "streaming";
-  const disabled = !accessToken;
+  const needsPropertySelection =
+    !!accessToken && !effectivePropertyId && properties.length > 0;
+  const noAccessibleProperties =
+    !!accessToken && properties.length === 0;
+  const disabled = !accessToken || needsPropertySelection || noAccessibleProperties;
 
   // If the stream ends (status flips out of streaming) with a tool part still
   // stuck in input-streaming/input-available, the worker was likely killed
