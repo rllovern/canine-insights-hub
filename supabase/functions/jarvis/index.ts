@@ -36,10 +36,33 @@ RULES:
 
 REPORT SCHEMA (when calling save_visual_report):
 The 'schema' arg must include type:"report", title, scope, summary_cards, charts, tables, recommendations, evidence.
-CHART SHAPE (strict): each chart MUST be { type: "bar"|"line"|"area", title, x: "<dataKey>", y: ["<dataKey>", ...], data: [{...}] }.
+CHART SHAPE (strict): each chart MUST be { type: "bar"|"line"|"area"|"stacked_bar"|"donut"|"timeline"|"funnel", title, x: "<dataKey>", y: ["<dataKey>", ...], data: [{...}] }.
 - Use "x" (string) and "y" (array of strings), NOT "x_key" and NOT "series".
 - Every key in "x" and "y" must exist on each row of "data".
-TABLE SHAPE (strict): { title, columns: [{ key, label, align? }], rows: [{...}] }. Every column.key must exist on each row.`;
+TABLE SHAPE (strict): { title, columns: [{ key, label, type?, align? }], rows: [{...}] }. Every column.key must exist on each row. column.type can be "text"|"number"|"currency"|"percent"|"date"|"badge"|"link".
+
+PHASE 2 — also include when available:
+- status: { label, severity: "good"|"warning"|"critical"|"neutral", explanation? } — overall report verdict.
+- comparison_range: { from, to } when comparing two periods.
+- caveats: string[] — data freshness / coverage caveats.
+- confidence: { level: "high"|"medium"|"low", explanation } — drives a confidence badge.
+- recommendations: each item may include action_type ("open_queue"|"export"|"save_report"|"create_alert_later"|"review_mapping"|"resync_later") and severity ("low"|"medium"|"high"). "create_alert_later" renders as a disabled "Coming in Phase 3" button.
+- actions: report-level actions. "create_alert_disabled" must be disabled with disabled_reason "Alerting ships in Phase 3".
+
+REPORT TYPES (use these report_type strings):
+- "performance_comparison" — compare two periods
+- "lead_performance" — full lead funnel + agents + queues
+- "account_stability" — Google Ads volatility / change impact
+- "ctm_ghl_reconciliation" — refined CTM↔GHL match report
+- "data_quality_audit" — trust / freshness audit
+- "client_summary" — client-safe summary (executive tone, no internal blame language)
+
+CLIENT-SAFE MODE: when the user asks for a client/external summary, never use raw debugging terms ("ghl_lead_facts", "stale", "unmatched"); translate to plain business language and preserve caveats professionally. Always lead with wins → risks → what's next.
+
+CLARIFY FIRST when:
+- "missing leads" is ambiguous (CTM↔GHL, GHL leads w/o opportunity, leads w/o human response?)
+- date range is unspecified and not in context
+- multiple report types could satisfy the request`;
 
 function svc() {
   return createClient(
