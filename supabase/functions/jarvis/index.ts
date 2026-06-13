@@ -230,6 +230,75 @@ function resolveRange(ctx: Ctx, from?: string, to?: string, days?: number) {
   return { from: f.toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) };
 }
 
+function secondsBetween(a: string | null | undefined, b: string | null | undefined) {
+  if (!a || !b) return null;
+  const diff = new Date(a).getTime() - new Date(b).getTime();
+  return Number.isFinite(diff) ? Math.max(0, Math.round(diff / 1000)) : null;
+}
+
+function percentile(values: number[], p: number) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = (sorted.length - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+function normText(v: unknown) {
+  return String(v ?? "").trim().toLowerCase();
+}
+
+function textIncludes(haystack: unknown, needle: unknown) {
+  const h = normText(haystack);
+  const n = normText(needle);
+  return !!h && !!n && h.includes(n);
+}
+
+function levenshtein(a: string, b: string) {
+  const aa = normText(a);
+  const bb = normText(b);
+  const dp = Array.from({ length: aa.length + 1 }, (_, i) => [i, ...Array(bb.length).fill(0)]);
+  for (let j = 1; j <= bb.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= aa.length; i++) {
+    for (let j = 1; j <= bb.length; j++) {
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (aa[i - 1] === bb[j - 1] ? 0 : 1),
+      );
+    }
+  }
+  return dp[aa.length][bb.length];
+}
+
+function detectLeadType(contact: Record<string, unknown> | undefined, firstChannel?: string | null) {
+  const raw = (contact?.raw ?? {}) as Record<string, unknown>;
+  const attr = (raw.attributionSource ?? {}) as Record<string, unknown>;
+  const lastAttr = (raw.lastAttributionSource ?? {}) as Record<string, unknown>;
+  const hay = [
+    contact?.source, firstChannel,
+    attr.medium, attr.mediumId, attr.sessionSource, attr.url,
+    lastAttr.medium, lastAttr.mediumId, lastAttr.sessionSource, lastAttr.url,
+    raw.source, raw.formId, raw.formName, raw.source_event_type,
+  ].map((v) => String(v ?? "").toLowerCase()).join(" ");
+  if (/external[_\s-]?form|\bform\b|formid|formname|submission/.test(hay)) return "form";
+  if (/\bcall\b|phone|type_call/.test(hay)) return "call";
+  if (/\bchat\b|webchat/.test(hay)) return "chat";
+  if (/\bsms\b|text message/.test(hay)) return "sms";
+  return "unknown";
+}
+
+function sourceBundle(contact: Record<string, unknown> | undefined) {
+  const raw = (contact?.raw ?? {}) as Record<string, unknown>;
+  const attr = (raw.attributionSource ?? {}) as Record<string, unknown>;
+  const lastAttr = (raw.lastAttributionSource ?? {}) as Record<string, unknown>;
+  return [contact?.source, raw.source, attr.medium, attr.mediumId, attr.sessionSource, attr.url, lastAttr.medium, lastAttr.mediumId, lastAttr.sessionSource, lastAttr.url]
+    .filter((v) => v != null && String(v).trim() !== "")
+    .join(" · ");
+}
+
 function buildTools(ctx: Ctx) {
   return {
     get_property_context: tool({
