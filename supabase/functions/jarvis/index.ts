@@ -18,6 +18,8 @@ const corsHeaders = {
   "Access-Control-Expose-Headers": "x-session-id",
 };
 
+const DEBUG = Deno.env.get("JARVIS_DEBUG") === "1";
+
 const SYSTEM_PROMPT = `You are Jarvis, an AI Command Agent for an advertising/CRM analytics platform.
 
 You operate the dashboard on behalf of an authenticated user. NEVER invent numbers. ALWAYS call a tool to get data before answering.
