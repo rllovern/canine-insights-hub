@@ -48,8 +48,9 @@ async function authUser(req: Request) {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_ANON_KEY")!,
   );
-  const { data } = await c.auth.getUser(token);
-  return data.user ?? null;
+  const { data, error } = await c.auth.getClaims(token);
+  if (error || !data?.claims?.sub) return null;
+  return { id: data.claims.sub as string };
 }
 
 function normPhone(s: string | null | undefined) {
@@ -567,7 +568,7 @@ serve(async (req) => {
     const contextHeader = `\n\nACTIVE CONTEXT:\n- property_id: ${propertyId ?? "(none)"}\n- date_range: ${from ?? "?"} → ${to ?? "?"}`;
 
     const result = streamText({
-      model: gateway("google/gemini-3-flash-preview"),
+      model: gateway("openai/gpt-5.5"),
       system: SYSTEM_PROMPT + contextHeader,
       messages: convertToModelMessages(messages),
       tools: buildTools(ctx),

@@ -158,7 +158,7 @@ export function JarvisChat() {
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold leading-tight">Jarvis</div>
             <div className="text-[11px] text-muted-foreground truncate">
-              {activeProperty?.name ?? "No property"} · {iso.from} → {iso.to}
+              Powered by GPT-5.5 · {activeProperty?.name ?? "No property"} · {iso.from} → {iso.to}
             </div>
           </div>
           <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); setActiveReport(null); setParams({}, { replace: true }); }}>
