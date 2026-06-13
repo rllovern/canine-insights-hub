@@ -98,18 +98,37 @@ function extractReports(messages: UIMessage[]): ReportRef[] {
 
 export function JarvisChat() {
   const { session } = useAuth();
-  const { activeProperty } = useProperties();
-  const { range } = useDashboard();
+  const { activeProperty, properties, setActiveProperty } = useProperties();
+  const { range, compareRange, compareMode } = useDashboard();
   const [params, setParams] = useSearchParams();
   const sessionParam = params.get("session");
   const [sessionId, setSessionId] = useState<string | null>(sessionParam);
   const initialQ = params.get("q");
+  const urlPropertyId = params.get("propertyId");
+  const urlFrom = params.get("from");
+  const urlTo = params.get("to");
   const didPrefill = useRef(false);
   const [input, setInput] = useState("");
   const [activeReport, setActiveReport] = useState<ReportRef | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const iso = useMemo(() => rangeToISO(range), [range]);
+  const cmpIso = useMemo(
+    () => (compareMode !== "off" && compareRange ? rangeToISO(compareRange) : null),
+    [compareMode, compareRange],
+  );
+
+  // Hydrate active property from ?propertyId= if present
+  useEffect(() => {
+    if (!urlPropertyId) return;
+    if (activeProperty?.id === urlPropertyId) return;
+    const match = properties.find((p) => p.id === urlPropertyId);
+    if (match) setActiveProperty(match);
+  }, [urlPropertyId, properties, activeProperty?.id, setActiveProperty]);
+
+  const effectiveFrom = urlFrom ?? iso.from;
+  const effectiveTo = urlTo ?? iso.to;
+  const effectivePropertyId = activeProperty?.id ?? urlPropertyId ?? null;
 
   const accessToken = session?.access_token ?? null;
 
@@ -118,16 +137,43 @@ export function JarvisChat() {
       new DefaultChatTransport({
         api: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis`,
         prepareSendMessagesRequest: ({ messages, id, api }) => {
-          return {
-            api,
-            body: {
+          const payload = {
             id,
             messages,
-            propertyId: activeProperty?.id ?? null,
-            from: iso.from,
-            to: iso.to,
+            propertyId: effectivePropertyId,
+            propertyName: activeProperty?.name ?? null,
+            propertySlug: (activeProperty as { slug?: string } | null)?.slug ?? null,
+            from: effectiveFrom,
+            to: effectiveTo,
+            compareFrom: cmpIso?.from ?? null,
+            compareTo: cmpIso?.to ?? null,
             sessionId,
+            pageContext: {
+              route: window.location.pathname,
+              search: window.location.search,
             },
+          };
+          if (import.meta.env.DEV) {
+            console.log("[Jarvis Context Debug]", {
+              selectedPropertyFromDashboard: activeProperty,
+              propertyId: payload.propertyId,
+              propertyName: payload.propertyName,
+              propertySlug: payload.propertySlug,
+              dateRange: { from: payload.from, to: payload.to },
+              comparisonRange: { from: payload.compareFrom, to: payload.compareTo },
+              assistantRouteParams: Object.fromEntries(new URLSearchParams(window.location.search)),
+            });
+            console.log("[Jarvis Request Payload]", {
+              propertyId: payload.propertyId,
+              propertyName: payload.propertyName,
+              dateRange: { from: payload.from, to: payload.to },
+              pageContext: payload.pageContext,
+              messageCount: payload.messages?.length,
+            });
+          }
+          return {
+            api,
+            body: payload,
           };
         },
         fetch: async (url, init) => {
@@ -149,7 +195,7 @@ export function JarvisChat() {
         },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, activeProperty?.id, iso.from, iso.to, sessionId],
+    [accessToken, effectivePropertyId, activeProperty?.name, effectiveFrom, effectiveTo, cmpIso?.from, cmpIso?.to, sessionId],
   );
 
   const { messages, sendMessage, status, error } = useChat({
@@ -158,9 +204,9 @@ export function JarvisChat() {
     onError: (e) => toast({ title: "Jarvis error", description: e.message, variant: "destructive" }),
   });
 
-  // Auto-send prefilled query from Cmd+K
+  // Auto-send prefilled query from Cmd+K — wait for property to hydrate
   useEffect(() => {
-    if (initialQ && accessToken && !didPrefill.current) {
+    if (initialQ && accessToken && effectivePropertyId && !didPrefill.current) {
       didPrefill.current = true;
       sendMessage({ text: initialQ });
       const next = new URLSearchParams(params);
@@ -168,7 +214,7 @@ export function JarvisChat() {
       setParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQ, accessToken]);
+  }, [initialQ, accessToken, effectivePropertyId]);
 
   const reports = useMemo(() => extractReports(messages), [messages]);
   useEffect(() => {
