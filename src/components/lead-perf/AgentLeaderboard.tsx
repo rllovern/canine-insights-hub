@@ -71,7 +71,7 @@ export function AgentLeaderboard({
             <TableHead className="text-right">Show %</TableHead>
             <TableHead className="text-right">Won</TableHead>
             <TableHead className="text-right">Win %</TableHead>
-            <TableHead className="text-right">Median STL</TableHead>
+            <TableHead className="text-right">Median outbound STL</TableHead>
             <TableHead className="text-right">Avg attempts</TableHead>
             <TableHead className="text-right">Stale</TableHead>
           </TableRow>

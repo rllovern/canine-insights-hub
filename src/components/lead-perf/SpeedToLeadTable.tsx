@@ -28,12 +28,12 @@ export function SpeedToLeadTable({
 
   const rows: Row[] = [
     {
-      metric: "Human Response Rate",
+      metric: "Outbound Human Response Rate",
       value: formatPct(respPct),
       detail: `${formatNum(speed.responded)} of ${formatNum(total)} leads`,
     },
     {
-      metric: "Median Human Response",
+      metric: "Median Outbound Human Response",
       value: formatDuration(speed.median_human_raw_seconds),
       detail: speed.median_human_business_seconds != null
         ? `${formatDuration(speed.median_human_business_seconds)} business-hours`
@@ -63,13 +63,18 @@ export function SpeedToLeadTable({
     {
       metric: "No Human Response",
       value: formatNum(speed.never_responded),
-      detail: `${formatPct(speed.pct_never_responded)} of leads`,
+      detail: `${formatPct(speed.pct_never_responded)} without outbound follow-up`,
       drill: speed.never_responded > 0 ? "never_responded" : undefined,
+    },
+    {
+      metric: "Answered Inbound, No Outbound",
+      value: formatNum(speed.answered_inbound_only ?? 0),
+      detail: "separate from speed-to-lead",
     },
     {
       metric: "Currently Waiting",
       value: formatNum(speed.currently_waiting),
-      detail: `open ≤ ${speed.active_window_days}d, no human reply`,
+      detail: `open ≤ ${speed.active_window_days}d, no outbound reply`,
       drill: speed.currently_waiting > 0 ? "currently_waiting" : undefined,
     },
   ];
@@ -78,7 +83,7 @@ export function SpeedToLeadTable({
     <div className="rounded-lg border bg-card overflow-hidden">
       <div className="border-b px-3 py-2 flex items-baseline justify-between">
         <h3 className="text-xs uppercase tracking-wider font-semibold text-foreground">Speed to Lead</h3>
-        <span className="text-[10.5px] text-muted-foreground">Human follow-up only</span>
+        <span className="text-[10.5px] text-muted-foreground">Outbound human follow-up only</span>
       </div>
       <table className="w-full text-sm">
         <tbody>
@@ -110,7 +115,7 @@ export function AutomationInsightLine({
   return (
     <p className="text-[11.5px] text-muted-foreground px-1">
       Automation median: <span className="text-foreground font-medium">{formatDuration(speed.median_automation_seconds)}</span>.{" "}
-      Human median: <span className="text-foreground font-medium">{formatDuration(speed.median_human_raw_seconds)}</span>.{" "}
+      Outbound human median: <span className="text-foreground font-medium">{formatDuration(speed.median_human_raw_seconds)}</span>.{" "}
       Gap: <span className="text-foreground font-medium">{formatDuration(speed.human_vs_automation_gap_seconds ?? null)}</span>.{" "}
       Automation touches per lead: <span className="text-foreground font-medium">{Number(handling.avg_automation_touches ?? 0).toFixed(2)}</span>.{" "}
       AI is bucketed into automation for v1.

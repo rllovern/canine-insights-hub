@@ -272,7 +272,7 @@ function buildTools(ctx: Ctx) {
     }),
 
     get_lead_performance_snapshot: tool({
-      description: "Speed-to-lead, response stats, and currently waiting leads for a property.",
+      description: "Speed-to-lead, response stats, and currently waiting leads for a property. Human response means outbound human follow-up; answered inbound calls are reported separately and must not be described as response speed.",
       inputSchema: z.object({
         property_id: z.string().uuid().optional(),
         days: z.number().int().min(1).max(180).default(30),
@@ -811,7 +811,7 @@ function buildTools(ctx: Ctx) {
 
     get_lead_performance_report: tool({
       description:
-        "Full Lead Performance state: speed-to-lead, handling, pipeline conversion, agents, data quality.",
+        "Full Lead Performance state: speed-to-lead, handling, pipeline conversion, agents, data quality. Human response means outbound human follow-up; answered inbound calls are reported separately and must not be described as response speed.",
       inputSchema: z.object({
         property_id: z.string().uuid().optional(),
         days: z.number().int().min(1).max(180).default(30),

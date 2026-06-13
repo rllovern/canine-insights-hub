@@ -5,17 +5,20 @@ export type SpeedData = {
   total_leads: number;
   responded: number;
   never_responded: number;
+  answered_inbound_only?: number;
   pct_never_responded: number;
   pct_under_1m: number;
   pct_under_5m: number;
   pct_under_15m: number;
   median_human_raw_seconds: number | null;
   median_human_business_seconds: number | null;
+  median_human_engagement_seconds?: number | null;
   median_automation_seconds: number | null;
   median_ai_seconds: number | null;
   human_vs_automation_gap_seconds: number | null;
   currently_waiting: number;
   active_window_days: number;
+  metric_definition?: string;
 };
 
 export type HandlingData = {
