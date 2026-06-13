@@ -283,10 +283,10 @@ function buildTools(ctx: Ctx) {
         const to = new Date();
         const from = new Date(to.getTime() - i.days * 86400_000);
         const [speed, handling] = await Promise.all([
-          ctx.supabase.rpc("lead_perf_speed", {
+          ctx.userSupabase.rpc("lead_perf_speed", {
             _property_ids: [id], _from: from.toISOString(), _to: to.toISOString(),
           }),
-          ctx.supabase.rpc("lead_perf_handling", {
+          ctx.userSupabase.rpc("lead_perf_handling", {
             _property_ids: [id], _from: from.toISOString(), _to: to.toISOString(),
           }),
         ]);
@@ -823,11 +823,11 @@ function buildTools(ctx: Ctx) {
         const from = new Date(to.getTime() - i.days * 86400_000);
         const args = { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() };
         const [speed, handling, pipeline, agents, quality] = await Promise.all([
-          ctx.supabase.rpc("lead_perf_speed", args),
-          ctx.supabase.rpc("lead_perf_handling", args),
-          ctx.supabase.rpc("lead_perf_pipeline", args),
-          ctx.supabase.rpc("lead_perf_agents", args),
-          ctx.supabase.rpc("lead_perf_quality", args),
+          ctx.userSupabase.rpc("lead_perf_speed", args),
+          ctx.userSupabase.rpc("lead_perf_handling", args),
+          ctx.userSupabase.rpc("lead_perf_pipeline", args),
+          ctx.userSupabase.rpc("lead_perf_agents", args),
+          ctx.userSupabase.rpc("lead_perf_quality", args),
         ]);
         const { data: ghlSrc } = await ctx.supabase.from("property_data_sources")
           .select("last_synced_at").eq("property_id", id).eq("source", "ghl").maybeSingle();
