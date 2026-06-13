@@ -411,13 +411,17 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
                 <CountdownRing daysLeft={accountDaysLeft} total={windowTotal} impact={lastMajor?.impact ?? "low"} />
                 <div className="min-w-0">
                   <div className="text-sm font-semibold">
-                    {accountDaysLeft > 0 ? `${accountDaysLeft} days left` : "No active window"}
+                    {accountDaysLeft > 0 ? `${accountDaysLeft} days remaining` : "No active window"}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    {windowTotal > 0 ? `Day ${currentDay} of ${windowTotal}` : "—"}
+                    {windowTotal > 0 ? `${windowTotal}-day window` : "—"}
+                    {lastMajor && <> · {capitalize(lastMajor.impact)} impact</>}
                   </div>
-                  {lastMajor && (
-                    <div className="text-[10.5px] text-muted-foreground">{capitalize(lastMajor.impact)}-impact window</div>
+                  {lastMajor && windowTotal > 0 && (
+                    <div className="text-[10.5px] text-muted-foreground">
+                      Started {format(new Date(lastMajor.change_date_time), "MMM d")}
+                      {reviewDate && <> · Review {format(reviewDate, "MMM d")}</>}
+                    </div>
                   )}
                 </div>
               </div>
@@ -450,7 +454,7 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Campaign</TableHead>
+                  <TableHead>Campaign / Scope</TableHead>
                   <TableHead>Last Major Change</TableHead>
                   <TableHead>Change Type</TableHead>
                   <TableHead>Impact</TableHead>
@@ -477,10 +481,19 @@ export function AccountStability({ propertyId }: { propertyId: string }) {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDistanceToNow(new Date(c.change_date_time), { addSuffix: true })}</TableCell>
                       <TableCell className="text-xs truncate max-w-[220px]">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                          {c.reason}
-                        </span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1.5 cursor-help">
+                                <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                                {c.reason}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs text-xs">
+                              {reasonTooltip(c.reason)}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </TableCell>
                       <TableCell><Badge variant={impactTone(c.impact)} className="h-5 text-[10px] uppercase">{c.impact}</Badge></TableCell>
                       <TableCell className="text-xs">
