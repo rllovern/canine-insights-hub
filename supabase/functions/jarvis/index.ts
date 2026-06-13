@@ -327,7 +327,15 @@ function buildTools(ctx: Ctx) {
         days: z.number().int().min(1).max(90).default(10),
       }),
       execute: wrap(ctx, "reconcile_ctm_to_ghl", async (i) => {
-        const id = resolveProperty(ctx, i, "reconcile_ctm_to_ghl");
+        logToolContext("reconcile_ctm_to_ghl", i, ctx);
+        const id = i.property_id ?? i.propertyId ?? ctx.defaultPropertyId;
+        if (!id) {
+          return {
+            ok: false,
+            error: "missing_property_id",
+            message: "No property selected.",
+          };
+        }
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const toD = new Date();
         const fromD = new Date(toD.getTime() - i.days * 86400_000);
@@ -691,9 +699,8 @@ serve(async (req) => {
       stopWhen: stepCountIs(50),
     });
 
-    return result.toUIMessageStreamResponse({
+    const streamResponse = result.toUIMessageStreamResponse({
       originalMessages: messages,
-      headers: { ...corsHeaders, "x-session-id": sessionId! },
       onFinish: async ({ responseMessage }) => {
         try {
           const text = responseMessage.parts
@@ -710,6 +717,14 @@ serve(async (req) => {
           console.error("persist assistant failed", e);
         }
       },
+    });
+    const responseHeaders = new Headers(streamResponse.headers);
+    for (const [key, value] of Object.entries(corsHeaders)) responseHeaders.set(key, value);
+    responseHeaders.set("x-session-id", sessionId!);
+    return new Response(streamResponse.body, {
+      status: streamResponse.status,
+      statusText: streamResponse.statusText,
+      headers: responseHeaders,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
