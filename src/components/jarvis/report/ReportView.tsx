@@ -328,4 +328,13 @@ function ReportViewInner({
   );
 }
 
+export function ReportView(props: { schema: ReportSchema; reportId?: string; onSave?: (id: string) => Promise<void> | void }) {
+  const normalized = normalizeReportSchema(props.schema);
+  return (
+    <ReportErrorBoundary schema={normalized}>
+      <ReportViewInner {...props} schema={normalized} />
+    </ReportErrorBoundary>
+  );
+}
+
 export default ReportView;
