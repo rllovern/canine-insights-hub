@@ -499,14 +499,17 @@ function buildTools(ctx: Ctx) {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
   try {
-    const user = await authUser(req);
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Missing or invalid user session. Please sign in and retry." }), {
+    const auth = await authUser(req);
+    if (!auth.user) {
+      return new Response(JSON.stringify({ error: auth.error, detail: auth.detail }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const user = auth.user;
     const key = Deno.env.get("LOVABLE_API_KEY");
     if (!key) {
       return new Response(JSON.stringify({ error: "LOVABLE_API_KEY missing" }), {
