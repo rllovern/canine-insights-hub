@@ -474,7 +474,7 @@ serve(async (req) => {
   try {
     const user = await authUser(req);
     if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      return new Response(JSON.stringify({ error: "Missing or invalid user session. Please sign in and retry." }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
