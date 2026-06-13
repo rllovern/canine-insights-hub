@@ -614,7 +614,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    console.log("jarvis body keys:", Object.keys(body));
+    if (DEBUG) console.log("jarvis body keys:", Object.keys(body));
     const rawMessages = body.messages ?? body.uiMessages ?? (body.message ? [body.message] : null);
     if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
       return new Response(
@@ -635,22 +635,16 @@ serve(async (req) => {
     const to = (body.to as string | undefined) ?? (bodyDateRange?.to as string | undefined) ?? null;
     let sessionId = body.sessionId as string | undefined;
 
-    console.log("[Jarvis Edge Body Context]", {
-      propertyId: body?.propertyId ?? null,
-      contextPropertyId: body?.context?.propertyId ?? null,
-      propertyName: body?.propertyName ?? body?.context?.propertyName ?? null,
-      dateRange: body?.dateRange ?? body?.context?.dateRange ?? null,
-      messageCount: body?.messages?.length,
-    });
-
-    console.log("[Jarvis Edge Context Debug]", {
-      propertyId,
-      propertyName: body.propertyName ?? body.context?.propertyName ?? null,
-      from,
-      to,
-      sessionId: sessionId ?? null,
-      pageContext: body.pageContext ?? null,
-    });
+    if (DEBUG) {
+      console.log("[Jarvis Edge Context Debug]", {
+        propertyId,
+        propertyName: body.propertyName ?? body.context?.propertyName ?? null,
+        from,
+        to,
+        sessionId: sessionId ?? null,
+        messageCount: body?.messages?.length,
+      });
+    }
 
     const supabase = svc();
 
