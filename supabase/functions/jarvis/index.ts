@@ -28,6 +28,9 @@ RULES:
 - For any analytical question, call the relevant tool(s) first, then answer using only the tool output.
 - Behave like a conversational command agent, not a report factory. If the exact ask cannot be answered, say that plainly first, show the lookup/filter reason, and offer concrete next actions instead of producing a polished report that misses the ask.
 - For speed-to-lead questions, ALWAYS call get_speed_to_lead_breakdown. Respect the requested metric: if the user asks for average, compute/report average; do not substitute median. For a person name like "Taylor", resolve the name through the tool before saying unavailable. For "forms only", use the tool's lead_type:"form" filter.
+- "Taylor" always refers to the human salesperson responding inside GHL (the only real human responder for Ridgeside K9). When a question mentions Taylor without further qualification, set filters.agent_name:"Taylor" on get_speed_to_lead_breakdown. Do NOT treat Taylor as automation, AI, or default-owner-only — always resolve through the GHL user lookup.
+- When reporting any speed-to-lead duration to the user (average, median, p75, p90, or per-lead values), ALWAYS format the duration in human-readable units ("Xh Ym Zs", "Ym Zs", or "Zs") — never raw seconds. Use the *_human fields returned by the tool when present.
+- When the user asks for speed-to-lead on forms (or any subset), ALWAYS also report the human response rate as a percentage (responded human leads / total matching leads) alongside the duration, using human_response_rate_pct from the tool output.
 - If the user asks for "missing CTM leads in GHL", "reconciliation", "leads that didn't make it", etc., call reconcile_ctm_to_ghl, then save_visual_report with a complete report schema, then briefly describe what you found.
 - When the user asks for account/property-specific analysis and the request context includes an active propertyId, use that propertyId automatically. Do not ask the user for a property ID if one is present in request context.
 - Always include scope (property, date range, sources used) when reporting numbers.
@@ -550,6 +553,26 @@ function buildTools(ctx: Ctx) {
         const p90 = percentile(responseValues, 0.9);
         const under = (s: number) => responseValues.filter((v) => v <= s).length;
 
+        const fmtDur = (s: number | null): string | null => {
+          if (s == null || !Number.isFinite(Number(s))) return null;
+          const n = Math.max(0, Math.round(Number(s)));
+          if (n < 60) return `${n}s`;
+          if (n < 3600) {
+            const m = Math.floor(n / 60);
+            const rs = n % 60;
+            return rs ? `${m}m ${rs}s` : `${m}m`;
+          }
+          const h = Math.floor(n / 3600);
+          const m = Math.floor((n % 3600) / 60);
+          const rs = n % 60;
+          const parts = [`${h}h`];
+          if (m) parts.push(`${m}m`);
+          if (rs) parts.push(`${rs}s`);
+          return parts.join(" ");
+        };
+        const humanResponseRatePct = total > 0 ? (responded / total) * 100 : null;
+        const requestedMetricSeconds = filters.metric_type === "median" ? median : filters.metric_type === "p75" ? p75 : filters.metric_type === "p90" ? p90 : average;
+
         if (requestedAgent && agentResolution?.status === "resolved" && total === 0) {
           unavailableReasons.push(`${requestedAgent} has no matching leads in this date range after filters were applied.`);
         }
@@ -579,11 +602,18 @@ function buildTools(ctx: Ctx) {
           median_speed_to_lead_seconds: median,
           p75_speed_to_lead_seconds: p75,
           p90_speed_to_lead_seconds: p90,
+          average_speed_to_lead_human: fmtDur(average),
+          median_speed_to_lead_human: fmtDur(median),
+          p75_speed_to_lead_human: fmtDur(p75),
+          p90_speed_to_lead_human: fmtDur(p90),
+          human_response_rate_pct: humanResponseRatePct,
+          human_response_rate_label: humanResponseRatePct == null ? null : `${humanResponseRatePct.toFixed(1)}%`,
           under_1_min: under(60),
           under_5_min: under(300),
           under_15_min: under(900),
           requested_metric_type: filters.metric_type ?? "average",
-          requested_metric_value_seconds: filters.metric_type === "median" ? median : filters.metric_type === "p75" ? p75 : filters.metric_type === "p90" ? p90 : average,
+          requested_metric_value_seconds: requestedMetricSeconds,
+          requested_metric_value_human: fmtDur(requestedMetricSeconds),
           response_definition: filters.include_answered_inbound_calls ? "first human engagement: outbound human follow-up or answered inbound call" : "first outbound human follow-up only",
           time_basis: filters.time_basis ?? "raw",
           lead_level_rows: rows.slice(0, i.limit),
