@@ -1157,6 +1157,7 @@ export type Database = {
         Row: {
           brand_color: string | null
           created_at: string
+          default_lead_owner_user_id: string | null
           hidden_metrics: Json
           id: string
           is_active: boolean
@@ -1171,6 +1172,7 @@ export type Database = {
         Insert: {
           brand_color?: string | null
           created_at?: string
+          default_lead_owner_user_id?: string | null
           hidden_metrics?: Json
           id?: string
           is_active?: boolean
@@ -1185,6 +1187,7 @@ export type Database = {
         Update: {
           brand_color?: string | null
           created_at?: string
+          default_lead_owner_user_id?: string | null
           hidden_metrics?: Json
           id?: string
           is_active?: boolean
@@ -1702,6 +1705,7 @@ export type Database = {
         Returns: {
           brand_color: string | null
           created_at: string
+          default_lead_owner_user_id: string | null
           hidden_metrics: Json
           id: string
           is_active: boolean
@@ -1793,6 +1797,7 @@ export type Database = {
           _to: string
         }
         Returns: {
+          agent_is_default: boolean
           agent_name: string
           assigned_user_id: string
           canonical_stage: Database["public"]["Enums"]["ghl_canonical_stage"]
@@ -1804,6 +1809,7 @@ export type Database = {
           human_attempt_count: number
           issue_type: string
           last_activity_at: string
+          last_activity_type: string
           lead_created_at: string
           phone: string
           property_id: string
