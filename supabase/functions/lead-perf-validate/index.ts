@@ -249,7 +249,14 @@ Deno.serve(async (req) => {
   const nfrWithLiveAnsweredCalls: Json[] = [];
   for (const row of needsRows ?? []) {
     const cid = String((row as Json).contact_id ?? "");
-    const conversations = liveConvByContact.get(cid) ?? [];
+    let conversations = liveConvByContact.get(cid) ?? [];
+    if (!conversations.length) {
+      try {
+        const targeted = await ghl("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(cid)}&limit=100`, token);
+        conversations = ((targeted.conversations as Json[]) ?? []).filter((c) => String((c as Json).contactId ?? "") === cid);
+        if (conversations.length) liveConvByContact.set(cid, conversations);
+      } catch (_e) { /* keep validation read-only and best-effort */ }
+    }
     const liveMessages: Json[] = [];
     let capped = false;
     for (const c of conversations) {
@@ -258,7 +265,7 @@ Deno.serve(async (req) => {
       liveMessages.push(...fetched.messages.map((m) => ({ ...(m as Json), conversation_id: (c as Json).id, contact_id: cid })));
     }
     const { count: localN } = await admin.from("ghl_messages").select("*", { count: "exact", head: true }).eq("property_id", property_id).eq("contact_id", cid);
-    if ((localN ?? 0) !== liveMessages.length) localVsLive.push({ contact_id: cid, local_message_count: localN ?? 0, live_message_count: liveMessages.length, pagination_capped: capped });
+    if ((localN ?? 0) !== liveMessages.length) localVsLive.push({ contact_id: cid, local_message_count: localN ?? 0, live_message_count: liveMessages.length, live_conversation_count: conversations.length, pagination_capped: capped });
     const leadCreated = new Date(String((row as Json).lead_created_at ?? 0)).getTime();
     const answered = liveMessages.filter((m) => isAnsweredInboundCall(m) && new Date(String((m as Json).dateAdded ?? "")).getTime() >= leadCreated);
     if (answered.length) nfrWithLiveAnsweredCalls.push({ contact_id: cid, lead_created_at: (row as Json).lead_created_at, current_reason: (row as Json).needs_first_response_reason, answered_inbound_calls: answered.map((m) => ({ id: (m as Json).id, conversation_id: (m as Json).conversation_id, dateAdded: (m as Json).dateAdded, duration: msgDuration(m), status: msgStatus(m) })) });
@@ -286,13 +293,16 @@ Deno.serve(async (req) => {
       if (mapping?.suppresses_needs_first_response === true) liveHandledOpps.push({ contact_id: (o as Json).contactId, opportunity_id: (o as Json).id, live_stage_id: stageId, mapping });
     }
   }
+  const noLocalButLive = localVsLive.filter((r) => Number((r as Json).local_message_count ?? 0) === 0 && Number((r as Json).live_message_count ?? 0) > 0);
   completeness.local_message_count_differs_from_live = localVsLive;
+  completeness.lead_queue_rows_with_no_local_messages_but_live_conversation_exists = noLocalButLive;
   completeness.needs_first_response_with_live_answered_inbound_calls = nfrWithLiveAnsweredCalls;
   completeness.needs_first_response_with_live_handled_opportunities = liveHandledOpps;
   completeness.endpoint_pagination = { conversation_search_capped: conversationSearchCapped, opportunity_pagination_capped: oppPaginationCapped };
   if (conversationSearchCapped) (completeness.warnings as string[]).push("Conversation search pagination hit the validation safety cap.");
   if (oppPaginationCapped) (completeness.warnings as string[]).push("Opportunity pagination hit the validation safety cap.");
   if (localVsLive.length) (completeness.warnings as string[]).push("Some Needs First Response contacts have local/live message-count drift.");
+  if (noLocalButLive.length) (completeness.warnings as string[]).push("Some Needs First Response rows have no local messages but live GHL conversations/messages exist.");
   if (nfrWithLiveAnsweredCalls.length) (completeness.warnings as string[]).push("Some Needs First Response contacts have live answered inbound calls.");
   if (liveHandledOpps.length) (completeness.warnings as string[]).push("Some Needs First Response contacts have live handled stages.");
   report.pagination_completeness = completeness;
