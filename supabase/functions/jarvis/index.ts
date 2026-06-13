@@ -36,10 +36,33 @@ RULES:
 
 REPORT SCHEMA (when calling save_visual_report):
 The 'schema' arg must include type:"report", title, scope, summary_cards, charts, tables, recommendations, evidence.
-CHART SHAPE (strict): each chart MUST be { type: "bar"|"line"|"area", title, x: "<dataKey>", y: ["<dataKey>", ...], data: [{...}] }.
+CHART SHAPE (strict): each chart MUST be { type: "bar"|"line"|"area"|"stacked_bar"|"donut"|"timeline"|"funnel", title, x: "<dataKey>", y: ["<dataKey>", ...], data: [{...}] }.
 - Use "x" (string) and "y" (array of strings), NOT "x_key" and NOT "series".
 - Every key in "x" and "y" must exist on each row of "data".
-TABLE SHAPE (strict): { title, columns: [{ key, label, align? }], rows: [{...}] }. Every column.key must exist on each row.`;
+TABLE SHAPE (strict): { title, columns: [{ key, label, type?, align? }], rows: [{...}] }. Every column.key must exist on each row. column.type can be "text"|"number"|"currency"|"percent"|"date"|"badge"|"link".
+
+PHASE 2 — also include when available:
+- status: { label, severity: "good"|"warning"|"critical"|"neutral", explanation? } — overall report verdict.
+- comparison_range: { from, to } when comparing two periods.
+- caveats: string[] — data freshness / coverage caveats.
+- confidence: { level: "high"|"medium"|"low", explanation } — drives a confidence badge.
+- recommendations: each item may include action_type ("open_queue"|"export"|"save_report"|"create_alert_later"|"review_mapping"|"resync_later") and severity ("low"|"medium"|"high"). "create_alert_later" renders as a disabled "Coming in Phase 3" button.
+- actions: report-level actions. "create_alert_disabled" must be disabled with disabled_reason "Alerting ships in Phase 3".
+
+REPORT TYPES (use these report_type strings):
+- "performance_comparison" — compare two periods
+- "lead_performance" — full lead funnel + agents + queues
+- "account_stability" — Google Ads volatility / change impact
+- "ctm_ghl_reconciliation" — refined CTM↔GHL match report
+- "data_quality_audit" — trust / freshness audit
+- "client_summary" — client-safe summary (executive tone, no internal blame language)
+
+CLIENT-SAFE MODE: when the user asks for a client/external summary, never use raw debugging terms ("ghl_lead_facts", "stale", "unmatched"); translate to plain business language and preserve caveats professionally. Always lead with wins → risks → what's next.
+
+CLARIFY FIRST when:
+- "missing leads" is ambiguous (CTM↔GHL, GHL leads w/o opportunity, leads w/o human response?)
+- date range is unspecified and not in context
+- multiple report types could satisfy the request`;
 
 function svc() {
   return createClient(
@@ -557,6 +580,501 @@ function buildTools(ctx: Ctx) {
       }),
     }),
 
+    compare_periods: tool({
+      description:
+        "Compare two date ranges on the same property: spend, clicks, impressions, CTR, CPC, leads, CPL, conversion rate, CTM calls, GHL leads. Returns deltas, campaign breakdown, and daily trends. Use for 'this month vs last month', 'why are leads down', performance-comparison reports.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        current_from: z.string(),
+        current_to: z.string(),
+        previous_from: z.string(),
+        previous_to: z.string(),
+        campaign: z.string().optional(),
+      }),
+      execute: wrap(ctx, "compare_periods", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "compare_periods");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const fetchRange = async (from: string, to: string) => {
+          let q = ctx.supabase.from("daily_metrics")
+            .select("date,ad_source,campaign,cost,impressions,clicks,record_count,leads,good_leads,admissions")
+            .eq("property_id", id).gte("date", from).lte("date", to);
+          if (i.campaign) q = q.eq("campaign", i.campaign);
+          const { data, error } = await q;
+          if (error) throw new Error(error.message);
+          return data ?? [];
+        };
+        const [cur, prev] = await Promise.all([
+          fetchRange(i.current_from, i.current_to),
+          fetchRange(i.previous_from, i.previous_to),
+        ]);
+        const totals = (rows: typeof cur) => {
+          const t = { cost: 0, impressions: 0, clicks: 0, calls: 0, leads: 0, good_leads: 0, admissions: 0 };
+          for (const r of rows) {
+            t.cost += Number(r.cost ?? 0);
+            t.impressions += Number(r.impressions ?? 0);
+            t.clicks += Number(r.clicks ?? 0);
+            t.calls += Number(r.record_count ?? 0);
+            t.leads += Number(r.leads ?? 0);
+            t.good_leads += Number(r.good_leads ?? 0);
+            t.admissions += Number(r.admissions ?? 0);
+          }
+          return t;
+        };
+        const derive = (t: ReturnType<typeof totals>) => ({
+          ...t,
+          ctr: t.impressions > 0 ? t.clicks / t.impressions : 0,
+          cpc: t.clicks > 0 ? t.cost / t.clicks : 0,
+          cpl: t.leads > 0 ? t.cost / t.leads : 0,
+          conv_rate: t.clicks > 0 ? t.leads / t.clicks : 0,
+        });
+        const c = derive(totals(cur));
+        const p = derive(totals(prev));
+        const delta = (a: number, b: number) => ({ abs: a - b, pct: b !== 0 ? (a - b) / b : null });
+        const metrics = {
+          cost: { current: c.cost, previous: p.cost, ...delta(c.cost, p.cost) },
+          impressions: { current: c.impressions, previous: p.impressions, ...delta(c.impressions, p.impressions) },
+          clicks: { current: c.clicks, previous: p.clicks, ...delta(c.clicks, p.clicks) },
+          ctr: { current: c.ctr, previous: p.ctr, ...delta(c.ctr, p.ctr) },
+          cpc: { current: c.cpc, previous: p.cpc, ...delta(c.cpc, p.cpc) },
+          calls: { current: c.calls, previous: p.calls, ...delta(c.calls, p.calls) },
+          leads: { current: c.leads, previous: p.leads, ...delta(c.leads, p.leads) },
+          good_leads: { current: c.good_leads, previous: p.good_leads, ...delta(c.good_leads, p.good_leads) },
+          cpl: { current: c.cpl, previous: p.cpl, ...delta(c.cpl, p.cpl) },
+          conv_rate: { current: c.conv_rate, previous: p.conv_rate, ...delta(c.conv_rate, p.conv_rate) },
+          admissions: { current: c.admissions, previous: p.admissions, ...delta(c.admissions, p.admissions) },
+        };
+        const byCampaign = new Map<string, { current: ReturnType<typeof totals>; previous: ReturnType<typeof totals> }>();
+        for (const r of cur) {
+          const k = r.campaign || r.ad_source || "(unknown)";
+          const e = byCampaign.get(k) ?? { current: totals([]), previous: totals([]) };
+          e.current = totals([...cur.filter(x => (x.campaign || x.ad_source) === k)]);
+          byCampaign.set(k, e);
+        }
+        for (const r of prev) {
+          const k = r.campaign || r.ad_source || "(unknown)";
+          const e = byCampaign.get(k) ?? { current: totals([]), previous: totals([]) };
+          e.previous = totals([...prev.filter(x => (x.campaign || x.ad_source) === k)]);
+          byCampaign.set(k, e);
+        }
+        const campaign_breakdown = [...byCampaign.entries()].map(([campaign, v]) => ({
+          campaign,
+          spend_current: v.current.cost, spend_previous: v.previous.cost,
+          leads_current: v.current.leads, leads_previous: v.previous.leads,
+          cpl_current: v.current.leads > 0 ? v.current.cost / v.current.leads : 0,
+          cpl_previous: v.previous.leads > 0 ? v.previous.cost / v.previous.leads : 0,
+          spend_delta_pct: v.previous.cost > 0 ? (v.current.cost - v.previous.cost) / v.previous.cost : null,
+          leads_delta_pct: v.previous.leads > 0 ? (v.current.leads - v.previous.leads) / v.previous.leads : null,
+        })).sort((a, b) => b.spend_current - a.spend_current).slice(0, 50);
+        const dailyMap = new Map<string, { date: string; cost: number; leads: number }>();
+        for (const r of cur) {
+          const d = dailyMap.get(r.date) ?? { date: r.date, cost: 0, leads: 0 };
+          d.cost += Number(r.cost ?? 0); d.leads += Number(r.leads ?? 0);
+          dailyMap.set(r.date, d);
+        }
+        const daily_current = [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+        return {
+          property_id: id,
+          current_range: { from: i.current_from, to: i.current_to },
+          previous_range: { from: i.previous_from, to: i.previous_to },
+          metrics, campaign_breakdown, daily_current,
+          sources_used: ["daily_metrics"],
+          caveats: cur.length === 0 ? ["No daily_metrics rows for current period"] :
+                   prev.length === 0 ? ["No daily_metrics rows for previous period — deltas vs zero baseline"] : [],
+        };
+      }),
+    }),
+
+    get_google_ads_performance: tool({
+      description:
+        "Google Ads (or all-source) performance over a window: spend, impressions, clicks, CTR, CPC, leads, CPL, conversion rate, by-campaign breakdown, daily trend.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        days: z.number().int().min(1).max(365).optional(),
+        campaign: z.string().optional(),
+        ad_source: z.string().optional().describe("e.g. 'google_ads'. Omit to include all sources."),
+      }),
+      execute: wrap(ctx, "get_google_ads_performance", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "get_google_ads_performance");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
+        let q = ctx.supabase.from("daily_metrics")
+          .select("date,ad_source,campaign,cost,impressions,clicks,record_count,leads,good_leads,admissions")
+          .eq("property_id", id).gte("date", from).lte("date", to);
+        if (i.ad_source) q = q.eq("ad_source", i.ad_source);
+        if (i.campaign) q = q.eq("campaign", i.campaign);
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+        const rows = data ?? [];
+        const tot = { cost: 0, impressions: 0, clicks: 0, leads: 0, good_leads: 0, admissions: 0 };
+        const byCampaign = new Map<string, { campaign: string; cost: number; clicks: number; impressions: number; leads: number }>();
+        const byDate = new Map<string, { date: string; cost: number; clicks: number; leads: number }>();
+        for (const r of rows) {
+          tot.cost += Number(r.cost ?? 0); tot.impressions += Number(r.impressions ?? 0);
+          tot.clicks += Number(r.clicks ?? 0); tot.leads += Number(r.leads ?? 0);
+          tot.good_leads += Number(r.good_leads ?? 0); tot.admissions += Number(r.admissions ?? 0);
+          const ck = r.campaign || "(unknown)";
+          const c = byCampaign.get(ck) ?? { campaign: ck, cost: 0, clicks: 0, impressions: 0, leads: 0 };
+          c.cost += Number(r.cost ?? 0); c.clicks += Number(r.clicks ?? 0);
+          c.impressions += Number(r.impressions ?? 0); c.leads += Number(r.leads ?? 0);
+          byCampaign.set(ck, c);
+          const d = byDate.get(r.date) ?? { date: r.date, cost: 0, clicks: 0, leads: 0 };
+          d.cost += Number(r.cost ?? 0); d.clicks += Number(r.clicks ?? 0); d.leads += Number(r.leads ?? 0);
+          byDate.set(r.date, d);
+        }
+        return {
+          property_id: id, from, to,
+          totals: {
+            ...tot,
+            ctr: tot.impressions > 0 ? tot.clicks / tot.impressions : 0,
+            cpc: tot.clicks > 0 ? tot.cost / tot.clicks : 0,
+            cpl: tot.leads > 0 ? tot.cost / tot.leads : 0,
+            conv_rate: tot.clicks > 0 ? tot.leads / tot.clicks : 0,
+          },
+          campaigns: [...byCampaign.values()]
+            .map(c => ({ ...c, cpl: c.leads > 0 ? c.cost / c.leads : 0, ctr: c.impressions > 0 ? c.clicks / c.impressions : 0 }))
+            .sort((a, b) => b.cost - a.cost),
+          daily: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
+          sources_used: ["daily_metrics"],
+          caveats: rows.length === 0 ? ["No metrics rows in window"] : [],
+        };
+      }),
+    }),
+
+    get_google_ads_change_impact: tool({
+      description:
+        "Estimate account stability from spend/lead volatility on daily_metrics. Returns volatility score, daily timeline, and a stabilization heuristic. NOTE: This is an internal volatility estimate, NOT official Google learning-phase status.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        days: z.number().int().min(7).max(90).default(30),
+      }),
+      execute: wrap(ctx, "get_google_ads_change_impact", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "get_google_ads_change_impact");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
+        const { data, error } = await ctx.supabase.from("daily_metrics")
+          .select("date,ad_source,campaign,cost,clicks,leads")
+          .eq("property_id", id).gte("date", from).lte("date", to).order("date");
+        if (error) throw new Error(error.message);
+        const rows = data ?? [];
+        const byDate = new Map<string, { date: string; cost: number; leads: number; clicks: number }>();
+        for (const r of rows) {
+          const d = byDate.get(r.date) ?? { date: r.date, cost: 0, leads: 0, clicks: 0 };
+          d.cost += Number(r.cost ?? 0); d.leads += Number(r.leads ?? 0); d.clicks += Number(r.clicks ?? 0);
+          byDate.set(r.date, d);
+        }
+        const daily = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+        const mean = (xs: number[]) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+        const std = (xs: number[]) => {
+          const m = mean(xs); if (!xs.length) return 0;
+          return Math.sqrt(mean(xs.map(x => (x - m) ** 2)));
+        };
+        const costs = daily.map(d => d.cost);
+        const leads = daily.map(d => d.leads);
+        const costMean = mean(costs); const costStd = std(costs);
+        const cv = costMean > 0 ? costStd / costMean : 0;
+        let severity: "good" | "warning" | "critical" | "neutral" = "good";
+        if (cv > 0.6) severity = "critical";
+        else if (cv > 0.35) severity = "warning";
+        else if (cv > 0) severity = "good";
+        else severity = "neutral";
+        const recentMean = mean(costs.slice(-7));
+        const priorMean = mean(costs.slice(0, -7));
+        const spendShift = priorMean > 0 ? (recentMean - priorMean) / priorMean : 0;
+        const structuralChange = Math.abs(spendShift) > 0.3;
+        return {
+          property_id: id, from, to,
+          volatility_score: cv,
+          severity,
+          structural_change_detected: structuralChange,
+          spend_shift_pct_last_7d_vs_prior: spendShift,
+          totals: { cost: costs.reduce((a, b) => a + b, 0), leads: leads.reduce((a, b) => a + b, 0) },
+          daily,
+          stabilization_window_days: 14,
+          stabilization_estimate: severity === "critical" || structuralChange
+            ? "Volatility elevated — recommend ~14 days of stability before further optimization."
+            : severity === "warning"
+            ? "Moderate volatility — partial review possible; avoid stacked changes."
+            : "Account looks stable — safe to review optimizations.",
+          sources_used: ["daily_metrics"],
+          caveats: [
+            "Stabilization estimate is an internal volatility heuristic, not official Google Ads learning-phase status.",
+            rows.length === 0 ? "No daily_metrics rows in window." : null,
+          ].filter(Boolean),
+        };
+      }),
+    }),
+
+    get_lead_performance_report: tool({
+      description:
+        "Full Lead Performance state: speed-to-lead, handling, pipeline conversion, agents, data quality.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        days: z.number().int().min(1).max(180).default(30),
+      }),
+      execute: wrap(ctx, "get_lead_performance_report", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "get_lead_performance_report");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const to = new Date();
+        const from = new Date(to.getTime() - i.days * 86400_000);
+        const args = { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() };
+        const [speed, handling, pipeline, agents, quality] = await Promise.all([
+          ctx.supabase.rpc("lead_perf_speed", args),
+          ctx.supabase.rpc("lead_perf_handling", args),
+          ctx.supabase.rpc("lead_perf_pipeline", args),
+          ctx.supabase.rpc("lead_perf_agents", args),
+          ctx.supabase.rpc("lead_perf_quality", args),
+        ]);
+        const { data: ghlSrc } = await ctx.supabase.from("property_data_sources")
+          .select("last_synced_at").eq("property_id", id).eq("source", "ghl").maybeSingle();
+        return {
+          property_id: id,
+          days: i.days,
+          speed: speed.data, handling: handling.data, pipeline: pipeline.data,
+          agents: agents.data, quality: quality.data,
+          sources_used: ["ghl_lead_facts", "ghl_contacts", "ghl_messages", "ghl_appointments"],
+          sync_freshness: { ghl: ghlSrc?.last_synced_at ?? null },
+          caveats: [
+            speed.error?.message, handling.error?.message, pipeline.error?.message,
+            agents.error?.message, quality.error?.message,
+          ].filter(Boolean),
+        };
+      }),
+    }),
+
+    get_action_queue_summary: tool({
+      description:
+        "Summarize one actionable lead queue (counts, oldest age, top records with reasons and GHL deep links).",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        days: z.number().int().min(1).max(180).default(30),
+        queue_type: z.enum([
+          "never_responded", "currently_waiting", "stale", "critical_stale",
+          "unassigned", "missing_opportunity", "lost_without_reason",
+          "slow_response", "disqualified_by_tag", "duplicate_contacts",
+          "duplicate_opportunities", "unknown_response_source",
+        ]).default("currently_waiting"),
+        limit: z.number().int().min(1).max(200).default(50),
+      }),
+      execute: wrap(ctx, "get_action_queue_summary", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "get_action_queue_summary");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const to = new Date();
+        const from = new Date(to.getTime() - i.days * 86400_000);
+        const { data, error } = await ctx.supabase.rpc("lead_perf_drill", {
+          _issue_type: i.queue_type, _property_ids: [id],
+          _from: from.toISOString(), _to: to.toISOString(), _limit: i.limit,
+        });
+        if (error) throw new Error(error.message);
+        const rows = (data ?? []) as Array<Record<string, unknown>>;
+        const oldest = rows.reduce((acc, r) => {
+          const t = r.lead_created_at ? new Date(r.lead_created_at as string).getTime() : 0;
+          return t && (!acc || t < acc) ? t : acc;
+        }, 0);
+        return {
+          property_id: id,
+          queue_type: i.queue_type,
+          count: rows.length,
+          oldest_lead_at: oldest ? new Date(oldest).toISOString() : null,
+          oldest_age_hours: oldest ? Math.round((Date.now() - oldest) / 3600_000) : null,
+          rows: rows.slice(0, i.limit),
+          sources_used: ["lead_perf_drill"],
+          caveats: rows.length === i.limit ? [`Result capped at ${i.limit}`] : [],
+        };
+      }),
+    }),
+
+    get_ctm_performance: tool({
+      description:
+        "CTM call performance: total/answered/missed calls, good/bad leads, disposition + source breakdown, daily trend, avg duration.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        days: z.number().int().min(1).max(180).optional(),
+      }),
+      execute: wrap(ctx, "get_ctm_performance", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "get_ctm_performance");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
+        const fromISO = `${from}T00:00:00Z`; const toISO = `${to}T23:59:59Z`;
+        const [callsRes, srcRes] = await Promise.all([
+          ctx.supabase.from("ctm_calls")
+            .select("ctm_call_id,called_at,caller_number,campaign_name,channel,tracking_source,raw_payload")
+            .eq("property_id", id).gte("called_at", fromISO).lte("called_at", toISO).limit(5000),
+          ctx.supabase.from("property_data_sources")
+            .select("last_synced_at").eq("property_id", id).eq("source", "ctm").maybeSingle(),
+        ]);
+        if (callsRes.error) throw new Error(callsRes.error.message);
+        const calls = callsRes.data ?? [];
+        const uniquePhones = new Set<string>();
+        const bySource = new Map<string, number>();
+        const byDisposition = new Map<string, number>();
+        const byDate = new Map<string, { date: string; calls: number }>();
+        let answered = 0, missed = 0, durSum = 0, durCount = 0;
+        let good = 0, bad = 0;
+        for (const c of calls) {
+          const p = normPhone(c.caller_number); if (p) uniquePhones.add(p);
+          const raw = (c.raw_payload ?? {}) as Record<string, unknown>;
+          const status = String(raw["call_status"] ?? raw["status"] ?? "").toLowerCase();
+          if (["completed", "answered"].includes(status)) answered++;
+          else if (["missed", "no-answer", "voicemail", "busy", "failed"].includes(status)) missed++;
+          const dur = Number(raw["duration"] ?? raw["call_duration"] ?? 0);
+          if (dur > 0) { durSum += dur; durCount++; }
+          const score = String(raw["score"] ?? raw["call_score"] ?? "").toLowerCase();
+          if (score === "good") good++; else if (score === "bad" || score === "spam") bad++;
+          const k = c.campaign_name || c.tracking_source || c.channel || "(unknown)";
+          bySource.set(k, (bySource.get(k) ?? 0) + 1);
+          const disp = String(raw["disposition"] ?? raw["call_disposition"] ?? "uncategorized").toLowerCase();
+          byDisposition.set(disp, (byDisposition.get(disp) ?? 0) + 1);
+          const day = c.called_at.slice(0, 10);
+          const d = byDate.get(day) ?? { date: day, calls: 0 }; d.calls++; byDate.set(day, d);
+        }
+        return {
+          property_id: id, from, to,
+          totals: {
+            total_calls: calls.length,
+            unique_leads: uniquePhones.size,
+            answered, missed,
+            good_leads: good, bad_leads: bad,
+            avg_duration_seconds: durCount > 0 ? Math.round(durSum / durCount) : null,
+          },
+          dispositions: [...byDisposition.entries()].map(([disposition, count]) => ({ disposition, count })).sort((a, b) => b.count - a.count),
+          sources: [...bySource.entries()].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count),
+          daily: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
+          sources_used: ["ctm_calls"],
+          sync_freshness: { ctm: srcRes.data?.last_synced_at ?? null },
+          caveats: [
+            calls.length >= 5000 ? "CTM result capped at 5000 calls" : null,
+            durCount === 0 ? "No call durations present in raw_payload — duration field may not be ingested." : null,
+            good + bad === 0 ? "No call score present — transcript/AI scoring may not be enabled." : null,
+          ].filter(Boolean),
+        };
+      }),
+    }),
+
+    get_data_quality_audit: tool({
+      description:
+        "Audit data trustworthiness for a property: sync freshness, failed syncs, pagination caps, unconfirmed pipeline mappings, derived appointment statuses, unknown outbound messages, duplicate contacts/opportunities. Returns overall confidence and per-issue rows.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        days: z.number().int().min(1).max(180).default(30),
+      }),
+      execute: wrap(ctx, "get_data_quality_audit", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "get_data_quality_audit");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
+        const [sources, syncs, qualityRpc, stages, mapping, dupContacts, unknownMsgs] = await Promise.all([
+          ctx.supabase.from("property_data_sources")
+            .select("source,is_connected,last_synced_at,status,error_message")
+            .eq("property_id", id),
+          ctx.supabase.from("sync_runs")
+            .select("source,status,error_message,started_at")
+            .eq("property_id", id).order("started_at", { ascending: false }).limit(50),
+          ctx.supabase.rpc("lead_perf_quality", {
+            _property_ids: [id],
+            _from: new Date(from).toISOString(), _to: new Date(to + "T23:59:59Z").toISOString(),
+          }),
+          ctx.supabase.from("ghl_pipeline_stages").select("ghl_stage_id").eq("property_id", id),
+          ctx.supabase.from("property_pipeline_mapping")
+            .select("ghl_stage_id,confirmed_by_user").eq("property_id", id),
+          ctx.supabase.from("ghl_contacts")
+            .select("duplicate_group_id", { count: "exact", head: true })
+            .eq("property_id", id).not("duplicate_group_id", "is", null),
+          ctx.supabase.from("ghl_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("property_id", id).eq("direction", "outbound").is("response_source", null),
+        ]);
+        const recentFailures = (syncs.data ?? []).filter(s => s.status === "failure").slice(0, 10);
+        const stageCount = (stages.data ?? []).length;
+        const confirmedStageIds = new Set((mapping.data ?? []).filter(m => m.confirmed_by_user).map(m => m.ghl_stage_id));
+        const unconfirmedStages = (stages.data ?? []).filter(s => !confirmedStageIds.has(s.ghl_stage_id)).length;
+        const issues: Array<{ category: string; severity: "low" | "medium" | "high"; detail: string; count?: number }> = [];
+        const now = Date.now();
+        for (const s of sources.data ?? []) {
+          const last = s.last_synced_at ? new Date(s.last_synced_at).getTime() : 0;
+          const ageH = last ? (now - last) / 3600_000 : Infinity;
+          if (!s.is_connected) issues.push({ category: "sync", severity: "high", detail: `${s.source} is not connected` });
+          else if (ageH > 48) issues.push({ category: "sync", severity: "high", detail: `${s.source} last synced ${Math.round(ageH)}h ago` });
+          else if (ageH > 24) issues.push({ category: "sync", severity: "medium", detail: `${s.source} last synced ${Math.round(ageH)}h ago` });
+        }
+        if (recentFailures.length) issues.push({ category: "sync_failures", severity: "high", detail: `${recentFailures.length} recent sync failures`, count: recentFailures.length });
+        if (unconfirmedStages > 0) issues.push({ category: "mapping", severity: "medium", detail: `${unconfirmedStages} unconfirmed pipeline stage mappings`, count: unconfirmedStages });
+        if ((dupContacts.count ?? 0) > 0) issues.push({ category: "duplicates", severity: "medium", detail: `${dupContacts.count} contacts in duplicate groups`, count: dupContacts.count ?? 0 });
+        if ((unknownMsgs.count ?? 0) > 0) issues.push({ category: "messaging", severity: "low", detail: `${unknownMsgs.count} outbound messages with unknown source (human/automation/ai)`, count: unknownMsgs.count ?? 0 });
+        const highCount = issues.filter(i => i.severity === "high").length;
+        const medCount = issues.filter(i => i.severity === "medium").length;
+        const confidence: "high" | "medium" | "low" =
+          highCount > 0 ? "low" : medCount > 1 ? "medium" : "high";
+        return {
+          property_id: id, from, to,
+          confidence,
+          confidence_explanation:
+            highCount > 0 ? "One or more high-severity data issues detected; treat numbers as approximate."
+            : medCount > 0 ? "Some medium-severity issues — numbers usable but flagged."
+            : "Sources are fresh and coverage looks clean.",
+          sync_freshness: Object.fromEntries((sources.data ?? []).map(s => [s.source, s.last_synced_at])),
+          recent_sync_failures: recentFailures,
+          unconfirmed_pipeline_mappings: unconfirmedStages,
+          duplicate_contacts: dupContacts.count ?? 0,
+          unknown_outbound_messages: unknownMsgs.count ?? 0,
+          lead_perf_quality: qualityRpc.data ?? null,
+          issues,
+          sources_used: ["property_data_sources", "sync_runs", "ghl_*", "lead_perf_quality"],
+          caveats: [
+            "Stabilization/learning-phase status is not surfaced from Google Ads directly.",
+            qualityRpc.error ? `lead_perf_quality: ${qualityRpc.error.message}` : null,
+          ].filter(Boolean),
+        };
+      }),
+    }),
+
+    get_client_summary_context: tool({
+      description:
+        "Collect the facts needed to write a CLIENT-SAFE summary: wins, risks, performance deltas, lead flow, lead handling summary, account stability, planned next steps, internal caveats. Use BEFORE writing a client_summary report.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        days: z.number().int().min(7).max(90).default(30),
+      }),
+      execute: wrap(ctx, "get_client_summary_context", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "get_client_summary_context");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const to = new Date();
+        const from = new Date(to.getTime() - i.days * 86400_000);
+        const prevFrom = new Date(from.getTime() - i.days * 86400_000);
+        const fromStr = from.toISOString().slice(0, 10);
+        const toStr = to.toISOString().slice(0, 10);
+        const prevFromStr = prevFrom.toISOString().slice(0, 10);
+        const prevToStr = from.toISOString().slice(0, 10);
+        const [summary, speed, handling, pipeline, prev] = await Promise.all([
+          ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: fromStr, _to: toStr }),
+          ctx.supabase.rpc("lead_perf_speed", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
+          ctx.supabase.rpc("lead_perf_handling", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
+          ctx.supabase.rpc("lead_perf_pipeline", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
+          ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: prevFromStr, _to: prevToStr }),
+        ]);
+        return {
+          property_id: id,
+          current_range: { from: fromStr, to: toStr },
+          previous_range: { from: prevFromStr, to: prevToStr },
+          current_summary: summary.data, previous_summary: prev.data,
+          speed: speed.data, handling: handling.data, pipeline: pipeline.data,
+          sources_used: ["daily_metrics", "ghl_lead_facts"],
+          internal_caveats_examples: [
+            "Do not surface raw table names to the client.",
+            "Translate 'stale' → 'awaiting follow-up'.",
+            "Translate 'never responded' → 'pending first outreach'.",
+            "Avoid blame language about agents in the client tone.",
+          ],
+        };
+      }),
+    }),
+
     save_visual_report: tool({
       description:
         "Persist a generated report so the user can open it from the report drawer. Always call this after producing analytical findings. Return the report_id.",
@@ -571,6 +1089,8 @@ function buildTools(ctx: Ctx) {
       execute: wrap(ctx, "save_visual_report", async (i) => {
         const pid = i.property_id ?? ctx.defaultPropertyId;
         if (pid) await assertPropertyAccess(ctx.supabase, ctx.userId, pid);
+        const s = (i.schema ?? {}) as Record<string, unknown>;
+        const cmp = s["comparison_range"] as { from?: string; to?: string } | undefined;
         const { data, error } = await ctx.supabase
           .from("ai_agent_reports")
           .insert({
@@ -581,8 +1101,14 @@ function buildTools(ctx: Ctx) {
             title: i.title,
             date_range_start: i.date_range?.from ?? null,
             date_range_end: i.date_range?.to ?? null,
+            comparison_range_start: cmp?.from ?? null,
+            comparison_range_end: cmp?.to ?? null,
             schema_json: i.schema,
             evidence_json: i.evidence ?? null,
+            scope_json: s["scope"] ?? null,
+            status_json: s["status"] ?? null,
+            caveats_json: s["caveats"] ?? null,
+            confidence_json: s["confidence"] ?? null,
             saved: false,
           })
           .select("id")

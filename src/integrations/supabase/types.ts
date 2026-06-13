@@ -96,44 +96,68 @@ export type Database = {
       }
       ai_agent_reports: {
         Row: {
+          caveats_json: Json | null
+          comparison_range_end: string | null
+          comparison_range_start: string | null
+          confidence_json: Json | null
           created_at: string
           date_range_end: string | null
           date_range_start: string | null
+          deleted_at: string | null
           evidence_json: Json | null
           id: string
           property_id: string | null
           report_type: string
           saved: boolean
+          saved_at: string | null
           schema_json: Json
+          scope_json: Json | null
           session_id: string | null
+          status_json: Json | null
           title: string
           user_id: string
         }
         Insert: {
+          caveats_json?: Json | null
+          comparison_range_end?: string | null
+          comparison_range_start?: string | null
+          confidence_json?: Json | null
           created_at?: string
           date_range_end?: string | null
           date_range_start?: string | null
+          deleted_at?: string | null
           evidence_json?: Json | null
           id?: string
           property_id?: string | null
           report_type: string
           saved?: boolean
+          saved_at?: string | null
           schema_json: Json
+          scope_json?: Json | null
           session_id?: string | null
+          status_json?: Json | null
           title: string
           user_id: string
         }
         Update: {
+          caveats_json?: Json | null
+          comparison_range_end?: string | null
+          comparison_range_start?: string | null
+          confidence_json?: Json | null
           created_at?: string
           date_range_end?: string | null
           date_range_start?: string | null
+          deleted_at?: string | null
           evidence_json?: Json | null
           id?: string
           property_id?: string | null
           report_type?: string
           saved?: boolean
+          saved_at?: string | null
           schema_json?: Json
+          scope_json?: Json | null
           session_id?: string | null
+          status_json?: Json | null
           title?: string
           user_id?: string
         }
