@@ -101,13 +101,6 @@ export default function CallTracking() {
       <SectionDivider
         title="Call Performance"
         subtitle="Total volume and per-source breakdowns of calls, leads, and conversions"
-        right={
-          <AskJarvisButton
-            range={range}
-            prompt="Reconcile CTM calls against GHL contacts for the selected property and date range. Flag mismatches, missing matches, and likely causes."
-            label="Reconcile with Jarvis"
-          />
-        }
       />
       <Row>
         <ChartCard title="Total Calls" subtitle="All sources, daily">
