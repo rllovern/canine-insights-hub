@@ -308,6 +308,13 @@ Deno.serve(async (req) => {
     });
 
     let metricsWritten = 0;
+    await admin
+      .from("daily_metrics")
+      .update({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, no_entry: 0, spam: 0, projected_sale: 0 })
+      .eq("property_id", propertyId)
+      .gte("date", from)
+      .lte("date", to);
+
     if (upsertRows.length) {
       const dates = Array.from(new Set(upsertRows.map(r => r.date)));
       const channels = Array.from(new Set(upsertRows.map(r => r.ad_source)));
