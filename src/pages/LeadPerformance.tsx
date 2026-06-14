@@ -1,10 +1,8 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Info } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { useProperties } from "@/contexts/PropertyContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
-import { usePreviewMode } from "@/contexts/PreviewModeContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExecutiveScoreboard } from "@/components/lead-perf/ExecutiveScoreboard";
 import { ActionQueue } from "@/components/lead-perf/ActionQueue";
@@ -17,8 +15,6 @@ import { DrillSheet } from "@/components/lead-perf/DrillSheet";
 import { useSpeed, useHandling, usePipeline, useQuality } from "@/components/lead-perf/hooks";
 import { DrillIssue, WINDOW_TOOLTIP } from "@/lib/leadPerf";
 import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
-
-const ALL_VALUE = "__all__";
 
 function SectionLabel({ title, hint, right }: { title: string; hint?: string; right?: React.ReactNode }) {
   return (
@@ -38,20 +34,11 @@ function SectionLabel({ title, hint, right }: { title: string; hint?: string; ri
 }
 
 export default function LeadPerformance() {
-  const { properties } = useProperties();
   const { range } = useDateRange();
-  const { effectiveRole } = usePreviewMode();
-  const [selected, setSelected] = useState<string>(ALL_VALUE);
+  const { mode, propertyId, propertyIds, label } = useScope();
   const [drill, setDrill] = useState<DrillIssue | null>(null);
 
-  const isAgencyMode = selected === ALL_VALUE && effectiveRole === "internal";
-
-  const propertyIds = useMemo<string[] | null>(() => {
-    if (selected === ALL_VALUE) {
-      return effectiveRole === "internal" ? null : properties.map((p) => p.id);
-    }
-    return [selected];
-  }, [selected, properties, effectiveRole]);
+  const isAgencyMode = mode === "agency";
 
   const args = { propertyIds, from: range.from, to: range.to };
   const { data: speed, loading: speedLoading } = useSpeed(args);
@@ -66,7 +53,7 @@ export default function LeadPerformance() {
         <div className="min-w-0">
           <h1 className="text-lg font-semibold tracking-tight">Lead Performance</h1>
           <p className="text-[11.5px] text-muted-foreground mt-0.5">
-            {isAgencyMode ? "Agency-wide across all properties." : "Single-property view."}{" "}
+            {isAgencyMode ? "Agency-wide across all properties." : `Single-property view · ${label}.`}{" "}
             Scoped to the selected reporting window.
           </p>
         </div>
@@ -79,22 +66,9 @@ export default function LeadPerformance() {
           </Tooltip>
           <Badge variant="outline" className="text-[10px]">AI = automation (v1)</Badge>
           <Badge variant="outline" className="text-[10px]">Showed/no-show provisional</Badge>
-          <Select value={selected} onValueChange={setSelected}>
-            <SelectTrigger className="w-52 h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_VALUE}>
-                {effectiveRole === "internal" ? "All properties (agency)" : "All my properties"}
-              </SelectItem>
-              {properties.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <AskJarvisButton
             range={range}
-            propertyId={selected !== ALL_VALUE ? selected : undefined}
+            propertyId={propertyId ?? undefined}
             prompt="Generate a lead performance report for the current scope and date range. Surface speed-to-lead, action-queue volume, and where leads are stalling."
             label="Run with Jarvis"
           />
