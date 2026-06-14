@@ -297,15 +297,17 @@ function Metric({ label, value, sub }: { label: string; value: string; sub?: str
   );
 }
 
-function DotGroup({ pacing, cpl, handling }: {
+function DotGroup({ pacing, cpl, cpgl, handling }: {
   pacing: "good" | "warning" | "critical" | "neutral";
   cpl: "good" | "warning" | "critical" | "neutral";
+  cpgl: "good" | "warning" | "critical" | "neutral";
   handling: "good" | "warning" | "critical" | "neutral";
 }) {
   return (
-    <div className="flex items-center gap-1.5" title="pacing · CPL · handling">
+    <div className="flex items-center gap-1.5" title="pacing · CPL · CPGL · handling">
       <span className={cn("size-2.5 rounded-full", dotClass(pacing))} title={`pacing: ${pacing}`} />
       <span className={cn("size-2.5 rounded-full", dotClass(cpl))} title={`CPL: ${cpl}`} />
+      <span className={cn("size-2.5 rounded-full", dotClass(cpgl))} title={`CPGL: ${cpgl}`} />
       <span className={cn("size-2.5 rounded-full", dotClass(handling))} title={`handling: ${handling}`} />
     </div>
   );
