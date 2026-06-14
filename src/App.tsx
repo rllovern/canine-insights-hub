@@ -25,6 +25,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { PreviewModeProvider } from "./contexts/PreviewModeContext";
 import { PropertyProvider } from "./contexts/PropertyContext";
 import { DateRangeProvider } from "./contexts/DateRangeContext";
+import { ScopeProvider } from "./contexts/ScopeContext";
 import { AppShell } from "./components/layout/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
 
@@ -40,6 +41,7 @@ const App = () => (
           <PreviewModeProvider>
             <DateRangeProvider>
               <PropertyProvider>
+                <ScopeProvider>
                 <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />
@@ -86,6 +88,7 @@ const App = () => (
 
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                </ScopeProvider>
               </PropertyProvider>
             </DateRangeProvider>
           </PreviewModeProvider>
