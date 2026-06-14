@@ -26,10 +26,9 @@ interface CTMConfig {
   number_filter?: string[];
 }
 
-type Bucket = "sale" | "good" | "bad" | "spam" | "repeat" | "no_entry" | "ignore";
-// In the database the "sale" bucket is stored as "admission" (the column is `admissions`).
+type Bucket = "projected_sale" | "good" | "bad" | "spam" | "repeat" | "no_entry" | "ignore";
 const BUCKET_TO_DB: Record<Bucket, string> = {
-  sale: "admission",
+  projected_sale: "projected_sale",
   good: "good",
   bad: "bad",
   spam: "spam",
@@ -38,7 +37,7 @@ const BUCKET_TO_DB: Record<Bucket, string> = {
   ignore: "ignore",
 };
 const DB_TO_BUCKET: Record<string, Bucket> = {
-  admission: "sale",
+  projected_sale: "projected_sale",
   good: "good",
   bad: "bad",
   spam: "spam",
@@ -47,7 +46,7 @@ const DB_TO_BUCKET: Record<string, Bucket> = {
   ignore: "ignore",
 };
 const BUCKET_LABELS: Record<Bucket, string> = {
-  sale: "Sale",
+  projected_sale: "Projected Sale",
   good: "Good Lead",
   bad: "Bad Lead",
   spam: "Spam",

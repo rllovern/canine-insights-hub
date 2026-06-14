@@ -158,11 +158,11 @@ interface RowAgg {
   bad_lead: number;
   good_lead: number;
   spam: number;
-  admission: number;
+  projected_sale: number;
 }
 
 function emptyAgg(): RowAgg {
-  return { record_count: 0, no_entry: 0, leads: 0, bad_lead: 0, good_lead: 0, spam: 0, admission: 0 };
+  return { record_count: 0, no_entry: 0, leads: 0, bad_lead: 0, good_lead: 0, spam: 0, projected_sale: 0 };
 }
 
 function aggregate(calls: CTMCall[], keyFn: (c: CTMCall) => string): Map<string, RowAgg> {
@@ -176,7 +176,7 @@ function aggregate(calls: CTMCall[], keyFn: (c: CTMCall) => string): Map<string,
     if (b === "good") { a.leads += 1; a.good_lead += 1; }
     if (b === "bad") a.bad_lead += 1;
     if (b === "spam") a.spam += 1;
-    if (b === "admission") { a.leads += 1; a.admission += 1; }
+    if (b === "projected_sale") { a.leads += 1; a.projected_sale += 1; }
     m.set(k, a);
   });
   return m;
@@ -259,9 +259,9 @@ export function CallTracking({
   }, [propertyId, publicToken, range.from, range.to]);
 
   // Filtered series predicates
-  const isLead = (c: CTMCall) => c.call_score_bucket === "good" || c.call_score_bucket === "admission";
+  const isLead = (c: CTMCall) => c.call_score_bucket === "good" || c.call_score_bucket === "projected_sale";
   const isGood = (c: CTMCall) => c.call_score_bucket === "good";
-  const isAdmission = (c: CTMCall) => c.call_score_bucket === "admission";
+  const isProjectedSale = (c: CTMCall) => c.call_score_bucket === "projected_sale";
   const isSpam = (c: CTMCall) => c.call_score_bucket === "spam";
 
   // Source × Outcome aggregation
@@ -304,9 +304,9 @@ export function CallTracking({
   return (
     <div className="space-y-8">
       <TimeSeriesRow title="Total Calls" calls={calls} from={range.from} to={range.to} filter={() => true} />
-      <TimeSeriesRow title="Total Lead Calls" description="Good leads + admissions" calls={calls} from={range.from} to={range.to} filter={isLead} />
+      <TimeSeriesRow title="Total Lead Calls" description="Good leads + projected sales" calls={calls} from={range.from} to={range.to} filter={isLead} />
       <TimeSeriesRow title="Total Good Leads" calls={calls} from={range.from} to={range.to} filter={isGood} />
-      <TimeSeriesRow title="Total Admissions" calls={calls} from={range.from} to={range.to} filter={isAdmission} />
+      <TimeSeriesRow title="Total Projected Sales" description="CTM AI transcript projection · provisional" calls={calls} from={range.from} to={range.to} filter={isProjectedSale} />
       {showSpam && (
         <TimeSeriesRow title="Total SPAM" description="Internal only" calls={calls} from={range.from} to={range.to} filter={isSpam} />
       )}
