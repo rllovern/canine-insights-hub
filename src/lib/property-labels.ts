@@ -1,4 +1,4 @@
-import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 
 export const CUSTOMIZABLE_METRIC_KEYS = [
   "leads", "good_leads", "bad_leads", "admissions", "spam",
@@ -22,7 +22,7 @@ export interface PropertyMetricConfig {
 }
 
 export function usePropertyMetricConfig(): PropertyMetricConfig {
-  const { activeProperty } = useProperties();
+  const { activeProperty } = useScope();
   const labels = (activeProperty?.metric_labels ?? {}) as Partial<Record<MetricKey, string>>;
   const hiddenArr = (activeProperty?.hidden_metrics ?? []) as MetricKey[];
   const hidden = new Set<MetricKey>(hiddenArr);
