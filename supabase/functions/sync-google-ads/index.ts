@@ -216,7 +216,7 @@ Deno.serve(async (req) => {
       const dates = Array.from(new Set(upsertRows.map(r => r.date)));
       const { data: existing } = await admin
         .from("daily_metrics")
-        .select("date,campaign,record_count,leads,good_leads,bad_leads,medicaid,admissions,no_entry,spam,sessions,users")
+        .select("date,campaign,record_count,leads,good_leads,bad_leads,medicaid,projected_sale,verified_sale,no_entry,spam,sessions,users")
         .eq("property_id", propertyId)
         .eq("ad_source", "Google PPC")
         .in("date", dates);
@@ -233,7 +233,8 @@ Deno.serve(async (req) => {
           good_leads: prev ? Number(prev.good_leads ?? 0) : 0,
           bad_leads: prev ? Number(prev.bad_leads ?? 0) : 0,
           medicaid: prev ? Number(prev.medicaid ?? 0) : 0,
-          admissions: prev ? Number(prev.admissions ?? 0) : 0,
+          projected_sale: prev ? Number(prev.projected_sale ?? 0) : 0,
+          verified_sale: prev ? Number(prev.verified_sale ?? 0) : 0,
           no_entry: prev ? Number(prev.no_entry ?? 0) : 0,
           spam: prev ? Number(prev.spam ?? 0) : 0,
           sessions: prev ? Number(prev.sessions ?? 0) : 0,
