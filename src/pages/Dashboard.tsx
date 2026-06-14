@@ -183,8 +183,9 @@ function ActionsKpis({ totals, prev, cfg }: { totals: any; prev: any; cfg: Retur
         <KpiCard
           key={k}
           label={cfg.label(k)}
-          value={fmtNumber((totals as any)[k] ?? 0)}
-          delta={pctChange((totals as any)[k] ?? 0, (prev as any)[k] ?? 0)}
+          value={k === "verified_sale" ? "—" : fmtNumber((totals as any)[k] ?? 0)}
+          delta={k === "verified_sale" ? undefined : pctChange((totals as any)[k] ?? 0, (prev as any)[k] ?? 0)}
+          hint={k === "verified_sale" ? "Close data not yet piped" : undefined}
         />
       ))}
     </div>
