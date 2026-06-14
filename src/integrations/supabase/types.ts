@@ -2188,6 +2188,10 @@ export type Database = {
         Args: { _active: boolean; _schedule: string }
         Returns: undefined
       }
+      sync_verified_sales_daily_metrics: {
+        Args: { _property_id: string }
+        Returns: number
+      }
       user_can_access_property: {
         Args: { _property_id: string; _user_id: string }
         Returns: boolean
