@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
-import { addMonths, format, isAfter, isBefore, isSameDay, startOfMonth } from "date-fns";
+import { addMonths, format, isAfter, isBefore, startOfMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -44,7 +44,7 @@ function parseInput(v: string): Date | null {
 export function DateRangePicker() {
   const {
     range, rangePreset, applySelection,
-    compareMode, setCompareMode, compareRange, setCompareRange,
+    compareMode, compareRange,
   } = useDateRange();
 
   const [open, setOpen] = useState(false);
