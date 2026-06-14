@@ -110,13 +110,6 @@ export default function Dashboard() {
       <SectionDivider
         title="Ads Overview"
         subtitle="Paid search performance across cost, traffic, and conversions"
-        right={
-          <AskJarvisButton
-            range={range}
-            prompt="Compare Google Ads performance for the selected date range vs the prior period. Explain the biggest movers and likely causes."
-            label="Run with Jarvis"
-          />
-        }
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="space-y-3">
@@ -167,31 +160,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <SectionDivider
-        title="Account Stability"
-        subtitle="Estimated stabilization impact from recent Google Ads changes"
-        right={
-          <AskJarvisButton
-            range={range}
-            prompt="Generate an account stability report for the selected property and date range. Highlight volatility, recent changes, and recommended next steps."
-            label="Run with Jarvis"
-          />
-        }
-      />
-      <AccountStability propertyId={activeProperty.id} />
-
-      <SectionDivider
-        title="Account Change History"
-        subtitle="Recent edits made inside the Google Ads account"
-        right={
-          <AskJarvisButton
-            range={range}
-            prompt="Review the recent Google Ads change history and call out which edits likely impacted performance, with severity and recommended follow-ups."
-            label="Investigate with Jarvis"
-          />
-        }
-      />
-      <AccountChangeHistory propertyId={activeProperty.id} />
     </>
   );
 }
