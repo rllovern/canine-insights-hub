@@ -53,16 +53,16 @@ function dotClass(severity: "good" | "warning" | "critical" | "neutral") {
   }
 }
 
-// Signed pacing severity.
-// delta = % budget spent − % month elapsed.
+// Signed, window-aware pacing severity.
+// Compare actual spend in the window against expected spend in the SAME window
+// (daily_budget × days_in_selected_window). delta = (actual − expected)/expected.
 //   |delta| ≤ 5pt → good (on pace)
-//   delta > +15pt → critical (burning too fast — overspend)
+//   delta > +15pt → critical (overspend)
 //   delta > +5pt  → warning (mild overspend)
 //   delta < −5pt  → warning at most (underdelivering; never critical)
-function pacingSeverity(spend: number, budget: number, pctMonthElapsed: number): "good" | "warning" | "critical" | "neutral" {
-  if (!budget) return "neutral";
-  const pace = spend / budget;
-  const delta = pace - pctMonthElapsed;
+function pacingSeverity(spend: number, expectedSpend: number): "good" | "warning" | "critical" | "neutral" {
+  if (!expectedSpend) return "neutral";
+  const delta = (spend - expectedSpend) / expectedSpend;
   if (Math.abs(delta) <= 0.05) return "good";
   if (delta > 0.15) return "critical";
   return "warning";
@@ -109,7 +109,7 @@ function healthLabel(s: Sev): string {
 
 export default function Command() {
   const { mode, propertyIds, propertyId, label } = useScope();
-  const { range } = useDateRange();
+  const { range, rangePreset } = useDateRange();
   const { properties } = useProperties();
 
   const fromIso = range.from.toISOString().slice(0, 10);
@@ -167,6 +167,14 @@ export default function Command() {
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     const pctMonth = (now.getTime() - start.getTime()) / (end.getTime() - start.getTime());
+    const daysInCurrentMonth = end.getDate();
+    // Single window source: derive days_in_selected_window from the same
+    // date-range the actual-spend query uses. Inclusive of both ends.
+    const daysInWindow = Math.max(
+      1,
+      Math.round((range.to.getTime() - range.from.getTime()) / 86_400_000) + 1,
+    );
+    const windowFraction = daysInWindow / daysInCurrentMonth;
     const totalBudget = (targetsQ.data ?? []).reduce((s, t) => s + (t.monthly_ad_budget ?? 0), 0);
     const totalGoal = (targetsQ.data ?? []).reduce((s, t) => s + (t.monthly_good_leads_goal ?? 0), 0);
     return {
@@ -175,12 +183,15 @@ export default function Command() {
       cpglValue: cpgl(spend, goodLeads),
       qualRate: ratio(goodLeads, totalLeads),
       pctMonth,
-      expectedSpend: totalBudget ? totalBudget * Math.min(1, Math.max(0, ((new Date().getTime() - start.getTime()) / (end.getTime() - start.getTime())))) : 0,
-      expectedGoodLeads: totalGoal ? totalGoal * Math.min(1, Math.max(0, ((new Date().getTime() - start.getTime()) / (end.getTime() - start.getTime())))) : 0,
+      daysInWindow,
+      daysInCurrentMonth,
+      windowFraction,
+      expectedSpend: totalBudget ? totalBudget * windowFraction : 0,
+      expectedGoodLeads: totalGoal ? totalGoal * windowFraction : 0,
       totalBudget,
       totalGoal,
     };
-  }, [rows, targetsQ.data]);
+  }, [rows, targetsQ.data, range.from, range.to]);
 
   const locationGrid = useMemo(() => {
     const byProperty = new Map<string, { spend: number; goodLeads: number; badLeads: number; projectedSale: number; verifiedSale: number }>();
@@ -196,6 +207,7 @@ export default function Command() {
     const visible = mode === "property" && propertyId
       ? properties.filter((p) => p.id === propertyId)
       : properties;
+    const isCustom = rangePreset === "custom";
     const items = visible.map((p) => {
       const agg = byProperty.get(p.id) ?? { spend: 0, goodLeads: 0, badLeads: 0, projectedSale: 0, verifiedSale: 0 };
       const totalLeads = agg.goodLeads + agg.badLeads + agg.projectedSale;
@@ -203,24 +215,28 @@ export default function Command() {
       const budget = target?.monthly_ad_budget ?? 0;
       const cplTarget = target?.cpl_target ?? null;
       const cpglTarget = target?.cpgl_target ?? null;
-      const pacing = pacingSeverity(agg.spend, budget, portfolio.pctMonth);
+      const expectedSpend = budget ? budget * portfolio.windowFraction : 0;
+      const pacing: Sev = isCustom && budget
+        ? "neutral"
+        : pacingSeverity(agg.spend, expectedSpend);
       const cplValue = cpl(agg.spend, totalLeads);
       const cpglValue = cpgl(agg.spend, agg.goodLeads);
       const cplSev = cplSeverity(cplValue, cplTarget);
       const cpglSev = cplSeverity(cpglValue, cpglTarget);
       const handlingSev = handlingSeverity(agg.goodLeads, totalLeads);
       const qual = totalLeads ? agg.goodLeads / totalLeads : 0;
-      const expectedSpend = budget ? budget * portfolio.pctMonth : 0;
-      const paceDeltaPt = budget ? ((agg.spend / budget) - portfolio.pctMonth) * 100 : 0;
+      const paceDeltaPt = expectedSpend ? ((agg.spend - expectedSpend) / expectedSpend) * 100 : 0;
       const paceDirection = paceDeltaPt > 0 ? "over" : "under";
       const dims: { key: string; label: string; sev: Sev; reason?: string }[] = [
         {
           key: "pacing",
           label: "Pacing",
           sev: pacing,
-          reason: budget
-            ? `${fmtCurrency(agg.spend)} spent vs ${fmtCurrency(expectedSpend)} expected at ${(portfolio.pctMonth * 100).toFixed(0)}% of month — ${Math.abs(paceDeltaPt).toFixed(0)}pt ${paceDirection} pace`
-            : undefined,
+          reason: !budget
+            ? undefined
+            : isCustom
+              ? "Pacing: select MTD or a trailing window"
+              : `${fmtCurrency(agg.spend)} spent vs ${fmtCurrency(expectedSpend)} expected over ${portfolio.daysInWindow}d — ${Math.abs(paceDeltaPt).toFixed(0)}pt ${paceDirection} pace`,
         },
         {
           key: "cpl",
@@ -246,7 +262,7 @@ export default function Command() {
       return { property: p, agg, totalLeads, cplValue, cpglValue, cplTarget, cpglTarget, budget, pacing, cplSev, cpglSev, handlingSev, worst, dims, health };
     });
     return items.sort((a, b) => severityRank(a.health.sev) - severityRank(b.health.sev));
-  }, [rows, properties, mode, propertyId, portfolio.pctMonth, targetsByProperty]);
+  }, [rows, properties, mode, propertyId, portfolio.windowFraction, portfolio.daysInWindow, rangePreset, targetsByProperty]);
 
   return (
     <div className="space-y-4">
