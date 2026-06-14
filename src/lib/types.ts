@@ -29,5 +29,5 @@ export interface PropertyDataSource {
 export interface DateRange {
   from: Date;
   to: Date;
-  label: string;
+  label?: string;
 }
