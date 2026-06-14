@@ -384,7 +384,7 @@ function buildTools(ctx: Ctx) {
     }),
 
     get_account_summary: tool({
-      description: "Aggregate totals (cost, calls, leads, admissions) by ad source for the date range.",
+      description: "Aggregate totals (cost, calls, leads, projected sales, verified sales) by ad source for the date range.",
       inputSchema: z.object({
         property_id: z.string().uuid().optional(),
         from: z.string().optional(),
@@ -1001,7 +1001,7 @@ function buildTools(ctx: Ctx) {
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const fetchRange = async (from: string, to: string) => {
           let q = ctx.supabase.from("daily_metrics")
-            .select("date,ad_source,campaign,cost,impressions,clicks,record_count,leads,good_leads,admissions")
+            .select("date,ad_source,campaign,cost,impressions,clicks,record_count,leads,good_leads,projected_sale,verified_sale")
             .eq("property_id", id).gte("date", from).lte("date", to);
           if (i.campaign) q = q.eq("campaign", i.campaign);
           const { data, error } = await q;
@@ -1013,7 +1013,7 @@ function buildTools(ctx: Ctx) {
           fetchRange(i.previous_from, i.previous_to),
         ]);
         const totals = (rows: typeof cur) => {
-          const t = { cost: 0, impressions: 0, clicks: 0, calls: 0, leads: 0, good_leads: 0, admissions: 0 };
+          const t = { cost: 0, impressions: 0, clicks: 0, calls: 0, leads: 0, good_leads: 0, projected_sale: 0, verified_sale: 0 };
           for (const r of rows) {
             t.cost += Number(r.cost ?? 0);
             t.impressions += Number(r.impressions ?? 0);
@@ -1021,7 +1021,8 @@ function buildTools(ctx: Ctx) {
             t.calls += Number(r.record_count ?? 0);
             t.leads += Number(r.leads ?? 0);
             t.good_leads += Number(r.good_leads ?? 0);
-            t.admissions += Number(r.admissions ?? 0);
+            t.projected_sale += Number(r.projected_sale ?? 0);
+            t.verified_sale += Number(r.verified_sale ?? 0);
           }
           return t;
         };
@@ -1046,7 +1047,8 @@ function buildTools(ctx: Ctx) {
           good_leads: { current: c.good_leads, previous: p.good_leads, ...delta(c.good_leads, p.good_leads) },
           cpl: { current: c.cpl, previous: p.cpl, ...delta(c.cpl, p.cpl) },
           conv_rate: { current: c.conv_rate, previous: p.conv_rate, ...delta(c.conv_rate, p.conv_rate) },
-          admissions: { current: c.admissions, previous: p.admissions, ...delta(c.admissions, p.admissions) },
+          projected_sale: { current: c.projected_sale, previous: p.projected_sale, ...delta(c.projected_sale, p.projected_sale) },
+          verified_sale: { current: c.verified_sale, previous: p.verified_sale, ...delta(c.verified_sale, p.verified_sale) },
         };
         const byCampaign = new Map<string, { current: ReturnType<typeof totals>; previous: ReturnType<typeof totals> }>();
         for (const r of cur) {
@@ -1105,20 +1107,20 @@ function buildTools(ctx: Ctx) {
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
         let q = ctx.supabase.from("daily_metrics")
-          .select("date,ad_source,campaign,cost,impressions,clicks,record_count,leads,good_leads,admissions")
+          .select("date,ad_source,campaign,cost,impressions,clicks,record_count,leads,good_leads,projected_sale,verified_sale")
           .eq("property_id", id).gte("date", from).lte("date", to);
         if (i.ad_source) q = q.eq("ad_source", i.ad_source);
         if (i.campaign) q = q.eq("campaign", i.campaign);
         const { data, error } = await q;
         if (error) throw new Error(error.message);
         const rows = data ?? [];
-        const tot = { cost: 0, impressions: 0, clicks: 0, leads: 0, good_leads: 0, admissions: 0 };
+        const tot = { cost: 0, impressions: 0, clicks: 0, leads: 0, good_leads: 0, projected_sale: 0, verified_sale: 0 };
         const byCampaign = new Map<string, { campaign: string; cost: number; clicks: number; impressions: number; leads: number }>();
         const byDate = new Map<string, { date: string; cost: number; clicks: number; leads: number }>();
         for (const r of rows) {
           tot.cost += Number(r.cost ?? 0); tot.impressions += Number(r.impressions ?? 0);
           tot.clicks += Number(r.clicks ?? 0); tot.leads += Number(r.leads ?? 0);
-          tot.good_leads += Number(r.good_leads ?? 0); tot.admissions += Number(r.admissions ?? 0);
+          tot.good_leads += Number(r.good_leads ?? 0); tot.projected_sale += Number(r.projected_sale ?? 0); tot.verified_sale += Number(r.verified_sale ?? 0);
           const ck = r.campaign || "(unknown)";
           const c = byCampaign.get(ck) ?? { campaign: ck, cost: 0, clicks: 0, impressions: 0, leads: 0 };
           c.cost += Number(r.cost ?? 0); c.clicks += Number(r.clicks ?? 0);
