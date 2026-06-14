@@ -172,7 +172,8 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
   const [sortKey, setSortKey] = useState<string>("good_leads");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) }));
+  // total_leads = good + bad + admissions (sale). Locked Step 2 AC-1.
+  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) + (r.admissions ?? 0) }));
   const curT = withTotals(cur);
   const preT = withTotals(pre);
   const preMapT = new Map(preT.map((r: any) => [r.ad_source, r]));
@@ -242,7 +243,8 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
 }
 
 function CampaignTable({ current, prior, cfg }: any) {
-  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) }));
+  // total_leads = good + bad + admissions (sale). Locked Step 2 AC-1.
+  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) + (r.admissions ?? 0) }));
   const cur = useMemo(() => withTotals(groupByCampaign(current)), [current]);
   const pre = useMemo(() => withTotals(groupByCampaign(prior)), [prior]);
   const preMap = new Map(pre.map((r: any) => [`${r.ad_source}::${r.campaign}`, r]));
