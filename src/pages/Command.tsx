@@ -10,6 +10,7 @@ import { useProperties } from "@/contexts/PropertyContext";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
+import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { fmtCurrency, fmtNumber } from "@/lib/metrics";
 import { cpl, cpgl, ratio, sumField } from "@/lib/scopedMetrics";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,25 @@ function handlingSeverity(goodLeads: number, totalLeads: number): "good" | "warn
 
 function severityRank(s: "good" | "warning" | "critical" | "neutral"): number {
   return { critical: 0, warning: 1, neutral: 2, good: 3 }[s];
+}
+
+type Sev = "good" | "warning" | "critical" | "neutral";
+
+function rollupHealth(dims: { key: string; label: string; sev: Sev; reason?: string }[]): {
+  sev: Sev;
+  failing: { label: string; reason?: string }[];
+} {
+  const assessable = dims.filter((d) => d.sev !== "neutral");
+  if (assessable.length === 0) return { sev: "neutral", failing: [] };
+  const criticals = assessable.filter((d) => d.sev === "critical");
+  if (criticals.length > 0) return { sev: "critical", failing: criticals.map((d) => ({ label: d.label, reason: d.reason })) };
+  const warns = assessable.filter((d) => d.sev === "warning");
+  if (warns.length > 0) return { sev: "warning", failing: warns.map((d) => ({ label: d.label, reason: d.reason })) };
+  return { sev: "good", failing: [] };
+}
+
+function healthLabel(s: Sev): string {
+  return s === "good" ? "Healthy" : s === "warning" ? "Warning" : s === "critical" ? "Critical" : "No target set";
 }
 
 export default function Command() {
@@ -183,10 +203,41 @@ export default function Command() {
       const cplSev = cplSeverity(cplValue, cplTarget);
       const cpglSev = cplSeverity(cpglValue, cpglTarget);
       const handlingSev = handlingSeverity(agg.goodLeads, totalLeads);
+      const qual = totalLeads ? agg.goodLeads / totalLeads : 0;
+      const expectedSpend = budget ? budget * portfolio.pctMonth : 0;
+      const dims: { key: string; label: string; sev: Sev; reason?: string }[] = [
+        {
+          key: "pacing",
+          label: "Pacing",
+          sev: pacing,
+          reason: budget
+            ? `${fmtCurrency(agg.spend)} spent vs ${fmtCurrency(expectedSpend)} expected at ${(portfolio.pctMonth * 100).toFixed(0)}% of month`
+            : undefined,
+        },
+        {
+          key: "cpl",
+          label: "CPL",
+          sev: cplSev,
+          reason: cplTarget && cplValue ? `${fmtCurrency(cplValue)} vs ${fmtCurrency(cplTarget)} target` : undefined,
+        },
+        {
+          key: "cpgl",
+          label: "CPGL",
+          sev: cpglSev,
+          reason: cpglTarget && cpglValue ? `${fmtCurrency(cpglValue)} vs ${fmtCurrency(cpglTarget)} target` : undefined,
+        },
+        {
+          key: "handling",
+          label: "Handling",
+          sev: handlingSev,
+          reason: totalLeads ? `${(qual * 100).toFixed(0)}% qual rate (${fmtNumber(agg.goodLeads)} / ${fmtNumber(totalLeads)})` : undefined,
+        },
+      ];
+      const health = rollupHealth(dims);
       const worst = [pacing, cplSev, cpglSev, handlingSev].sort((a, b) => severityRank(a) - severityRank(b))[0];
-      return { property: p, agg, totalLeads, cplValue, cpglValue, cplTarget, cpglTarget, budget, pacing, cplSev, cpglSev, handlingSev, worst };
+      return { property: p, agg, totalLeads, cplValue, cpglValue, cplTarget, cpglTarget, budget, pacing, cplSev, cpglSev, handlingSev, worst, dims, health };
     });
-    return items.sort((a, b) => severityRank(a.worst) - severityRank(b.worst));
+    return items.sort((a, b) => severityRank(a.health.sev) - severityRank(b.health.sev));
   }, [rows, properties, mode, propertyId, portfolio.pctMonth, targetsByProperty]);
 
   return (
@@ -243,6 +294,7 @@ export default function Command() {
             <span className="inline-flex items-center gap-1"><span className={cn("size-2 rounded-full", dotClass("good"))} /> good</span>
             <span className="inline-flex items-center gap-1"><span className={cn("size-2 rounded-full", dotClass("warning"))} /> warn</span>
             <span className="inline-flex items-center gap-1"><span className={cn("size-2 rounded-full", dotClass("critical"))} /> critical</span>
+            <span className="inline-flex items-center gap-1"><span className={cn("size-2 rounded-full", dotClass("neutral"))} /> no target</span>
           </div>
         </div>
         {q.isLoading ? (
@@ -262,7 +314,7 @@ export default function Command() {
                     </span>
                   </div>
                 </div>
-                <DotGroup pacing={row.pacing} cpl={row.cplSev} cpgl={row.cpglSev} handling={row.handlingSev} />
+                <HealthDot health={row.health} dims={row.dims} />
                 <Link
                   to={`/lead-performance`}
                   className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline"
@@ -310,5 +362,52 @@ function DotGroup({ pacing, cpl, cpgl, handling }: {
       <span className={cn("size-2.5 rounded-full", dotClass(cpgl))} title={`CPGL: ${cpgl}`} />
       <span className={cn("size-2.5 rounded-full", dotClass(handling))} title={`handling: ${handling}`} />
     </div>
+  );
+}
+
+function HealthDot({
+  health,
+  dims,
+}: {
+  health: { sev: Sev; failing: { label: string; reason?: string }[] };
+  dims: { key: string; label: string; sev: Sev; reason?: string }[];
+}) {
+  const verdict = healthLabel(health.sev);
+  const failingLine =
+    health.failing.length > 0
+      ? `${verdict}: ${health.failing
+          .map((f) => (f.reason ? `${f.label} ${f.reason}` : f.label))
+          .join(", ")}`
+      : health.sev === "good"
+        ? "All assessable dimensions within target."
+        : "No targets set for this location.";
+  return (
+    <HoverCard openDelay={80} closeDelay={60}>
+      <HoverCardTrigger asChild>
+        <button
+          type="button"
+          aria-label={failingLine}
+          className="inline-flex items-center justify-center rounded-full p-1 hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          <span className={cn("size-3 rounded-full ring-1 ring-border", dotClass(health.sev))} />
+        </button>
+      </HoverCardTrigger>
+      <HoverCardContent align="end" className="w-72 p-3 space-y-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{verdict}</div>
+        <div className="text-xs">{failingLine}</div>
+        <div className="pt-2 border-t border-border">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Breakdown</div>
+          <ul className="space-y-1">
+            {dims.map((d) => (
+              <li key={d.key} className="flex items-start gap-2 text-[11px]">
+                <span className={cn("size-2 rounded-full mt-1 shrink-0", dotClass(d.sev))} />
+                <span className="font-medium w-16 shrink-0">{d.label}</span>
+                <span className="text-muted-foreground">{d.reason ?? "no target set"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   );
 }
