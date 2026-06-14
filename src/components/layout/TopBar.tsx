@@ -1,23 +1,19 @@
-import { useProperties } from "@/contexts/PropertyContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, ShieldCheck, Eye, GitCompare } from "lucide-react";
+import { Calendar as CalendarIcon, ShieldCheck, Eye, GitCompare, Globe2, Building2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { PropertyAvatar } from "@/components/brand/PropertyAvatar";
-import { Plus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 export function TopBar() {
-  const { properties, activeProperty, setActiveProperty } = useProperties();
+  const { mode, label, activeProperty } = useScope();
   const { realRole, effectiveRole, isPreviewing, togglePreview } = usePreviewMode();
-  const navigate = useNavigate();
   const {
     range, setRange, rangePreset, setRangePreset,
     compareMode, setCompareMode, compareRange, setCompareRange,
@@ -27,8 +23,9 @@ export function TopBar() {
     <header className="shrink-0 border-b border-border bg-card sticky top-0 z-30">
       <div className="min-h-16 px-4 py-3 sm:px-6 sm:py-0 flex flex-wrap items-center gap-2 sm:gap-4">
         <div className="basis-full sm:basis-auto flex-1 min-w-0">
-          <h1 className="text-[18px] font-semibold tracking-tight truncate text-foreground">
-            {activeProperty?.name ?? "Dashboard"}
+          <h1 className="text-[18px] font-semibold tracking-tight truncate text-foreground flex items-center gap-2">
+            {mode === "agency" ? <Globe2 className="size-4 text-primary" /> : <Building2 className="size-4 text-primary" />}
+            {label}
           </h1>
           <div className="mt-1 h-[2px] w-10 rounded-full bg-gold" />
           <div className="text-xs text-muted-foreground leading-relaxed sm:truncate">
@@ -41,35 +38,7 @@ export function TopBar() {
           </div>
         </div>
 
-        {/* Property switcher */}
-        {properties.length > 0 ? (
-          <Select
-            value={activeProperty?.id ?? ""}
-            onValueChange={(v) => setActiveProperty(properties.find((p) => p.id === v) ?? null)}
-          >
-            <SelectTrigger className="w-[11rem] sm:w-48 h-9">
-              <SelectValue placeholder="Select client" />
-            </SelectTrigger>
-            <SelectContent>
-              {properties.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : realRole === "internal" ? (
-          <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => navigate("/admin/properties")}>
-            <Plus className="size-4" /> Add client
-          </Button>
-        ) : (
-          <div className="text-xs text-muted-foreground">No clients assigned</div>
-        )}
-
-        {activeProperty && (
-          <div className="hidden lg:flex items-center gap-2 px-3 h-9 rounded-md border bg-card">
-            <PropertyAvatar property={activeProperty} size="sm" />
-            <span className="text-xs font-medium">{activeProperty.name}</span>
-          </div>
-        )}
+        {/* Scope is now driven from the left rail. */}
 
         <Select value={rangePreset} onValueChange={(v) => setRangePreset(v as any)}>
           <SelectTrigger className="w-[8.75rem] sm:w-36 h-9">
