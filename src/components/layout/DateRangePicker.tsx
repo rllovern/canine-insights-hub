@@ -274,7 +274,29 @@ export function DateRangePicker() {
 
             {draftCompareMode !== "off" && (
               <div className="mt-2">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Compare</div>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Compare</div>
+                  <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+                    <Button
+                      type="button"
+                      variant={activeRange === "current" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() => { setActiveRange("current"); setPendingStart(null); }}
+                    >
+                      Date range
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={activeRange === "compare" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() => { setDraftCompareMode("custom"); setActiveRange("compare"); setPendingStart(null); }}
+                    >
+                      Compare range
+                    </Button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <DateField
                     label="Start date"
