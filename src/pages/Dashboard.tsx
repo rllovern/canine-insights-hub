@@ -7,7 +7,7 @@ import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLin
 import { AccountChangeHistory } from "@/components/dashboard/AccountChangeHistory";
 import { AccountStability } from "@/components/dashboard/AccountStability";
 import { useDashboard } from "@/contexts/DashboardContext";
-import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fillDateRange } from "@/lib/metrics";
 import { calc } from "@/lib/data-sources";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,7 +20,7 @@ import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 const REQUIRED_SOURCES = ["Facebook", "Direct", "Google PPC", "Organic"] as const;
 
 export default function Dashboard() {
-  const { activeProperty } = useProperties();
+  const { activeProperty } = useScope();
   const { current, prior, isLoading, range, compareMode, compareRange } = useDashboard();
   const cfg = usePropertyMetricConfig();
 
