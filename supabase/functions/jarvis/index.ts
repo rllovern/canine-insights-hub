@@ -345,7 +345,7 @@ function normalizeSpeedToLeadReportSchema(schema: Record<string, unknown>) {
     detail: detailParts.slice(1).join(" · ") || speedCard.detail,
     status: averageCard.status ?? speedCard.status,
     tone: averageCard.tone ?? speedCard.tone,
-    action_payload: averageCard.action_payload ?? speedCard.action_payload ?? responseRateCard?.action_payload,
+    action_payload: averageCard.action_payload ?? responseRateCard?.action_payload ?? speedCard.action_payload,
   };
 
   const drop = new Set([unavailableStlIdx, formAverageIdx, responseRateIdx].filter((i) => i >= 0));

@@ -299,17 +299,33 @@ function ReportTable({ spec }: { spec: TableSpec }) {
 
 function tableForAction(schema: ReportSchema, card: SummaryCard): TableSpec | null {
   const payload = card.action_payload;
-  if (!payload || payload.type !== "open_table") return null;
+  if (!payload) return null;
+  const legacy = payload as Record<string, unknown>;
   const tables = schema.tables ?? [];
-  const base = payload.table_title
+  const legacyTarget = typeof legacy.target === "string" ? legacy.target : undefined;
+  const legacyFilter = typeof legacy.filter === "string" ? legacy.filter : undefined;
+  const legacyTitle = legacyTarget === "lead_level_rows"
+    ? "lead"
+    : legacyTarget === "unavailable_diagnostics"
+      ? "diagnostic"
+      : undefined;
+  const base = payload.type === "open_table" && payload.table_title
     ? tables.find((t) => t.title === payload.table_title || t.title?.toLowerCase().includes(payload.table_title!.toLowerCase()))
-    : tables[0];
+    : legacyTitle
+      ? tables.find((t) => t.title?.toLowerCase().includes(legacyTitle))
+      : payload.type === "open_table"
+        ? tables[0]
+        : null;
   if (!base) return null;
-  const filters = payload.row_filter ?? {};
+  const filters = payload.type === "open_table" ? payload.row_filter ?? {} : {};
   const entries = Object.entries(filters).filter(([, v]) => v !== undefined);
-  const rows = entries.length
+  let rows = entries.length
     ? (base.rows ?? []).filter((row) => entries.every(([k, v]) => row[k] === v))
     : (base.rows ?? []);
+  if (legacyTarget === "lead_level_rows") {
+    if (legacyFilter === "responded_rows") rows = rows.filter((row) => row.response_seconds != null || row.response_type !== "none");
+    if (legacyFilter === "never_responded_rows") rows = rows.filter((row) => row.response_seconds == null || row.response_type === "none");
+  }
   return {
     ...base,
     title: payload.label ?? `${card.label} drill-in`,
@@ -406,7 +422,7 @@ function mergeSpeedToLeadSummaryCards(cards: SummaryCard[]): SummaryCard[] {
     detail: detailParts.slice(1).join(" · ") || speedCard.detail,
     status: averageCard.status ?? speedCard.status,
     tone: averageCard.tone ?? speedCard.tone,
-    action_payload: averageCard.action_payload ?? speedCard.action_payload ?? responseRateCard?.action_payload,
+    action_payload: averageCard.action_payload ?? responseRateCard?.action_payload ?? speedCard.action_payload,
   };
 
   const drop = new Set([unavailableStlIdx, formAverageIdx, responseRateIdx].filter((idx) => idx >= 0));
