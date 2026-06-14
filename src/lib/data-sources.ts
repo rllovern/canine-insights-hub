@@ -21,14 +21,17 @@ export interface MetricRow {
   users: number;
 }
 
-export async function fetchBlendedMetrics(propertyId: string, from: string, to: string): Promise<MetricRow[]> {
-  const { data, error } = await supabase
+export async function fetchBlendedMetrics(propertyId: string | null, from: string, to: string, propertyIds?: string[] | null): Promise<MetricRow[]> {
+  if (propertyIds && propertyIds.length === 0) return [];
+  let query = supabase
     .from("daily_metrics")
     .select("*")
-    .eq("property_id", propertyId)
     .gte("date", from)
     .lte("date", to)
     .order("date", { ascending: true });
+  if (propertyIds) query = query.in("property_id", propertyIds);
+  else if (propertyId) query = query.eq("property_id", propertyId);
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as unknown as MetricRow[];
 }

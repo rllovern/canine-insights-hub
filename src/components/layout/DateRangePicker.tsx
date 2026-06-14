@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
+import { addMonths, format, isAfter, isBefore, startOfMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -37,14 +37,15 @@ const fmtShort = (d: Date) => format(d, "M/d/yyyy");
 const fmtLong = (d: Date) => format(d, "MMM d, yyyy");
 
 function parseInput(v: string): Date | null {
-  const d = new Date(v);
+  const [year, month, day] = v.split("-").map(Number);
+  const d = year && month && day ? new Date(year, month - 1, day) : new Date(v);
   return isNaN(d.getTime()) ? null : d;
 }
 
 export function DateRangePicker() {
   const {
-    range, setRange, rangePreset, setRangePreset,
-    compareMode, setCompareMode, compareRange, setCompareRange,
+    range, rangePreset, applySelection,
+    compareMode, compareRange,
   } = useDateRange();
 
   const [open, setOpen] = useState(false);
@@ -56,6 +57,20 @@ export function DateRangePicker() {
   const [draftCompareRange, setDraftCompareRange] = useState<AppDateRange>(compareRange);
   const [upToToday, setUpToToday] = useState<number>(30);
   const [upToYesterday, setUpToYesterday] = useState<number>(30);
+  const [activeRange, setActiveRange] = useState<"current" | "compare">("current");
+  const [pendingStart, setPendingStart] = useState<Date | null>(null);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(startOfMonth(addMonths(range.to, -1)));
+
+  const calendarModifiers = useMemo(() => ({
+    current_range: draftRange,
+    current_start: draftRange.from,
+    current_end: draftRange.to,
+    ...(draftCompareMode !== "off" ? {
+      compare_range: draftCompareRange,
+      compare_start: draftCompareRange.from,
+      compare_end: draftCompareRange.to,
+    } : {}),
+  }), [draftRange, draftCompareMode, draftCompareRange]);
 
   // Reset draft when opening.
   useEffect(() => {
@@ -64,6 +79,9 @@ export function DateRangePicker() {
       setDraftPreset(rangePreset);
       setDraftCompareMode(compareMode);
       setDraftCompareRange(compareRange);
+      setActiveRange("current");
+      setPendingStart(null);
+      setVisibleMonth(startOfMonth(addMonths(range.to, -1)));
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -82,24 +100,63 @@ export function DateRangePicker() {
   }, [range, rangePreset]);
 
   function pickPreset(p: PresetKey) {
+    const next = getPresetRange(p);
     setDraftPreset(p);
-    setDraftRange(getPresetRange(p));
+    setDraftRange(next);
+    setActiveRange("current");
+    setPendingStart(null);
+    setVisibleMonth(startOfMonth(addMonths(next.to, -1)));
   }
 
   function applyDaysUpTo(n: number, yesterday: boolean) {
     if (!n || n < 1) return;
+    const next = daysUpTo(n, yesterday);
     setDraftPreset("custom");
-    setDraftRange(daysUpTo(n, yesterday));
+    setDraftRange(next);
+    setActiveRange("current");
+    setPendingStart(null);
+    setVisibleMonth(startOfMonth(addMonths(next.to, -1)));
+  }
+
+  function setPrimaryRange(next: AppDateRange, preset: PresetKey | "custom" = "custom") {
+    setDraftPreset(preset);
+    setDraftRange(next);
+    setActiveRange("current");
+    setPendingStart(null);
+  }
+
+  function setComparisonRange(next: AppDateRange) {
+    setDraftCompareMode("custom");
+    setDraftCompareRange(next);
+    setActiveRange("compare");
+    setPendingStart(null);
+  }
+
+  function handleDayClick(day: Date) {
+    if (isAfter(day, new Date())) return;
+    const setter = activeRange === "compare" && draftCompareMode !== "off"
+      ? (next: AppDateRange) => setComparisonRange(next)
+      : (next: AppDateRange) => setPrimaryRange(next);
+
+    if (!pendingStart) {
+      setter({ from: day, to: day });
+      setPendingStart(day);
+      return;
+    }
+
+    const from = isBefore(day, pendingStart) ? day : pendingStart;
+    const to = isBefore(day, pendingStart) ? pendingStart : day;
+    setter({ from, to });
+    setPendingStart(null);
   }
 
   function apply() {
-    if (draftPreset === "custom") {
-      setRange(draftRange);
-    } else {
-      setRangePreset(draftPreset);
-    }
-    setCompareMode(draftCompareMode);
-    if (draftCompareMode === "custom") setCompareRange(draftCompareRange);
+    applySelection({
+      range: draftRange,
+      preset: draftPreset,
+      compareMode: draftCompareMode,
+      compareRange: draftCompareRange,
+    });
     setOpen(false);
   }
 
@@ -183,12 +240,23 @@ export function DateRangePicker() {
               <Switch
                 id="cmp"
                 checked={draftCompareMode !== "off"}
-                onCheckedChange={(on) => setDraftCompareMode(on ? "previous" : "off")}
+                onCheckedChange={(on) => {
+                  setDraftCompareMode(on ? "previous" : "off");
+                  setDraftCompareRange(priorPeriod(draftRange));
+                  setActiveRange(on ? "compare" : "current");
+                  setPendingStart(null);
+                }}
               />
             </div>
             {draftCompareMode !== "off" && (
               <div className="px-2.5 pb-2.5">
-                <Select value={draftCompareMode} onValueChange={(v) => setDraftCompareMode(v as any)}>
+                <Select value={draftCompareMode} onValueChange={(v) => {
+                  const mode = v as "previous" | "custom";
+                  setDraftCompareMode(mode);
+                  if (mode === "previous") setDraftCompareRange(priorPeriod(draftRange));
+                  setActiveRange(mode === "custom" ? "compare" : "current");
+                  setPendingStart(null);
+                }}>
                   <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent className="z-50 bg-popover">
                     <SelectItem value="previous">Previous period</SelectItem>
@@ -205,28 +273,54 @@ export function DateRangePicker() {
               <DateField
                 label="Start date"
                 value={draftRange.from}
-                onChange={(d) => { setDraftPreset("custom"); setDraftRange({ ...draftRange, from: d }); }}
+                onFocus={() => { setActiveRange("current"); setPendingStart(null); }}
+                onChange={(d) => setPrimaryRange({ ...draftRange, from: d })}
               />
               <DateField
                 label="End date"
                 value={draftRange.to}
-                onChange={(d) => { setDraftPreset("custom"); setDraftRange({ ...draftRange, to: d }); }}
+                onFocus={() => { setActiveRange("current"); setPendingStart(null); }}
+                onChange={(d) => setPrimaryRange({ ...draftRange, to: d })}
               />
             </div>
 
             {draftCompareMode !== "off" && (
               <div className="mt-2">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Compare</div>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Compare</div>
+                  <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+                    <Button
+                      type="button"
+                      variant={activeRange === "current" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() => { setActiveRange("current"); setPendingStart(null); }}
+                    >
+                      Date range
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={activeRange === "compare" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() => { setDraftCompareMode("custom"); setActiveRange("compare"); setPendingStart(null); }}
+                    >
+                      Compare range
+                    </Button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <DateField
                     label="Start date"
                     value={draftCompareRange.from}
-                    onChange={(d) => { setDraftCompareMode("custom"); setDraftCompareRange({ ...draftCompareRange, from: d }); }}
+                    onFocus={() => { setActiveRange("compare"); setPendingStart(null); }}
+                    onChange={(d) => setComparisonRange({ ...draftCompareRange, from: d })}
                   />
                   <DateField
                     label="End date"
                     value={draftCompareRange.to}
-                    onChange={(d) => { setDraftCompareMode("custom"); setDraftCompareRange({ ...draftCompareRange, to: d }); }}
+                    onFocus={() => { setActiveRange("compare"); setPendingStart(null); }}
+                    onChange={(d) => setComparisonRange({ ...draftCompareRange, to: d })}
                   />
                 </div>
               </div>
@@ -234,14 +328,18 @@ export function DateRangePicker() {
 
             <div className="mt-3 -mx-1">
               <Calendar
-                mode="range"
-                defaultMonth={draftRange.from}
-                selected={{ from: draftRange.from, to: draftRange.to }}
-                onSelect={(r) => {
-                  if (r?.from) {
-                    setDraftPreset("custom");
-                    setDraftRange({ from: r.from, to: r.to ?? r.from });
-                  }
+                month={visibleMonth}
+                onMonthChange={setVisibleMonth}
+                disabled={{ after: new Date() }}
+                onDayClick={handleDayClick}
+                modifiers={calendarModifiers}
+                modifiersClassNames={{
+                  current_range: "bg-primary/15 text-foreground hover:bg-primary/20",
+                  current_start: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                  current_end: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                  compare_range: "bg-destructive/15 text-foreground hover:bg-destructive/20",
+                  compare_start: "bg-destructive text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground focus:bg-destructive focus:text-destructive-foreground",
+                  compare_end: "bg-destructive text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground focus:bg-destructive focus:text-destructive-foreground",
                 }}
                 numberOfMonths={2}
                 className="p-0 pointer-events-auto"
@@ -259,7 +357,7 @@ export function DateRangePicker() {
   );
 }
 
-function DateField({ label, value, onChange }: { label: string; value: Date; onChange: (d: Date) => void }) {
+function DateField({ label, value, onChange, onFocus }: { label: string; value: Date; onChange: (d: Date) => void; onFocus?: () => void }) {
   const [text, setText] = useState(format(value, "yyyy-MM-dd"));
   useEffect(() => { setText(format(value, "yyyy-MM-dd")); }, [value]);
   return (
@@ -268,6 +366,7 @@ function DateField({ label, value, onChange }: { label: string; value: Date; onC
       <Input
         type="date"
         value={text}
+        onFocus={onFocus}
         onChange={(e) => setText(e.target.value)}
         onBlur={() => { const d = parseInput(text); if (d) onChange(d); }}
         className="h-8 text-xs mt-0.5"
