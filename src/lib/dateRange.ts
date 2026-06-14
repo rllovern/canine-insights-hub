@@ -108,6 +108,22 @@ export function priorPeriod(r: DateRange): DateRange {
   return { from: startOfDay(from), to: endOfDay(to) };
 }
 
+/**
+ * Same calendar slice in the previous month. For a "this month" range like
+ * Jun 1–14, this returns May 1–14 (not the immediately-prior 14 days).
+ * Clamps to the last day of the previous month when day-of-month doesn't exist.
+ */
+export function sameSliceLastMonth(r: DateRange): DateRange {
+  const lastDayPrevMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
+  const shift = (d: Date) => {
+    const y = d.getFullYear();
+    const m = d.getMonth(); // shift to m-1
+    const day = Math.min(d.getDate(), lastDayPrevMonth(y, m));
+    return new Date(y, m - 1, day, d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+  };
+  return { from: startOfDay(shift(r.from)), to: endOfDay(shift(r.to)) };
+}
+
 export function formatRangeLabel(range: DateRange): string {
   const fmt = (d: Date) =>
     d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
