@@ -1,28 +1,19 @@
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { createContext, useContext, useMemo, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchBlendedMetrics, type MetricRow } from "@/lib/data-sources";
-import { getRange, priorRange, rangeToISO, type DateRange } from "@/lib/metrics";
+import { rangeToISO, type DateRange } from "@/lib/metrics";
 import { useProperties } from "./PropertyContext";
 import { useScope } from "./ScopeContext";
-import { startOfMonth } from "date-fns";
+import { useDateRange, type CompareMode, type RangePreset } from "./DateRangeContext";
+import type { PresetKey } from "@/lib/dateRange";
 
-export type CompareMode = "off" | "previous" | "custom";
-export type RangePreset = "mtd" | "7" | "30" | "90" | "custom";
-
-function presetToRange(preset: RangePreset): DateRange {
-  if (preset === "mtd") {
-    const now = new Date();
-    return { from: startOfMonth(now), to: now };
-  }
-  const days = preset === "custom" ? 30 : Number(preset);
-  return getRange(days);
-}
+export type { CompareMode, RangePreset };
 
 export interface DashboardCtx {
   range: DateRange;
   setRange: (r: DateRange) => void;
   rangePreset: RangePreset;
-  setRangePreset: (p: RangePreset) => void;
+  setRangePreset: (p: PresetKey) => void;
   compareMode: CompareMode;
   setCompareMode: (m: CompareMode) => void;
   compareRange: DateRange;
@@ -44,27 +35,11 @@ interface ProviderProps {
 export function DashboardProvider({ children, fetcher, fetcherKey, enabled }: ProviderProps) {
   const { properties } = useProperties();
   const { activeProperty: scopeProperty, mode } = useScope();
-  // Dashboard (PPC Overview) is single-property today. In agency mode, fall
-  // back to the first available property so the page still renders; Command
-  // is the proper agency landing page.
   const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
-  const [rangePreset, setRangePresetState] = useState<RangePreset>("mtd");
-  const [range, setRangeState] = useState<DateRange>(presetToRange("mtd"));
-  const [compareMode, setCompareMode] = useState<CompareMode>("previous");
-  const [compareRange, setCompareRange] = useState<DateRange>(priorRange(presetToRange("mtd")));
-
-  const setRangePreset = (p: RangePreset) => {
-    setRangePresetState(p);
-    if (p !== "custom") setRangeState(presetToRange(p));
-  };
-  const setRange = (r: DateRange) => {
-    setRangeState(r);
-    setRangePresetState("custom");
-  };
-
-  useEffect(() => {
-    if (compareMode === "previous") setCompareRange(priorRange(range));
-  }, [range, compareMode]);
+  const {
+    range, setRange, rangePreset, setRangePreset,
+    compareMode, setCompareMode, compareRange, setCompareRange,
+  } = useDateRange();
 
   const iso = rangeToISO(range);
   const effCmp = compareMode === "off" ? null : compareRange;
