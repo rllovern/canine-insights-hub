@@ -279,7 +279,7 @@ Deno.serve(async (req) => {
         case "good":      b.good_leads += 1; b.leads += 1; break;
         case "bad":       b.bad_leads  += 1; b.leads += 1; break;
         case "no_entry":  b.no_entry   += 1; b.leads += 1; break;
-        case "spam":      b.spam       += 1; break;
+        case "spam":      b.spam       += 1; b.bad_leads += 1; b.leads += 1; break;
         case "unmapped":  /* counted in record_count only */ break;
       }
       agg.set(key, b);
