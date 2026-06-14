@@ -221,8 +221,8 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
                 <TableCell className="font-medium">{r.ad_source}</TableCell>
                 {cols.map((c) => (
                   <TableCell key={c.key} className="text-right tabular-nums">
-                    <div>{fmtNumber(r[c.key])}</div>
-                    {p && <Delta value={pctChange(r[c.key], p[c.key] ?? 0)} invert={c.key === "bad_leads" || c.key === "no_entry" || c.key === "spam"} />}
+                    <div>{c.key === "verified_sale" ? "—" : fmtNumber(r[c.key])}</div>
+                    {p && c.key !== "verified_sale" && <Delta value={pctChange(r[c.key], p[c.key] ?? 0)} invert={c.key === "bad_leads" || c.key === "no_entry" || c.key === "spam"} />}
                   </TableCell>
                 ))}
               </TableRow>
@@ -232,8 +232,8 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
             <TableCell>Grand Total</TableCell>
             {cols.map((c) => (
               <TableCell key={c.key} className="text-right tabular-nums">
-                <div>{fmtNumber(totals[c.key])}</div>
-                <Delta value={pctChange(totals[c.key], ptotals[c.key] ?? 0)} invert={c.key === "bad_leads" || c.key === "no_entry" || c.key === "spam"} />
+                <div>{c.key === "verified_sale" ? "—" : fmtNumber(totals[c.key])}</div>
+                {c.key !== "verified_sale" && <Delta value={pctChange(totals[c.key], ptotals[c.key] ?? 0)} invert={c.key === "bad_leads" || c.key === "no_entry" || c.key === "spam"} />}
               </TableCell>
             ))}
           </TableRow>
@@ -298,8 +298,8 @@ function CampaignTable({ current, prior, cfg }: any) {
                 <TableCell className="font-medium">{r.campaign}</TableCell>
                 {cols.map((c) => (
                   <TableCell key={c} className="text-right tabular-nums">
-                    <div>{fmtNumber(r[c])}</div>
-                    {p && <Delta value={pctChange(r[c], p[c] ?? 0)} invert={c === "bad_leads" || c === "no_entry" || c === "spam"} />}
+                    <div>{c === "verified_sale" ? "—" : fmtNumber(r[c])}</div>
+                    {p && c !== "verified_sale" && <Delta value={pctChange(r[c], p[c] ?? 0)} invert={c === "bad_leads" || c === "no_entry" || c === "spam"} />}
                   </TableCell>
                 ))}
               </TableRow>

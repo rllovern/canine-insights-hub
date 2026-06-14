@@ -223,7 +223,7 @@ export default function Command() {
             />
             <Metric label="Total leads" value={fmtNumber(portfolio.totalLeads)} />
             <Metric label="Projected sales" value={fmtNumber(portfolio.projectedSale)} sub="CTM AI projection" />
-            <Metric label="Verified sales" value={fmtNumber(portfolio.verifiedSale)} sub="Close data not yet piped" />
+            <Metric label="Verified sales" value="—" sub="Close data not yet piped" />
             <Metric label="CPL" value={portfolio.cplValue ? fmtCurrency(portfolio.cplValue) : "—"} />
             <Metric label="CPGL" value={portfolio.cpglValue ? fmtCurrency(portfolio.cpglValue) : "—"} />
             <Metric label="Qual rate" value={portfolio.totalLeads ? `${(portfolio.qualRate * 100).toFixed(0)}%` : "—"} />
@@ -256,7 +256,7 @@ export default function Command() {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate">{row.property.name}</div>
                   <div className="text-[11px] text-muted-foreground">
-                    {fmtCurrency(row.agg.spend)} spend · {fmtNumber(row.totalLeads)} total leads · {fmtNumber(row.agg.goodLeads)} good leads · {fmtNumber(row.agg.projectedSale)} projected sales · {fmtNumber(row.agg.verifiedSale)} verified sales
+                    {fmtCurrency(row.agg.spend)} spend · {fmtNumber(row.totalLeads)} total leads · {fmtNumber(row.agg.goodLeads)} good leads · {fmtNumber(row.agg.projectedSale)} projected sales · verified sales unavailable
                     <span className="block text-muted-foreground/70">
                       CPL {row.cplValue ? fmtCurrency(row.cplValue) : "—"}{row.cplTarget ? ` target ${fmtCurrency(row.cplTarget)}` : " target unset"} · CPGL {row.cpglValue ? fmtCurrency(row.cpglValue) : "—"}{row.cpglTarget ? ` target ${fmtCurrency(row.cpglTarget)}` : " target unset"}
                     </span>
