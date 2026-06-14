@@ -157,30 +157,34 @@ export default function Command() {
   }, [rows, targetsQ.data]);
 
   const locationGrid = useMemo(() => {
-    const byProperty = new Map<string, { spend: number; goodLeads: number; badLeads: number; admissions: number }>();
+    const byProperty = new Map<string, { spend: number; goodLeads: number; badLeads: number; projectedSale: number; verifiedSale: number }>();
     for (const r of rows) {
-      const cur = byProperty.get(r.property_id) ?? { spend: 0, goodLeads: 0, badLeads: 0, admissions: 0 };
+      const cur = byProperty.get(r.property_id) ?? { spend: 0, goodLeads: 0, badLeads: 0, projectedSale: 0, verifiedSale: 0 };
       cur.spend += r.cost ?? 0;
       cur.goodLeads += r.good_leads ?? 0;
       cur.badLeads += r.bad_leads ?? 0;
-      cur.admissions += r.admissions ?? 0;
+      cur.projectedSale += r.projected_sale ?? 0;
+      cur.verifiedSale += r.verified_sale ?? 0;
       byProperty.set(r.property_id, cur);
     }
     const visible = mode === "property" && propertyId
       ? properties.filter((p) => p.id === propertyId)
       : properties;
     const items = visible.map((p) => {
-      const agg = byProperty.get(p.id) ?? { spend: 0, goodLeads: 0, badLeads: 0, admissions: 0 };
-      const totalLeads = agg.goodLeads + agg.badLeads + agg.admissions;
+      const agg = byProperty.get(p.id) ?? { spend: 0, goodLeads: 0, badLeads: 0, projectedSale: 0, verifiedSale: 0 };
+      const totalLeads = agg.goodLeads + agg.badLeads + agg.projectedSale;
       const target = targetsByProperty.get(p.id);
       const budget = target?.monthly_ad_budget ?? 0;
-      const cplTarget = target?.cpl_target ?? AGENCY_DEFAULT_CPL_TARGET;
+      const cplTarget = target?.cpl_target ?? null;
+      const cpglTarget = target?.cpgl_target ?? null;
       const pacing = pacingSeverity(agg.spend, budget, portfolio.pctMonth);
-      const cplValue = cpl(agg.spend, agg.goodLeads);
+      const cplValue = cpl(agg.spend, totalLeads);
+      const cpglValue = cpgl(agg.spend, agg.goodLeads);
       const cplSev = cplSeverity(cplValue, cplTarget);
+      const cpglSev = cplSeverity(cpglValue, cpglTarget);
       const handlingSev = handlingSeverity(agg.goodLeads, totalLeads);
-      const worst = [pacing, cplSev, handlingSev].sort((a, b) => severityRank(a) - severityRank(b))[0];
-      return { property: p, agg, totalLeads, cplValue, cplTarget, budget, pacing, cplSev, handlingSev, worst };
+      const worst = [pacing, cplSev, cpglSev, handlingSev].sort((a, b) => severityRank(a) - severityRank(b))[0];
+      return { property: p, agg, totalLeads, cplValue, cpglValue, cplTarget, cpglTarget, budget, pacing, cplSev, cpglSev, handlingSev, worst };
     });
     return items.sort((a, b) => severityRank(a.worst) - severityRank(b.worst));
   }, [rows, properties, mode, propertyId, portfolio.pctMonth, targetsByProperty]);
