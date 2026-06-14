@@ -32,14 +32,14 @@ export default function CallTracking() {
     const zeros = {
       cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0,
       leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0,
-      admissions: 0, sessions: 0, users: 0,
-      cost_per_good_lead: 0, cost_per_intake: 0,
+      projected_sale: 0, verified_sale: 0, sessions: 0, users: 0,
+      cost_per_good_lead: 0, cost_per_projected_sale: 0,
     } as any;
     const buildDaily = (rows: typeof current) =>
       groupByDate(rows).map((r) => ({
         ...r,
         cost_per_good_lead: calc.costPerGoodLead(r.cost, r.good_leads),
-        cost_per_intake: calc.costPerIntake(r.cost, r.admissions),
+        cost_per_projected_sale: calc.costPerProjectedSale(r.cost, r.projected_sale),
       }));
     const cur = fillDateRange(buildDaily(current), range.from, range.to, zeros);
     if (!showCompare) return cur;
@@ -50,13 +50,13 @@ export default function CallTracking() {
         ...row,
         record_count_prev: p.record_count ?? 0,
         good_leads_prev: p.good_leads ?? 0,
-        admissions_prev: p.admissions ?? 0,
+        projected_sale_prev: p.projected_sale ?? 0,
         spam_prev: p.spam ?? 0,
       };
     });
   }, [current, prior, range, compareRange, showCompare]);
 
-  const buildSourceSeries = (metric: "record_count" | "good_leads" | "admissions" | "spam") => {
+  const buildSourceSeries = (metric: "record_count" | "good_leads" | "projected_sale" | "spam") => {
     const curG = groupByDateAndSource(current, metric);
     const priG = groupByDateAndSource(prior, metric);
     const sources = Array.from(new Set([...curG.sources, ...priG.sources]));
@@ -75,7 +75,7 @@ export default function CallTracking() {
 
   const callsBySource = useMemo(() => buildSourceSeries("record_count"), [current, prior, range, compareRange, showCompare]);
   const goodBySource = useMemo(() => buildSourceSeries("good_leads"), [current, prior, range, compareRange, showCompare]);
-  const admBySource = useMemo(() => buildSourceSeries("admissions"), [current, prior, range, compareRange, showCompare]);
+  const projectedBySource = useMemo(() => buildSourceSeries("projected_sale"), [current, prior, range, compareRange, showCompare]);
   const spamBySource = useMemo(() => buildSourceSeries("spam"), [current, prior, range, compareRange, showCompare]);
 
   const cpglBySource = useMemo(() => {
@@ -128,13 +128,13 @@ export default function CallTracking() {
         </ChartCard>
       </Row>
 
-      {!cfg.isHidden("admissions") && (
+      {!cfg.isHidden("projected_sale") && (
         <Row>
-          <ChartCard title={`Total ${cfg.label("admissions")}`} subtitle="Daily">
-            <SingleLineChart data={series} dataKey="admissions" label={cfg.label("admissions")} color="hsl(var(--chart-4))" fmt={fmtNumber} prevKey="admissions_prev" showCompare={showCompare} />
+          <ChartCard title={`Total ${cfg.label("projected_sale")}`} subtitle="CTM AI transcript projection · provisional">
+            <SingleLineChart data={series} dataKey="projected_sale" label={cfg.label("projected_sale")} color="hsl(var(--chart-4))" fmt={fmtNumber} prevKey="projected_sale_prev" showCompare={showCompare} />
           </ChartCard>
-          <ChartCard title={`${cfg.label("admissions")} by Source`}>
-            <MultiLineChart data={admBySource.series} sources={admBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
+          <ChartCard title={`${cfg.label("projected_sale")} by Source`}>
+            <MultiLineChart data={projectedBySource.series} sources={projectedBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
           </ChartCard>
         </Row>
       )}
