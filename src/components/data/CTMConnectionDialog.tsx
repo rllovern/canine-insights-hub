@@ -244,7 +244,7 @@ export function CTMConnectionDialog({ property, source, onChanged, trigger, open
       .limit(1);
     if (existing.data && existing.data.length > 0) return;
     const seeds: Array<[string, Bucket]> = [
-      ["Sale", "sale"],
+      ["Projected Sale", "projected_sale"],
       ["Good Lead", "good"],
       ["Bad Lead", "bad"],
       ["Repeat Caller", "repeat"],

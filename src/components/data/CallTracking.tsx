@@ -324,7 +324,7 @@ export function CallTracking({
                 {showBadLead && <TableHead className="text-right">Bad lead</TableHead>}
                 <TableHead className="text-right">Good lead</TableHead>
                 {showSpam && <TableHead className="text-right">SPAM</TableHead>}
-                <TableHead className="text-right">Admission</TableHead>
+                <TableHead className="text-right">Projected sale</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -339,7 +339,7 @@ export function CallTracking({
                     {showBadLead && <TableCell className="text-right"><DeltaCell curr={agg.bad_lead} prev={prev.bad_lead} /></TableCell>}
                     <TableCell className="text-right"><DeltaCell curr={agg.good_lead} prev={prev.good_lead} /></TableCell>
                     {showSpam && <TableCell className="text-right"><DeltaCell curr={agg.spam} prev={prev.spam} /></TableCell>}
-                    <TableCell className="text-right"><DeltaCell curr={agg.admission} prev={prev.admission} /></TableCell>
+                    <TableCell className="text-right"><DeltaCell curr={agg.projected_sale} prev={prev.projected_sale} /></TableCell>
                   </TableRow>
                 );
               })}
@@ -361,7 +361,7 @@ export function CallTracking({
               <option value="record_count">Record count</option>
               <option value="leads">Leads</option>
               <option value="good_lead">Good lead</option>
-              <option value="admission">Admission</option>
+              <option value="projected_sale">Projected sale</option>
               {showBadLead && <option value="bad_lead">Bad lead</option>}
               {showSpam && <option value="spam">SPAM</option>}
             </select>
@@ -379,7 +379,7 @@ export function CallTracking({
                 {showBadLead && <TableHead className="text-right">Bad lead</TableHead>}
                 <TableHead className="text-right">Good lead</TableHead>
                 {showSpam && <TableHead className="text-right">SPAM</TableHead>}
-                <TableHead className="text-right">Admission</TableHead>
+                <TableHead className="text-right">Projected sale</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -393,7 +393,7 @@ export function CallTracking({
                   {showBadLead && <TableCell className="text-right"><DeltaCell curr={agg.bad_lead} prev={prev.bad_lead} /></TableCell>}
                   <TableCell className="text-right"><DeltaCell curr={agg.good_lead} prev={prev.good_lead} /></TableCell>
                   {showSpam && <TableCell className="text-right"><DeltaCell curr={agg.spam} prev={prev.spam} /></TableCell>}
-                  <TableCell className="text-right"><DeltaCell curr={agg.admission} prev={prev.admission} /></TableCell>
+                  <TableCell className="text-right"><DeltaCell curr={agg.projected_sale} prev={prev.projected_sale} /></TableCell>
                 </TableRow>
               ))}
             </TableBody>
