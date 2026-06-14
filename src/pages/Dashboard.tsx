@@ -4,8 +4,6 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { DualAxisChart } from "@/components/dashboard/DualAxisChart";
 import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLineChart";
-import { AccountChangeHistory } from "@/components/dashboard/AccountChangeHistory";
-import { AccountStability } from "@/components/dashboard/AccountStability";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { useProperties } from "@/contexts/PropertyContext";
@@ -13,7 +11,6 @@ import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fil
 import { calc } from "@/lib/data-sources";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePropertyMetricConfig, type MetricKey } from "@/lib/property-labels";
-import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 
 // Cost / Good Lead by-source chart always renders these 4 series so missing
 // connectors (Facebook / Direct / Organic) appear as flat $0 lines instead of
