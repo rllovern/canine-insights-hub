@@ -211,13 +211,15 @@ export default function Command() {
       const handlingSev = handlingSeverity(agg.goodLeads, totalLeads);
       const qual = totalLeads ? agg.goodLeads / totalLeads : 0;
       const expectedSpend = budget ? budget * portfolio.pctMonth : 0;
+      const paceDeltaPt = budget ? ((agg.spend / budget) - portfolio.pctMonth) * 100 : 0;
+      const paceDirection = paceDeltaPt > 0 ? "over" : "under";
       const dims: { key: string; label: string; sev: Sev; reason?: string }[] = [
         {
           key: "pacing",
           label: "Pacing",
           sev: pacing,
           reason: budget
-            ? `${fmtCurrency(agg.spend)} spent vs ${fmtCurrency(expectedSpend)} expected at ${(portfolio.pctMonth * 100).toFixed(0)}% of month`
+            ? `${fmtCurrency(agg.spend)} spent vs ${fmtCurrency(expectedSpend)} expected at ${(portfolio.pctMonth * 100).toFixed(0)}% of month — ${Math.abs(paceDeltaPt).toFixed(0)}pt ${paceDirection} pace`
             : undefined,
         },
         {
