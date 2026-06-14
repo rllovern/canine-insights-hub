@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { rangeToISO, type DateRange } from "@/lib/metrics";
 
 type Props = {
@@ -29,7 +29,7 @@ export function AskJarvisButton({
   className,
 }: Props) {
   const nav = useNavigate();
-  const { activeProperty } = useProperties();
+  const { activeProperty } = useScope();
 
   const go = () => {
     const sp = new URLSearchParams();

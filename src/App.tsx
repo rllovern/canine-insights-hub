@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import Command from "./pages/Command";
 import CallTracking from "./pages/CallTracking";
 import Keywords from "./pages/Keywords";
 import PropertyPage from "./pages/PropertyPage";
@@ -25,6 +26,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { PreviewModeProvider } from "./contexts/PreviewModeContext";
 import { PropertyProvider } from "./contexts/PropertyContext";
 import { DateRangeProvider } from "./contexts/DateRangeContext";
+import { ScopeProvider } from "./contexts/ScopeContext";
 import { AppShell } from "./components/layout/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
 
@@ -40,6 +42,7 @@ const App = () => (
           <PreviewModeProvider>
             <DateRangeProvider>
               <PropertyProvider>
+                <ScopeProvider>
                 <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />
@@ -54,6 +57,7 @@ const App = () => (
                   />
 
                   <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+                    <Route path="/command" element={<Command />} />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/calls" element={<CallTracking />} />
                     <Route path="/keywords" element={<Keywords />} />
@@ -86,6 +90,7 @@ const App = () => (
 
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                </ScopeProvider>
               </PropertyProvider>
             </DateRangeProvider>
           </PreviewModeProvider>

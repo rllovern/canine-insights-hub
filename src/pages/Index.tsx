@@ -10,5 +10,5 @@ export default function Index() {
       </div>
     );
   }
-  return <Navigate to={user ? "/dashboard" : "/login"} replace />;
+  return <Navigate to={user ? "/command" : "/login"} replace />;
 }

@@ -1,11 +1,12 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, GripVertical, Target, GitBranch, Timer, Bot } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, GripVertical, Target, GitBranch, Timer, Bot, LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { ScopeSelector } from "./ScopeSelector";
 
 type NavItem = {
   key: string;
@@ -17,6 +18,7 @@ type NavItem = {
 };
 
 const ALL_ITEMS: NavItem[] = [
+  { key: "command", to: "/command", label: "Command", icon: LayoutDashboard },
   { key: "dashboard", to: "/dashboard", label: "PPC Overview", icon: BarChart3 },
   { key: "calls", to: "/calls", label: "Call Tracking", icon: PhoneCall },
   { key: "lead-performance", to: "/lead-performance", label: "Lead Performance", icon: Target },
@@ -93,6 +95,9 @@ export function Sidebar() {
       <div className="px-4 py-4 border-b border-sidebar-border">
         <BrandMark variant="onDark" />
         <div className="mt-2 h-[2px] w-10 rounded-full bg-sidebar-primary" />
+      </div>
+      <div className="px-3 pt-3">
+        <ScopeSelector />
       </div>
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {visibleItems.map((it) => {

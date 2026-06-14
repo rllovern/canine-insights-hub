@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchBlendedMetrics, type MetricRow } from "@/lib/data-sources";
 import { getRange, priorRange, rangeToISO, type DateRange } from "@/lib/metrics";
 import { useProperties } from "./PropertyContext";
+import { useScope } from "./ScopeContext";
 import { startOfMonth } from "date-fns";
 
 export type CompareMode = "off" | "previous" | "custom";
@@ -41,7 +42,12 @@ interface ProviderProps {
 }
 
 export function DashboardProvider({ children, fetcher, fetcherKey, enabled }: ProviderProps) {
-  const { activeProperty } = useProperties();
+  const { properties } = useProperties();
+  const { activeProperty: scopeProperty, mode } = useScope();
+  // Dashboard (PPC Overview) is single-property today. In agency mode, fall
+  // back to the first available property so the page still renders; Command
+  // is the proper agency landing page.
+  const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
   const [rangePreset, setRangePresetState] = useState<RangePreset>("mtd");
   const [range, setRangeState] = useState<DateRange>(presetToRange("mtd"));
   const [compareMode, setCompareMode] = useState<CompareMode>("previous");

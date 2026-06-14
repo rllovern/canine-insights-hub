@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { rangeToISO } from "@/lib/metrics";
 import {
@@ -117,7 +118,10 @@ function extractReports(messages: UIMessage[]): ReportRef[] {
 
 export function JarvisChat() {
   const { session } = useAuth();
-  const { activeProperty, properties, setActiveProperty } = useProperties();
+  const { activeProperty, properties } = useProperties();
+  // We keep useProperties() for the list, and use scope as the source of truth
+  // for the active property and for switching it.
+  const { setScope } = useScope();
   const { range, compareRange, compareMode } = useDashboard();
   const [params, setParams] = useSearchParams();
   const sessionParam = params.get("session");
@@ -147,8 +151,8 @@ export function JarvisChat() {
     if (!urlPropertyId) return;
     if (activeProperty?.id === urlPropertyId) return;
     const match = properties.find((p) => p.id === urlPropertyId);
-    if (match) setActiveProperty(match);
-  }, [urlPropertyId, properties, activeProperty?.id, setActiveProperty]);
+    if (match) setScope({ mode: "property", propertyId: match.id });
+  }, [urlPropertyId, properties, activeProperty?.id, setScope]);
 
   const urlProperty = urlPropertyId ? properties.find((p) => p.id === urlPropertyId) ?? null : null;
   const effectiveProperty =
@@ -485,7 +489,7 @@ export function JarvisChat() {
                   <Select
                     onValueChange={(id) => {
                       const p = properties.find((x) => x.id === id);
-                      if (p) setActiveProperty(p);
+                      if (p) setScope({ mode: "property", propertyId: p.id });
                     }}
                   >
                     <SelectTrigger>

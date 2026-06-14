@@ -7,6 +7,7 @@ import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLin
 import { AccountChangeHistory } from "@/components/dashboard/AccountChangeHistory";
 import { AccountStability } from "@/components/dashboard/AccountStability";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fillDateRange } from "@/lib/metrics";
 import { calc } from "@/lib/data-sources";
@@ -20,7 +21,10 @@ import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 const REQUIRED_SOURCES = ["Facebook", "Direct", "Google PPC", "Organic"] as const;
 
 export default function Dashboard() {
-  const { activeProperty } = useProperties();
+  const { activeProperty: scopeProperty, mode } = useScope();
+  const { properties } = useProperties();
+  // PPC Overview is single-property today; in agency mode fall back to first.
+  const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
   const { current, prior, isLoading, range, compareMode, compareRange } = useDashboard();
   const cfg = usePropertyMetricConfig();
 

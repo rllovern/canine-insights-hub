@@ -5,6 +5,7 @@ import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLin
 import { useDashboard } from "@/contexts/DashboardContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 import {
   fmtCurrency, fmtNumber, groupByDate, groupByDateAndSource, groupBySource, groupByCampaign, pctChange, fillDateRange,
 } from "@/lib/metrics";
@@ -19,7 +20,9 @@ import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 
 export default function CallTracking() {
   const { current, prior, isLoading, range, compareMode, compareRange } = useDashboard();
-  const { activeProperty } = useProperties();
+  const { activeProperty: scopeProperty, mode } = useScope();
+  const { properties } = useProperties();
+  const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
   const { effectiveRole } = usePreviewMode();
   const isInternal = effectiveRole === "internal";
   const cfg = usePropertyMetricConfig();

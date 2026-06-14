@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, Menu, Building2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
-import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { PreviewModeContext } from "@/contexts/PreviewModeContext";
 import { TokenReport } from "@/components/reports/TokenReport";
 import { exportNodeToPdf } from "@/lib/exportPdf";
@@ -32,7 +32,7 @@ const VIEWER_PREVIEW_VALUE = {
 export default function AdminClientReports() {
   const { propertyId } = useParams<{ propertyId: string }>();
   const navigate = useNavigate();
-  const { setActiveProperty } = useProperties();
+  const { setScope } = useScope();
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -67,9 +67,9 @@ export default function AdminClientReports() {
 
   useEffect(() => {
     if (!current) return;
-    setActiveProperty(current);
+    setScope({ mode: "property", propertyId: current.id });
     localStorage.setItem(STORAGE_KEY, current.id);
-  }, [current, setActiveProperty]);
+  }, [current, setScope]);
 
   if (!properties) {
     return (

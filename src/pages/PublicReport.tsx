@@ -3,12 +3,12 @@ import { useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
-import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { TokenReport } from "@/components/reports/TokenReport";
 
 export default function PublicReport() {
   const { token } = useParams<{ token: string }>();
-  const { setActiveProperty } = useProperties();
+  const { setScope } = useScope();
   const [property, setProperty] = useState<Property | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +20,7 @@ export default function PublicReport() {
       } else {
         const p = data[0] as Property;
         setProperty(p);
-        setActiveProperty(p);
+        setScope({ mode: "property", propertyId: p.id });
       }
     });
     // Intentionally only re-run when the token changes. setActiveProperty

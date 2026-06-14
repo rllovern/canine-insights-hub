@@ -8,7 +8,9 @@ interface PropertyContextValue {
   properties: Property[];
   loading: boolean;
   reload: () => Promise<void>;
+  /** @deprecated Use `useScope().activeProperty`. Kept for legacy components. */
   activeProperty: Property | null;
+  /** @deprecated Use `useScope().setScope({ mode: "property", propertyId })`. */
   setActiveProperty: (p: Property | null) => void;
 }
 
