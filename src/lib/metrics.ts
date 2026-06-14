@@ -60,7 +60,7 @@ export const costPerLead = (cost: number, leads: number) => (leads ? cost / lead
 export const ctr = (clicks: number, imp: number) => (imp ? (clicks / imp) * 100 : null);
 export const cpc = (cost: number, clicks: number) => (clicks ? cost / clicks : null);
 
-const ZERO = { cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0, leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0, admissions: 0, sessions: 0, users: 0 };
+const ZERO = { cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0, leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0, projected_sale: 0, verified_sale: 0, sessions: 0, users: 0 };
 
 export function sumMetrics(rows: MetricRow[]) {
   return rows.reduce((acc: any, r: any) => {

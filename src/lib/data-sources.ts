@@ -16,7 +16,8 @@ export interface MetricRow {
   bad_leads: number;
   medicaid: number;
   spam: number;
-  admissions: number;
+  projected_sale: number;
+  verified_sale: number;
   sessions: number;
   users: number;
 }
@@ -41,7 +42,8 @@ export const calc = {
   costPerGoodLead: (cost: number, gl: number) => (gl ? cost / gl : 0),
   costPerBadLead: (cost: number, bl: number) => (bl ? cost / bl : 0),
   costPerLead: (cost: number, leads: number) => (leads ? cost / leads : 0),
-  costPerIntake: (cost: number, adm: number) => (adm ? cost / adm : 0),
+  costPerProjectedSale: (cost: number, n: number) => (n ? cost / n : 0),
+  costPerVerifiedSale: (cost: number, n: number) => (n ? cost / n : 0),
   ctr: (clicks: number, imp: number) => (imp ? (clicks / imp) * 100 : 0),
   cpc: (cost: number, clicks: number) => (clicks ? cost / clicks : 0),
   cpm: (cost: number, imp: number) => (imp ? (cost / imp) * 1000 : 0),
