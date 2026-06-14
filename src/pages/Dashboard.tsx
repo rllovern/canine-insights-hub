@@ -32,7 +32,7 @@ export default function Dashboard() {
     const zeros = {
       cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0,
       leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0,
-      admissions: 0, sessions: 0, users: 0, cpm: 0, ctr: 0, cost_per_good_lead: 0,
+      projected_sale: 0, verified_sale: 0, sessions: 0, users: 0, cpm: 0, ctr: 0, cost_per_good_lead: 0,
     } as any;
     const buildDaily = (rows: typeof current) =>
       groupByDate(rows).map((r) => ({
@@ -165,13 +165,13 @@ export default function Dashboard() {
 }
 
 function ActionsHeader({ cfg }: { cfg: ReturnType<typeof usePropertyMetricConfig> }) {
-  const order: MetricKey[] = ["leads", "good_leads", "admissions"];
+  const order: MetricKey[] = ["leads", "good_leads", "projected_sale", "verified_sale"];
   const visibleLabels = order.filter((k) => !cfg.isHidden(k)).map((k) => cfg.label(k));
   return <Header title="Actions" subtitle={`By ${visibleLabels.join(", ")}`} />;
 }
 
 function ActionsKpis({ totals, prev, cfg }: { totals: any; prev: any; cfg: ReturnType<typeof usePropertyMetricConfig> }) {
-  const order: MetricKey[] = ["leads", "good_leads", "admissions"];
+  const order: MetricKey[] = ["leads", "good_leads", "projected_sale", "verified_sale"];
   const visible = order.filter((k) => !cfg.isHidden(k));
   const gridCls =
     visible.length >= 3 ? "grid grid-cols-1 sm:grid-cols-3 gap-2" :

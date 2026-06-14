@@ -436,7 +436,6 @@ export type Database = {
       daily_metrics: {
         Row: {
           ad_source: string
-          admissions: number
           bad_leads: number
           campaign: string
           clicks: number
@@ -449,15 +448,16 @@ export type Database = {
           leads: number
           medicaid: number
           no_entry: number
+          projected_sale: number
           property_id: string
           record_count: number
           sessions: number
           spam: number
           users: number
+          verified_sale: number
         }
         Insert: {
           ad_source: string
-          admissions?: number
           bad_leads?: number
           campaign: string
           clicks?: number
@@ -470,15 +470,16 @@ export type Database = {
           leads?: number
           medicaid?: number
           no_entry?: number
+          projected_sale?: number
           property_id: string
           record_count?: number
           sessions?: number
           spam?: number
           users?: number
+          verified_sale?: number
         }
         Update: {
           ad_source?: string
-          admissions?: number
           bad_leads?: number
           campaign?: string
           clicks?: number
@@ -491,11 +492,13 @@ export type Database = {
           leads?: number
           medicaid?: number
           no_entry?: number
+          projected_sale?: number
           property_id?: string
           record_count?: number
           sessions?: number
           spam?: number
           users?: number
+          verified_sale?: number
         }
         Relationships: [
           {
@@ -1713,6 +1716,7 @@ export type Database = {
       }
       property_targets: {
         Row: {
+          cpgl_target: number | null
           cpl_target: number | null
           created_at: string
           id: string
@@ -1723,6 +1727,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cpgl_target?: number | null
           cpl_target?: number | null
           created_at?: string
           id?: string
@@ -1733,6 +1738,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cpgl_target?: number | null
           cpl_target?: number | null
           created_at?: string
           id?: string
@@ -1920,7 +1926,6 @@ export type Database = {
         Args: { _from: string; _to: string; _token: string }
         Returns: {
           ad_source: string
-          admissions: number
           bad_leads: number
           campaign: string
           clicks: number
@@ -1933,11 +1938,13 @@ export type Database = {
           leads: number
           medicaid: number
           no_entry: number
+          projected_sale: number
           property_id: string
           record_count: number
           sessions: number
           spam: number
           users: number
+          verified_sale: number
         }[]
         SetofOptions: {
           from: "*"
@@ -2127,7 +2134,6 @@ export type Database = {
         Args: { _from: string; _to: string; _token: string }
         Returns: {
           ad_source: string
-          admissions: number
           bad_leads: number
           campaign: string
           clicks: number
@@ -2140,11 +2146,13 @@ export type Database = {
           leads: number
           medicaid: number
           no_entry: number
+          projected_sale: number
           property_id: string
           record_count: number
           sessions: number
           spam: number
           users: number
+          verified_sale: number
         }[]
         SetofOptions: {
           from: "*"
@@ -2179,6 +2187,10 @@ export type Database = {
       set_sync_cron_schedule: {
         Args: { _active: boolean; _schedule: string }
         Returns: undefined
+      }
+      sync_verified_sales_daily_metrics: {
+        Args: { _property_id: string }
+        Returns: number
       }
       user_can_access_property: {
         Args: { _property_id: string; _user_id: string }

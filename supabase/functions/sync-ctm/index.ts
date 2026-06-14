@@ -16,7 +16,7 @@ function isoDaysAgo(n: number): string {
 }
 function isoToday(): string { return new Date().toISOString().slice(0, 10); }
 
-type Bucket = "admission" | "good" | "bad" | "spam" | "repeat" | "no_entry" | "unmapped" | "ignore";
+type Bucket = "projected_sale" | "good" | "bad" | "spam" | "repeat" | "no_entry" | "unmapped" | "ignore";
 
 function extractScoreLabels(call: any): string[] {
   const out: string[] = [];
@@ -261,9 +261,9 @@ Deno.serve(async (req) => {
     }
 
     // Aggregate by date × channel × campaign for daily_metrics.
-    type Agg = { record_count: number; leads: number; good_leads: number; bad_leads: number; admissions: number; no_entry: number; spam: number };
+    type Agg = { record_count: number; leads: number; good_leads: number; bad_leads: number; projected_sale: number; no_entry: number; spam: number };
     const agg = new Map<string, Agg>();
-    const newAgg = (): Agg => ({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, admissions: 0, no_entry: 0, spam: 0 });
+    const newAgg = (): Agg => ({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, projected_sale: 0, no_entry: 0, spam: 0 });
     for (const c of filtered) {
       const callDate = String(c.called_at ?? c.start_time ?? c.date ?? "").slice(0, 10);
       if (!callDate) continue;
@@ -275,7 +275,7 @@ Deno.serve(async (req) => {
       const b = agg.get(key) ?? newAgg();
       b.record_count += 1;
       switch (cls) {
-        case "admission": b.admissions += 1; b.leads += 1; break;
+        case "projected_sale": b.projected_sale += 1; b.leads += 1; break;
         case "good":      b.good_leads += 1; b.leads += 1; break;
         case "bad":       b.bad_leads  += 1; b.leads += 1; break;
         case "no_entry":  b.no_entry   += 1; b.leads += 1; break;
@@ -303,11 +303,18 @@ Deno.serve(async (req) => {
         bad_leads: b.bad_leads,
         no_entry: b.no_entry,
         spam: b.spam,
-        admissions: b.admissions,
+        projected_sale: b.projected_sale,
       };
     });
 
     let metricsWritten = 0;
+    await admin
+      .from("daily_metrics")
+      .update({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, no_entry: 0, spam: 0, projected_sale: 0 })
+      .eq("property_id", propertyId)
+      .gte("date", from)
+      .lte("date", to);
+
     if (upsertRows.length) {
       const dates = Array.from(new Set(upsertRows.map(r => r.date)));
       const channels = Array.from(new Set(upsertRows.map(r => r.ad_source)));

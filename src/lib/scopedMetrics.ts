@@ -6,7 +6,12 @@ export function ctr(clicks: number, impressions: number): number {
   return clicks / impressions;
 }
 
-export function cpl(spend: number, goodLeads: number): number {
+export function cpl(spend: number, totalLeads: number): number {
+  if (!totalLeads) return 0;
+  return spend / totalLeads;
+}
+
+export function cpgl(spend: number, goodLeads: number): number {
   if (!goodLeads) return 0;
   return spend / goodLeads;
 }

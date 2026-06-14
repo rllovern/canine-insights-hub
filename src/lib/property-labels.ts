@@ -1,7 +1,7 @@
 import { useScope } from "@/contexts/ScopeContext";
 
 export const CUSTOMIZABLE_METRIC_KEYS = [
-  "leads", "good_leads", "bad_leads", "admissions", "spam",
+  "leads", "good_leads", "bad_leads", "projected_sale", "verified_sale", "spam",
 ] as const;
 
 export type MetricKey = (typeof CUSTOMIZABLE_METRIC_KEYS)[number];
@@ -10,7 +10,8 @@ export const DEFAULT_METRIC_LABELS: Record<MetricKey, string> = {
   leads: "Leads",
   good_leads: "Good Leads",
   bad_leads: "Bad Leads",
-  admissions: "Sale",
+  projected_sale: "Projected Sale",
+  verified_sale: "Verified Sale",
   spam: "Spam",
 };
 

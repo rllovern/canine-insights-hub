@@ -11,15 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { fmtCurrency, fmtNumber } from "@/lib/metrics";
-import { cpl, ratio, sumField } from "@/lib/scopedMetrics";
+import { cpl, cpgl, ratio, sumField } from "@/lib/scopedMetrics";
 import { cn } from "@/lib/utils";
 
 /**
  * Denominator rule (locked in Step 2 AC-1):
- *   total_leads = good_leads + bad_leads + admissions (sale)
+ *   total_leads = good_leads + bad_leads + projected_sale
  * Defined here once, read everywhere. Do not introduce a second definition.
  */
-const AGENCY_DEFAULT_CPL_TARGET = 80;
 const PACING_GOOD_BAND = 0.15;
 const PACING_WARN_BAND = 0.25;
 
@@ -31,13 +30,15 @@ type DailyRow = {
   clicks: number | null;
   good_leads: number | null;
   bad_leads: number | null;
-  admissions: number | null;
+  projected_sale: number | null;
+  verified_sale: number | null;
 };
 
 type TargetRow = {
   property_id: string;
   period_start: string;
   cpl_target: number | null;
+  cpgl_target: number | null;
   monthly_ad_budget: number | null;
   monthly_good_leads_goal: number | null;
 };
@@ -91,7 +92,7 @@ export default function Command() {
   const q = useQuery({
     queryKey: ["command-daily", propertyIds?.join(",") ?? "all", fromIso, toIso],
     queryFn: async (): Promise<DailyRow[]> => {
-      let query = supabase.from("daily_metrics").select("property_id, date, cost, impressions, clicks, good_leads, bad_leads, admissions")
+      let query = supabase.from("daily_metrics").select("property_id, date, cost, impressions, clicks, good_leads, bad_leads, projected_sale, verified_sale")
         .gte("date", fromIso).lte("date", toIso);
       if (propertyIds) query = query.in("property_id", propertyIds);
       const { data, error } = await query;
@@ -110,7 +111,7 @@ export default function Command() {
     queryFn: async (): Promise<TargetRow[]> => {
       let query = supabase
         .from("property_targets")
-        .select("property_id, period_start, cpl_target, monthly_ad_budget, monthly_good_leads_goal")
+        .select("property_id, period_start, cpl_target, cpgl_target, monthly_ad_budget, monthly_good_leads_goal")
         .eq("period_start", periodStart);
       if (propertyIds) query = query.in("property_id", propertyIds);
       const { data, error } = await query;
@@ -131,10 +132,11 @@ export default function Command() {
     const spend = sumField(rows, "cost");
     const goodLeads = sumField(rows, "good_leads");
     const badLeads = sumField(rows, "bad_leads");
-    const admissions = sumField(rows, "admissions");
+    const projectedSale = sumField(rows, "projected_sale");
+    const verifiedSale = sumField(rows, "verified_sale");
     const clicks = sumField(rows, "clicks");
     const impressions = sumField(rows, "impressions");
-    const totalLeads = goodLeads + badLeads + admissions;
+    const totalLeads = goodLeads + badLeads + projectedSale;
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -142,8 +144,9 @@ export default function Command() {
     const totalBudget = (targetsQ.data ?? []).reduce((s, t) => s + (t.monthly_ad_budget ?? 0), 0);
     const totalGoal = (targetsQ.data ?? []).reduce((s, t) => s + (t.monthly_good_leads_goal ?? 0), 0);
     return {
-      spend, goodLeads, badLeads, admissions, totalLeads, clicks, impressions,
-      blendedCpl: cpl(spend, goodLeads),
+      spend, goodLeads, badLeads, projectedSale, verifiedSale, totalLeads, clicks, impressions,
+      cplValue: cpl(spend, totalLeads),
+      cpglValue: cpgl(spend, goodLeads),
       qualRate: ratio(goodLeads, totalLeads),
       pctMonth,
       expectedSpend: totalBudget ? totalBudget * Math.min(1, Math.max(0, ((new Date().getTime() - start.getTime()) / (end.getTime() - start.getTime())))) : 0,
@@ -154,30 +157,34 @@ export default function Command() {
   }, [rows, targetsQ.data]);
 
   const locationGrid = useMemo(() => {
-    const byProperty = new Map<string, { spend: number; goodLeads: number; badLeads: number; admissions: number }>();
+    const byProperty = new Map<string, { spend: number; goodLeads: number; badLeads: number; projectedSale: number; verifiedSale: number }>();
     for (const r of rows) {
-      const cur = byProperty.get(r.property_id) ?? { spend: 0, goodLeads: 0, badLeads: 0, admissions: 0 };
+      const cur = byProperty.get(r.property_id) ?? { spend: 0, goodLeads: 0, badLeads: 0, projectedSale: 0, verifiedSale: 0 };
       cur.spend += r.cost ?? 0;
       cur.goodLeads += r.good_leads ?? 0;
       cur.badLeads += r.bad_leads ?? 0;
-      cur.admissions += r.admissions ?? 0;
+      cur.projectedSale += r.projected_sale ?? 0;
+      cur.verifiedSale += r.verified_sale ?? 0;
       byProperty.set(r.property_id, cur);
     }
     const visible = mode === "property" && propertyId
       ? properties.filter((p) => p.id === propertyId)
       : properties;
     const items = visible.map((p) => {
-      const agg = byProperty.get(p.id) ?? { spend: 0, goodLeads: 0, badLeads: 0, admissions: 0 };
-      const totalLeads = agg.goodLeads + agg.badLeads + agg.admissions;
+      const agg = byProperty.get(p.id) ?? { spend: 0, goodLeads: 0, badLeads: 0, projectedSale: 0, verifiedSale: 0 };
+      const totalLeads = agg.goodLeads + agg.badLeads + agg.projectedSale;
       const target = targetsByProperty.get(p.id);
       const budget = target?.monthly_ad_budget ?? 0;
-      const cplTarget = target?.cpl_target ?? AGENCY_DEFAULT_CPL_TARGET;
+      const cplTarget = target?.cpl_target ?? null;
+      const cpglTarget = target?.cpgl_target ?? null;
       const pacing = pacingSeverity(agg.spend, budget, portfolio.pctMonth);
-      const cplValue = cpl(agg.spend, agg.goodLeads);
+      const cplValue = cpl(agg.spend, totalLeads);
+      const cpglValue = cpgl(agg.spend, agg.goodLeads);
       const cplSev = cplSeverity(cplValue, cplTarget);
+      const cpglSev = cplSeverity(cpglValue, cpglTarget);
       const handlingSev = handlingSeverity(agg.goodLeads, totalLeads);
-      const worst = [pacing, cplSev, handlingSev].sort((a, b) => severityRank(a) - severityRank(b))[0];
-      return { property: p, agg, totalLeads, cplValue, cplTarget, budget, pacing, cplSev, handlingSev, worst };
+      const worst = [pacing, cplSev, cpglSev, handlingSev].sort((a, b) => severityRank(a) - severityRank(b))[0];
+      return { property: p, agg, totalLeads, cplValue, cpglValue, cplTarget, cpglTarget, budget, pacing, cplSev, cpglSev, handlingSev, worst };
     });
     return items.sort((a, b) => severityRank(a.worst) - severityRank(b.worst));
   }, [rows, properties, mode, propertyId, portfolio.pctMonth, targetsByProperty]);
@@ -203,7 +210,7 @@ export default function Command() {
         {q.isLoading ? (
           <Skeleton className="h-14 w-full" />
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
             <Metric
               label="Spend"
               value={fmtCurrency(portfolio.spend)}
@@ -215,13 +222,16 @@ export default function Command() {
               sub={portfolio.totalGoal ? `of ${fmtNumber(Math.round(portfolio.expectedGoodLeads))} expected` : undefined}
             />
             <Metric label="Total leads" value={fmtNumber(portfolio.totalLeads)} />
-            <Metric label="Blended CPL" value={portfolio.blendedCpl ? fmtCurrency(portfolio.blendedCpl) : "—"} />
+            <Metric label="Projected sales" value={fmtNumber(portfolio.projectedSale)} sub="CTM AI projection" />
+            <Metric label="Verified sales" value={fmtNumber(portfolio.verifiedSale)} sub="Close data not yet piped" />
+            <Metric label="CPL" value={portfolio.cplValue ? fmtCurrency(portfolio.cplValue) : "—"} />
+            <Metric label="CPGL" value={portfolio.cpglValue ? fmtCurrency(portfolio.cpglValue) : "—"} />
             <Metric label="Qual rate" value={portfolio.totalLeads ? `${(portfolio.qualRate * 100).toFixed(0)}%` : "—"} />
           </div>
         )}
         <p className="text-[11px] text-muted-foreground mt-3">
           Month elapsed: {(portfolio.pctMonth * 100).toFixed(0)}%. Rates computed as Σ numerator ÷ Σ denominator across scope.
-          Total leads = good + bad + admissions (sale).
+          Total leads = good + bad + projected sale. Projected sales are provisional CTM AI transcript projections; verified sales come only from GHL Won and show as unavailable until close data is piped.
         </p>
       </Card>
 
@@ -246,11 +256,13 @@ export default function Command() {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate">{row.property.name}</div>
                   <div className="text-[11px] text-muted-foreground">
-                    {fmtCurrency(row.agg.spend)} spend · {fmtNumber(row.agg.goodLeads)} good leads · CPL {row.cplValue ? fmtCurrency(row.cplValue) : "—"}
-                    {" "}<span className="text-muted-foreground/70">(target {fmtCurrency(row.cplTarget)})</span>
+                    {fmtCurrency(row.agg.spend)} spend · {fmtNumber(row.totalLeads)} total leads · {fmtNumber(row.agg.goodLeads)} good leads · {fmtNumber(row.agg.projectedSale)} projected sales · {fmtNumber(row.agg.verifiedSale)} verified sales
+                    <span className="block text-muted-foreground/70">
+                      CPL {row.cplValue ? fmtCurrency(row.cplValue) : "—"}{row.cplTarget ? ` target ${fmtCurrency(row.cplTarget)}` : " target unset"} · CPGL {row.cpglValue ? fmtCurrency(row.cpglValue) : "—"}{row.cpglTarget ? ` target ${fmtCurrency(row.cpglTarget)}` : " target unset"}
+                    </span>
                   </div>
                 </div>
-                <DotGroup pacing={row.pacing} cpl={row.cplSev} handling={row.handlingSev} />
+                <DotGroup pacing={row.pacing} cpl={row.cplSev} cpgl={row.cpglSev} handling={row.handlingSev} />
                 <Link
                   to={`/lead-performance`}
                   className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline"
@@ -285,15 +297,17 @@ function Metric({ label, value, sub }: { label: string; value: string; sub?: str
   );
 }
 
-function DotGroup({ pacing, cpl, handling }: {
+function DotGroup({ pacing, cpl, cpgl, handling }: {
   pacing: "good" | "warning" | "critical" | "neutral";
   cpl: "good" | "warning" | "critical" | "neutral";
+  cpgl: "good" | "warning" | "critical" | "neutral";
   handling: "good" | "warning" | "critical" | "neutral";
 }) {
   return (
-    <div className="flex items-center gap-1.5" title="pacing · CPL · handling">
+    <div className="flex items-center gap-1.5" title="pacing · CPL · CPGL · handling">
       <span className={cn("size-2.5 rounded-full", dotClass(pacing))} title={`pacing: ${pacing}`} />
       <span className={cn("size-2.5 rounded-full", dotClass(cpl))} title={`CPL: ${cpl}`} />
+      <span className={cn("size-2.5 rounded-full", dotClass(cpgl))} title={`CPGL: ${cpgl}`} />
       <span className={cn("size-2.5 rounded-full", dotClass(handling))} title={`handling: ${handling}`} />
     </div>
   );
