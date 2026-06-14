@@ -61,6 +61,17 @@ export function DateRangePicker() {
   const [pendingStart, setPendingStart] = useState<Date | null>(null);
   const [visibleMonth, setVisibleMonth] = useState<Date>(startOfMonth(addMonths(range.to, -1)));
 
+  const calendarModifiers = useMemo(() => ({
+    current_range: draftRange,
+    current_start: draftRange.from,
+    current_end: draftRange.to,
+    ...(draftCompareMode !== "off" ? {
+      compare_range: draftCompareRange,
+      compare_start: draftCompareRange.from,
+      compare_end: draftCompareRange.to,
+    } : {}),
+  }), [draftRange, draftCompareMode, draftCompareRange]);
+
   // Reset draft when opening.
   useEffect(() => {
     if (open) {
@@ -322,14 +333,7 @@ export function DateRangePicker() {
                 onMonthChange={setVisibleMonth}
                 disabled={{ after: new Date() }}
                 onDayClick={handleDayClick}
-                modifiers={{
-                  current_range: draftRange,
-                  current_start: draftRange.from,
-                  current_end: draftRange.to,
-                  compare_range: draftCompareMode !== "off" ? draftCompareRange : undefined,
-                  compare_start: draftCompareMode !== "off" ? draftCompareRange.from : undefined,
-                  compare_end: draftCompareMode !== "off" ? draftCompareRange.to : undefined,
-                }}
+                modifiers={calendarModifiers}
                 modifiersClassNames={{
                   current_range: "bg-primary/15 text-foreground hover:bg-primary/20",
                   current_start: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
