@@ -328,7 +328,6 @@ export function DateRangePicker() {
 
             <div className="mt-3 -mx-1">
               <Calendar
-                mode="default"
                 month={visibleMonth}
                 onMonthChange={setVisibleMonth}
                 disabled={{ after: new Date() }}
