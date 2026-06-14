@@ -19,7 +19,9 @@ import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 
 export default function CallTracking() {
   const { current, prior, isLoading, range, compareMode, compareRange } = useDashboard();
-  const { activeProperty } = useProperties();
+  const { activeProperty: scopeProperty, mode } = useScope();
+  const { properties } = useProperties();
+  const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
   const { effectiveRole } = usePreviewMode();
   const isInternal = effectiveRole === "internal";
   const cfg = usePropertyMetricConfig();
