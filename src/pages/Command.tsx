@@ -16,10 +16,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * Denominator rule (locked in Step 2 AC-1):
- *   total_leads = good_leads + bad_leads + admissions (sale)
+ *   total_leads = good_leads + bad_leads + projected_sale
  * Defined here once, read everywhere. Do not introduce a second definition.
  */
-const AGENCY_DEFAULT_CPL_TARGET = 80;
 const PACING_GOOD_BAND = 0.15;
 const PACING_WARN_BAND = 0.25;
 
@@ -31,13 +30,15 @@ type DailyRow = {
   clicks: number | null;
   good_leads: number | null;
   bad_leads: number | null;
-  admissions: number | null;
+  projected_sale: number | null;
+  verified_sale: number | null;
 };
 
 type TargetRow = {
   property_id: string;
   period_start: string;
   cpl_target: number | null;
+  cpgl_target: number | null;
   monthly_ad_budget: number | null;
   monthly_good_leads_goal: number | null;
 };
