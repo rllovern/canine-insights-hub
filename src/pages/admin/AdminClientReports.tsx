@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, Menu, Building2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
-import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { PreviewModeContext } from "@/contexts/PreviewModeContext";
 import { TokenReport } from "@/components/reports/TokenReport";
 import { exportNodeToPdf } from "@/lib/exportPdf";
