@@ -5,6 +5,7 @@ import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLin
 import { useDashboard } from "@/contexts/DashboardContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 import {
   fmtCurrency, fmtNumber, groupByDate, groupByDateAndSource, groupBySource, groupByCampaign, pctChange, fillDateRange,
 } from "@/lib/metrics";
