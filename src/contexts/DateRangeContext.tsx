@@ -10,6 +10,7 @@ interface DateRangeContextValue {
   rangePreset: RangePreset;
   setRangePreset: (p: PresetKey) => void;
   setRange: (r: DateRange) => void;
+  applySelection: (next: { range: DateRange; preset: RangePreset; compareMode: CompareMode; compareRange: DateRange }) => void;
   compareMode: CompareMode;
   setCompareMode: (m: CompareMode) => void;
   compareRange: DateRange;
@@ -32,6 +33,12 @@ export function DateRangeProvider({ children }: { children: ReactNode }) {
     setRangeState(r);
     setRangePresetState("custom");
   };
+  const applySelection = (next: { range: DateRange; preset: RangePreset; compareMode: CompareMode; compareRange: DateRange }) => {
+    setRangePresetState(next.preset);
+    setRangeState(next.range);
+    setCompareMode(next.compareMode);
+    setCompareRange(next.compareMode === "previous" ? priorPeriod(next.range) : next.compareRange);
+  };
 
   useEffect(() => {
     if (compareMode === "previous") setCompareRange(priorPeriod(range));
@@ -40,7 +47,7 @@ export function DateRangeProvider({ children }: { children: ReactNode }) {
   return (
     <DateRangeContext.Provider
       value={{
-        range, rangePreset, setRangePreset, setRange,
+        range, rangePreset, setRangePreset, setRange, applySelection,
         compareMode, setCompareMode, compareRange, setCompareRange,
       }}
     >
