@@ -1,9 +1,19 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { DateRange } from "@/lib/types";
-import { getPresetRange, priorPeriod, PresetKey } from "@/lib/dateRange";
+import { getPresetRange, priorPeriod, sameSliceLastMonth, PresetKey } from "@/lib/dateRange";
 
 export type RangePreset = PresetKey | "custom";
 export type CompareMode = "off" | "previous" | "custom";
+
+/**
+ * Compare range for "previous" mode. For "thisMonth" we mirror the same
+ * calendar slice in the prior month (Jun 1–14 → May 1–14) instead of the
+ * immediately preceding N days.
+ */
+function defaultCompareFor(range: DateRange, preset: RangePreset): DateRange {
+  if (preset === "thisMonth") return sameSliceLastMonth(range);
+  return priorPeriod(range);
+}
 
 interface DateRangeContextValue {
   range: DateRange;
@@ -20,10 +30,12 @@ interface DateRangeContextValue {
 const DateRangeContext = createContext<DateRangeContextValue | undefined>(undefined);
 
 export function DateRangeProvider({ children }: { children: ReactNode }) {
-  const [range, setRangeState] = useState<DateRange>(getPresetRange("last30"));
-  const [rangePreset, setRangePresetState] = useState<RangePreset>("last30");
+  const [range, setRangeState] = useState<DateRange>(getPresetRange("thisMonth"));
+  const [rangePreset, setRangePresetState] = useState<RangePreset>("thisMonth");
   const [compareMode, setCompareMode] = useState<CompareMode>("previous");
-  const [compareRange, setCompareRange] = useState<DateRange>(priorPeriod(getPresetRange("last30")));
+  const [compareRange, setCompareRange] = useState<DateRange>(
+    defaultCompareFor(getPresetRange("thisMonth"), "thisMonth"),
+  );
 
   const setRangePreset = (p: PresetKey) => {
     setRangePresetState(p);
@@ -37,12 +49,12 @@ export function DateRangeProvider({ children }: { children: ReactNode }) {
     setRangePresetState(next.preset);
     setRangeState(next.range);
     setCompareMode(next.compareMode);
-    setCompareRange(next.compareMode === "previous" ? priorPeriod(next.range) : next.compareRange);
+    setCompareRange(next.compareMode === "previous" ? defaultCompareFor(next.range, next.preset) : next.compareRange);
   };
 
   useEffect(() => {
-    if (compareMode === "previous") setCompareRange(priorPeriod(range));
-  }, [range, compareMode]);
+    if (compareMode === "previous") setCompareRange(defaultCompareFor(range, rangePreset));
+  }, [range, compareMode, rangePreset]);
 
   return (
     <DateRangeContext.Provider

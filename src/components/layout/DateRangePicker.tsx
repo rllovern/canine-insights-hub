@@ -17,6 +17,7 @@ import {
   daysUpTo,
   getPresetRange,
   priorPeriod,
+  sameSliceLastMonth,
 } from "@/lib/dateRange";
 import type { DateRange as AppDateRange } from "@/lib/types";
 
@@ -85,12 +86,16 @@ export function DateRangePicker() {
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Compare-range generator for "previous" mode. Mirrors DateRangeContext.
+  const previousFor = (r: AppDateRange, preset: PresetKey | "custom") =>
+    preset === "thisMonth" ? sameSliceLastMonth(r) : priorPeriod(r);
+
   // Keep compare auto-tracking when "previous" selected and not custom-edited.
   useEffect(() => {
     if (draftCompareMode === "previous") {
-      setDraftCompareRange(priorPeriod(draftRange));
+      setDraftCompareRange(previousFor(draftRange, draftPreset));
     }
-  }, [draftRange, draftCompareMode]);
+  }, [draftRange, draftCompareMode, draftPreset]);
 
   const triggerLabel = useMemo(() => {
     const base = rangePreset === "custom"
@@ -242,7 +247,7 @@ export function DateRangePicker() {
                 checked={draftCompareMode !== "off"}
                 onCheckedChange={(on) => {
                   setDraftCompareMode(on ? "previous" : "off");
-                  setDraftCompareRange(priorPeriod(draftRange));
+                  setDraftCompareRange(previousFor(draftRange, draftPreset));
                   setActiveRange(on ? "compare" : "current");
                   setPendingStart(null);
                 }}
@@ -253,7 +258,7 @@ export function DateRangePicker() {
                 <Select value={draftCompareMode} onValueChange={(v) => {
                   const mode = v as "previous" | "custom";
                   setDraftCompareMode(mode);
-                  if (mode === "previous") setDraftCompareRange(priorPeriod(draftRange));
+                  if (mode === "previous") setDraftCompareRange(previousFor(draftRange, draftPreset));
                   setActiveRange(mode === "custom" ? "compare" : "current");
                   setPendingStart(null);
                 }}>
