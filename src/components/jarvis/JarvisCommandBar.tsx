@@ -4,7 +4,7 @@ import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
 } from "@/components/ui/command";
 import { Sparkles, BarChart3, PhoneCall, FileText, Target, GitCompare, Search } from "lucide-react";
-import { useProperties } from "@/contexts/PropertyContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { rangeToISO } from "@/lib/metrics";
 
@@ -26,7 +26,7 @@ const NAV = [
 export function JarvisCommandBar() {
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
-  const { activeProperty } = useProperties();
+  const { activeProperty } = useScope();
   const { range } = useDashboard();
 
   useEffect(() => {
