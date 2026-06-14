@@ -172,8 +172,8 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
   const [sortKey, setSortKey] = useState<string>("good_leads");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  // total_leads = good + bad + admissions (sale). Locked Step 2 AC-1.
-  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) + (r.admissions ?? 0) }));
+  // total_leads = good + bad + projected_sale. Locked Step 2 AC-1.
+  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) + (r.projected_sale ?? 0) }));
   const curT = withTotals(cur);
   const preT = withTotals(pre);
   const preMapT = new Map(preT.map((r: any) => [r.ad_source, r]));
@@ -190,7 +190,8 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
     { key: "total_leads", label: "Total Leads" },
     ...(cfg?.isHidden("bad_leads") ? [] : [{ key: "bad_leads", label: cfg?.label("bad_leads") ?? "Bad Leads" }]),
     ...(cfg?.isHidden("good_leads") ? [] : [{ key: "good_leads", label: cfg?.label("good_leads") ?? "Good Leads" }]),
-    ...(cfg?.isHidden("admissions") ? [] : [{ key: "admissions", label: cfg?.label("admissions") ?? "Admissions" }]),
+    ...(cfg?.isHidden("projected_sale") ? [] : [{ key: "projected_sale", label: cfg?.label("projected_sale") ?? "Projected Sale" }]),
+    ...(cfg?.isHidden("verified_sale") ? [] : [{ key: "verified_sale", label: cfg?.label("verified_sale") ?? "Verified Sale" }]),
   ];
 
   const totals = curT.reduce((acc: any, r: any) => { for (const c of cols) acc[c.key] = (acc[c.key] || 0) + (r[c.key] ?? 0); return acc; }, {} as any);
@@ -243,8 +244,8 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
 }
 
 function CampaignTable({ current, prior, cfg }: any) {
-  // total_leads = good + bad + admissions (sale). Locked Step 2 AC-1.
-  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) + (r.admissions ?? 0) }));
+  // total_leads = good + bad + projected_sale. Locked Step 2 AC-1.
+  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) + (r.projected_sale ?? 0) }));
   const cur = useMemo(() => withTotals(groupByCampaign(current)), [current]);
   const pre = useMemo(() => withTotals(groupByCampaign(prior)), [prior]);
   const preMap = new Map(pre.map((r: any) => [`${r.ad_source}::${r.campaign}`, r]));
@@ -255,11 +256,12 @@ function CampaignTable({ current, prior, cfg }: any) {
   const slice = sorted.slice(page * PAGE, page * PAGE + PAGE);
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE));
 
-  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "admissions"].filter((c) => {
+  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "projected_sale", "verified_sale"].filter((c) => {
     if (c === "spam" && cfg?.isHidden("spam")) return false;
     if (c === "bad_leads" && cfg?.isHidden("bad_leads")) return false;
     if (c === "good_leads" && cfg?.isHidden("good_leads")) return false;
-    if (c === "admissions" && cfg?.isHidden("admissions")) return false;
+    if (c === "projected_sale" && cfg?.isHidden("projected_sale")) return false;
+    if (c === "verified_sale" && cfg?.isHidden("verified_sale")) return false;
     return true;
   });
   const labels: Record<string, string> = {
@@ -267,7 +269,8 @@ function CampaignTable({ current, prior, cfg }: any) {
     spam: cfg?.label("spam") ?? "Spam", total_leads: "Total Leads",
     bad_leads: cfg?.label("bad_leads") ?? "Bad Leads",
     good_leads: cfg?.label("good_leads") ?? "Good Leads",
-    admissions: cfg?.label("admissions") ?? "Admissions",
+    projected_sale: cfg?.label("projected_sale") ?? "Projected Sale",
+    verified_sale: cfg?.label("verified_sale") ?? "Verified Sale",
   };
 
   return (
