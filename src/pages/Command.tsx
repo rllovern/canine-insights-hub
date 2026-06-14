@@ -53,13 +53,19 @@ function dotClass(severity: "good" | "warning" | "critical" | "neutral") {
   }
 }
 
+// Signed pacing severity.
+// delta = % budget spent − % month elapsed.
+//   |delta| ≤ 5pt → good (on pace)
+//   delta > +15pt → critical (burning too fast — overspend)
+//   delta > +5pt  → warning (mild overspend)
+//   delta < −5pt  → warning at most (underdelivering; never critical)
 function pacingSeverity(spend: number, budget: number, pctMonthElapsed: number): "good" | "warning" | "critical" | "neutral" {
   if (!budget) return "neutral";
   const pace = spend / budget;
   const delta = pace - pctMonthElapsed;
-  if (Math.abs(delta) <= PACING_GOOD_BAND) return "good";
-  if (Math.abs(delta) <= PACING_WARN_BAND) return "warning";
-  return "critical";
+  if (Math.abs(delta) <= 0.05) return "good";
+  if (delta > 0.15) return "critical";
+  return "warning";
 }
 
 function cplSeverity(value: number, target: number | null): "good" | "warning" | "critical" | "neutral" {
