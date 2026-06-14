@@ -165,13 +165,13 @@ export default function Dashboard() {
 }
 
 function ActionsHeader({ cfg }: { cfg: ReturnType<typeof usePropertyMetricConfig> }) {
-  const order: MetricKey[] = ["leads", "good_leads", "projected_sale", "verified_sale"];
+  const order: MetricKey[] = ["leads", "good_leads", "projected_sale"];
   const visibleLabels = order.filter((k) => !cfg.isHidden(k)).map((k) => cfg.label(k));
   return <Header title="Actions" subtitle={`By ${visibleLabels.join(", ")}`} />;
 }
 
 function ActionsKpis({ totals, prev, cfg }: { totals: any; prev: any; cfg: ReturnType<typeof usePropertyMetricConfig> }) {
-  const order: MetricKey[] = ["leads", "good_leads", "projected_sale", "verified_sale"];
+  const order: MetricKey[] = ["leads", "good_leads", "projected_sale"];
   const visible = order.filter((k) => !cfg.isHidden(k));
   const gridCls =
     visible.length >= 3 ? "grid grid-cols-1 sm:grid-cols-3 gap-2" :
@@ -183,9 +183,8 @@ function ActionsKpis({ totals, prev, cfg }: { totals: any; prev: any; cfg: Retur
         <KpiCard
           key={k}
           label={cfg.label(k)}
-          value={k === "verified_sale" ? "—" : fmtNumber((totals as any)[k] ?? 0)}
-          delta={k === "verified_sale" ? undefined : pctChange((totals as any)[k] ?? 0, (prev as any)[k] ?? 0)}
-          hint={k === "verified_sale" ? "Close data not yet piped" : undefined}
+          value={fmtNumber((totals as any)[k] ?? 0)}
+          delta={pctChange((totals as any)[k] ?? 0, (prev as any)[k] ?? 0)}
         />
       ))}
     </div>
