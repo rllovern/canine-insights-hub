@@ -32,7 +32,7 @@ const VIEWER_PREVIEW_VALUE = {
 export default function AdminClientReports() {
   const { propertyId } = useParams<{ propertyId: string }>();
   const navigate = useNavigate();
-  const { setActiveProperty } = useProperties();
+  const { setScope } = useScope();
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -67,9 +67,9 @@ export default function AdminClientReports() {
 
   useEffect(() => {
     if (!current) return;
-    setActiveProperty(current);
+    setScope({ mode: "property", propertyId: current.id });
     localStorage.setItem(STORAGE_KEY, current.id);
-  }, [current, setActiveProperty]);
+  }, [current, setScope]);
 
   if (!properties) {
     return (
