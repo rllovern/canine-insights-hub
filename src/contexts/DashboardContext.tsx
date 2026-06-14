@@ -45,9 +45,9 @@ export function DashboardProvider({ children, fetcher, fetcherKey, enabled }: Pr
   const effCmp = compareMode === "off" ? null : compareRange;
   const cmpIso = effCmp ? rangeToISO(effCmp) : null;
 
-  const queryFn = fetcher ?? ((from: string, to: string) => fetchBlendedMetrics(activeProperty?.id ?? null, from, to, propertyIds));
+  const queryFn = fetcher ?? ((from: string, to: string) => fetchBlendedMetrics(mode === "agency" ? null : activeProperty?.id ?? null, from, to, propertyIds));
   const queryKey = fetcherKey ?? (mode === "agency" ? `agency:${propertyIds?.join(",") ?? "all"}` : activeProperty?.id);
-  const queryEnabled = enabled ?? !!activeProperty;
+  const queryEnabled = enabled ?? (mode === "agency" || !!activeProperty);
 
   const currentQ = useQuery({
     queryKey: ["metrics", queryKey, iso.from, iso.to],
