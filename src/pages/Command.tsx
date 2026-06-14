@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { fmtCurrency, fmtNumber } from "@/lib/metrics";
-import { cpl, ratio, sumField } from "@/lib/scopedMetrics";
+import { cpl, cpgl, ratio, sumField } from "@/lib/scopedMetrics";
 import { cn } from "@/lib/utils";
 
 /**
@@ -92,7 +92,7 @@ export default function Command() {
   const q = useQuery({
     queryKey: ["command-daily", propertyIds?.join(",") ?? "all", fromIso, toIso],
     queryFn: async (): Promise<DailyRow[]> => {
-      let query = supabase.from("daily_metrics").select("property_id, date, cost, impressions, clicks, good_leads, bad_leads, admissions")
+      let query = supabase.from("daily_metrics").select("property_id, date, cost, impressions, clicks, good_leads, bad_leads, projected_sale, verified_sale")
         .gte("date", fromIso).lte("date", toIso);
       if (propertyIds) query = query.in("property_id", propertyIds);
       const { data, error } = await query;
@@ -111,7 +111,7 @@ export default function Command() {
     queryFn: async (): Promise<TargetRow[]> => {
       let query = supabase
         .from("property_targets")
-        .select("property_id, period_start, cpl_target, monthly_ad_budget, monthly_good_leads_goal")
+        .select("property_id, period_start, cpl_target, cpgl_target, monthly_ad_budget, monthly_good_leads_goal")
         .eq("period_start", periodStart);
       if (propertyIds) query = query.in("property_id", propertyIds);
       const { data, error } = await query;
@@ -132,10 +132,11 @@ export default function Command() {
     const spend = sumField(rows, "cost");
     const goodLeads = sumField(rows, "good_leads");
     const badLeads = sumField(rows, "bad_leads");
-    const admissions = sumField(rows, "admissions");
+    const projectedSale = sumField(rows, "projected_sale");
+    const verifiedSale = sumField(rows, "verified_sale");
     const clicks = sumField(rows, "clicks");
     const impressions = sumField(rows, "impressions");
-    const totalLeads = goodLeads + badLeads + admissions;
+    const totalLeads = goodLeads + badLeads + projectedSale;
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -143,8 +144,9 @@ export default function Command() {
     const totalBudget = (targetsQ.data ?? []).reduce((s, t) => s + (t.monthly_ad_budget ?? 0), 0);
     const totalGoal = (targetsQ.data ?? []).reduce((s, t) => s + (t.monthly_good_leads_goal ?? 0), 0);
     return {
-      spend, goodLeads, badLeads, admissions, totalLeads, clicks, impressions,
-      blendedCpl: cpl(spend, goodLeads),
+      spend, goodLeads, badLeads, projectedSale, verifiedSale, totalLeads, clicks, impressions,
+      cplValue: cpl(spend, totalLeads),
+      cpglValue: cpgl(spend, goodLeads),
       qualRate: ratio(goodLeads, totalLeads),
       pctMonth,
       expectedSpend: totalBudget ? totalBudget * Math.min(1, Math.max(0, ((new Date().getTime() - start.getTime()) / (end.getTime() - start.getTime())))) : 0,
