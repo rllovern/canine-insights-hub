@@ -210,7 +210,7 @@ export default function Command() {
         {q.isLoading ? (
           <Skeleton className="h-14 w-full" />
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
             <Metric
               label="Spend"
               value={fmtCurrency(portfolio.spend)}
@@ -222,13 +222,16 @@ export default function Command() {
               sub={portfolio.totalGoal ? `of ${fmtNumber(Math.round(portfolio.expectedGoodLeads))} expected` : undefined}
             />
             <Metric label="Total leads" value={fmtNumber(portfolio.totalLeads)} />
-            <Metric label="Blended CPL" value={portfolio.blendedCpl ? fmtCurrency(portfolio.blendedCpl) : "—"} />
+            <Metric label="Projected sales" value={fmtNumber(portfolio.projectedSale)} sub="CTM AI projection" />
+            <Metric label="Verified sales" value={fmtNumber(portfolio.verifiedSale)} sub="Close data not yet piped" />
+            <Metric label="CPL" value={portfolio.cplValue ? fmtCurrency(portfolio.cplValue) : "—"} />
+            <Metric label="CPGL" value={portfolio.cpglValue ? fmtCurrency(portfolio.cpglValue) : "—"} />
             <Metric label="Qual rate" value={portfolio.totalLeads ? `${(portfolio.qualRate * 100).toFixed(0)}%` : "—"} />
           </div>
         )}
         <p className="text-[11px] text-muted-foreground mt-3">
           Month elapsed: {(portfolio.pctMonth * 100).toFixed(0)}%. Rates computed as Σ numerator ÷ Σ denominator across scope.
-          Total leads = good + bad + admissions (sale).
+          Total leads = good + bad + projected sale. Projected sales are provisional CTM AI transcript projections; verified sales come only from GHL Won and show as unavailable until close data is piped.
         </p>
       </Card>
 
@@ -253,11 +256,13 @@ export default function Command() {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate">{row.property.name}</div>
                   <div className="text-[11px] text-muted-foreground">
-                    {fmtCurrency(row.agg.spend)} spend · {fmtNumber(row.agg.goodLeads)} good leads · CPL {row.cplValue ? fmtCurrency(row.cplValue) : "—"}
-                    {" "}<span className="text-muted-foreground/70">(target {fmtCurrency(row.cplTarget)})</span>
+                    {fmtCurrency(row.agg.spend)} spend · {fmtNumber(row.totalLeads)} total leads · {fmtNumber(row.agg.goodLeads)} good leads · {fmtNumber(row.agg.projectedSale)} projected sales · {fmtNumber(row.agg.verifiedSale)} verified sales
+                    <span className="block text-muted-foreground/70">
+                      CPL {row.cplValue ? fmtCurrency(row.cplValue) : "—"}{row.cplTarget ? ` target ${fmtCurrency(row.cplTarget)}` : " target unset"} · CPGL {row.cpglValue ? fmtCurrency(row.cpglValue) : "—"}{row.cpglTarget ? ` target ${fmtCurrency(row.cpglTarget)}` : " target unset"}
+                    </span>
                   </div>
                 </div>
-                <DotGroup pacing={row.pacing} cpl={row.cplSev} handling={row.handlingSev} />
+                <DotGroup pacing={row.pacing} cpl={row.cplSev} cpgl={row.cpglSev} handling={row.handlingSev} />
                 <Link
                   to={`/lead-performance`}
                   className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline"
