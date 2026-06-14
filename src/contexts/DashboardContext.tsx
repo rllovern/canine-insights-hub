@@ -34,7 +34,7 @@ interface ProviderProps {
 
 export function DashboardProvider({ children, fetcher, fetcherKey, enabled }: ProviderProps) {
   const { properties } = useProperties();
-  const { activeProperty: scopeProperty, mode } = useScope();
+  const { activeProperty: scopeProperty, mode, propertyIds } = useScope();
   const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
   const {
     range, setRange, rangePreset, setRangePreset,
@@ -45,8 +45,8 @@ export function DashboardProvider({ children, fetcher, fetcherKey, enabled }: Pr
   const effCmp = compareMode === "off" ? null : compareRange;
   const cmpIso = effCmp ? rangeToISO(effCmp) : null;
 
-  const queryFn = fetcher ?? ((from: string, to: string) => fetchBlendedMetrics(activeProperty!.id, from, to));
-  const queryKey = fetcherKey ?? activeProperty?.id;
+  const queryFn = fetcher ?? ((from: string, to: string) => fetchBlendedMetrics(activeProperty?.id ?? null, from, to, propertyIds));
+  const queryKey = fetcherKey ?? (mode === "agency" ? `agency:${propertyIds?.join(",") ?? "all"}` : activeProperty?.id);
   const queryEnabled = enabled ?? !!activeProperty;
 
   const currentQ = useQuery({
