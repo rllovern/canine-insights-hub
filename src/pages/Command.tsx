@@ -14,6 +14,15 @@ import { fmtCurrency, fmtNumber } from "@/lib/metrics";
 import { cpl, ratio, sumField } from "@/lib/scopedMetrics";
 import { cn } from "@/lib/utils";
 
+/**
+ * Denominator rule (locked in Step 2 AC-1):
+ *   total_leads = good_leads + bad_leads + admissions (sale)
+ * Defined here once, read everywhere. Do not introduce a second definition.
+ */
+const AGENCY_DEFAULT_CPL_TARGET = 80;
+const PACING_GOOD_BAND = 0.15;
+const PACING_WARN_BAND = 0.25;
+
 type DailyRow = {
   property_id: string;
   date: string;
@@ -22,6 +31,15 @@ type DailyRow = {
   clicks: number | null;
   good_leads: number | null;
   bad_leads: number | null;
+  admissions: number | null;
+};
+
+type TargetRow = {
+  property_id: string;
+  period_start: string;
+  cpl_target: number | null;
+  monthly_ad_budget: number | null;
+  monthly_good_leads_goal: number | null;
 };
 
 function dotClass(severity: "good" | "warning" | "critical" | "neutral") {
@@ -37,13 +55,14 @@ function pacingSeverity(spend: number, budget: number, pctMonthElapsed: number):
   if (!budget) return "neutral";
   const pace = spend / budget;
   const delta = pace - pctMonthElapsed;
-  if (Math.abs(delta) <= 0.15) return "good";
-  if (Math.abs(delta) <= 0.25) return "warning";
+  if (Math.abs(delta) <= PACING_GOOD_BAND) return "good";
+  if (Math.abs(delta) <= PACING_WARN_BAND) return "warning";
   return "critical";
 }
 
 function cplSeverity(value: number, target: number | null): "good" | "warning" | "critical" | "neutral" {
-  if (!value || !target) return "neutral";
+  if (!target) return "neutral";
+  if (!value) return "neutral";
   if (value <= target) return "good";
   if (value <= target * 1.25) return "warning";
   return "critical";
@@ -72,7 +91,7 @@ export default function Command() {
   const q = useQuery({
     queryKey: ["command-daily", propertyIds?.join(",") ?? "all", fromIso, toIso],
     queryFn: async (): Promise<DailyRow[]> => {
-      let query = supabase.from("daily_metrics").select("property_id, date, cost, impressions, clicks, good_leads, bad_leads")
+      let query = supabase.from("daily_metrics").select("property_id, date, cost, impressions, clicks, good_leads, bad_leads, admissions")
         .gte("date", fromIso).lte("date", toIso);
       if (propertyIds) query = query.in("property_id", propertyIds);
       const { data, error } = await query;
@@ -81,51 +100,87 @@ export default function Command() {
     },
   });
 
+  const periodStart = useMemo(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  }, []);
+
+  const targetsQ = useQuery({
+    queryKey: ["command-targets", propertyIds?.join(",") ?? "all", periodStart],
+    queryFn: async (): Promise<TargetRow[]> => {
+      let query = supabase
+        .from("property_targets")
+        .select("property_id, period_start, cpl_target, monthly_ad_budget, monthly_good_leads_goal")
+        .eq("period_start", periodStart);
+      if (propertyIds) query = query.in("property_id", propertyIds);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as TargetRow[];
+    },
+  });
+
+  const targetsByProperty = useMemo(() => {
+    const m = new Map<string, TargetRow>();
+    for (const t of targetsQ.data ?? []) m.set(t.property_id, t);
+    return m;
+  }, [targetsQ.data]);
+
   const rows = q.data ?? [];
 
   const portfolio = useMemo(() => {
     const spend = sumField(rows, "cost");
     const goodLeads = sumField(rows, "good_leads");
     const badLeads = sumField(rows, "bad_leads");
+    const admissions = sumField(rows, "admissions");
     const clicks = sumField(rows, "clicks");
     const impressions = sumField(rows, "impressions");
-    const totalLeads = goodLeads + badLeads;
+    const totalLeads = goodLeads + badLeads + admissions;
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     const pctMonth = (now.getTime() - start.getTime()) / (end.getTime() - start.getTime());
+    const totalBudget = (targetsQ.data ?? []).reduce((s, t) => s + (t.monthly_ad_budget ?? 0), 0);
+    const totalGoal = (targetsQ.data ?? []).reduce((s, t) => s + (t.monthly_good_leads_goal ?? 0), 0);
     return {
-      spend, goodLeads, badLeads, totalLeads, clicks, impressions,
+      spend, goodLeads, badLeads, admissions, totalLeads, clicks, impressions,
       blendedCpl: cpl(spend, goodLeads),
       qualRate: ratio(goodLeads, totalLeads),
       pctMonth,
+      expectedSpend: totalBudget ? totalBudget * Math.min(1, Math.max(0, ((new Date().getTime() - start.getTime()) / (end.getTime() - start.getTime())))) : 0,
+      expectedGoodLeads: totalGoal ? totalGoal * Math.min(1, Math.max(0, ((new Date().getTime() - start.getTime()) / (end.getTime() - start.getTime())))) : 0,
+      totalBudget,
+      totalGoal,
     };
-  }, [rows]);
+  }, [rows, targetsQ.data]);
 
   const locationGrid = useMemo(() => {
-    const byProperty = new Map<string, { spend: number; goodLeads: number; badLeads: number }>();
+    const byProperty = new Map<string, { spend: number; goodLeads: number; badLeads: number; admissions: number }>();
     for (const r of rows) {
-      const cur = byProperty.get(r.property_id) ?? { spend: 0, goodLeads: 0, badLeads: 0 };
+      const cur = byProperty.get(r.property_id) ?? { spend: 0, goodLeads: 0, badLeads: 0, admissions: 0 };
       cur.spend += r.cost ?? 0;
       cur.goodLeads += r.good_leads ?? 0;
       cur.badLeads += r.bad_leads ?? 0;
+      cur.admissions += r.admissions ?? 0;
       byProperty.set(r.property_id, cur);
     }
     const visible = mode === "property" && propertyId
       ? properties.filter((p) => p.id === propertyId)
       : properties;
     const items = visible.map((p) => {
-      const agg = byProperty.get(p.id) ?? { spend: 0, goodLeads: 0, badLeads: 0 };
-      const totalLeads = agg.goodLeads + agg.badLeads;
-      const pacing = pacingSeverity(agg.spend, /* budget unknown here */ 0, portfolio.pctMonth);
+      const agg = byProperty.get(p.id) ?? { spend: 0, goodLeads: 0, badLeads: 0, admissions: 0 };
+      const totalLeads = agg.goodLeads + agg.badLeads + agg.admissions;
+      const target = targetsByProperty.get(p.id);
+      const budget = target?.monthly_ad_budget ?? 0;
+      const cplTarget = target?.cpl_target ?? AGENCY_DEFAULT_CPL_TARGET;
+      const pacing = pacingSeverity(agg.spend, budget, portfolio.pctMonth);
       const cplValue = cpl(agg.spend, agg.goodLeads);
-      const cplSev = cplSeverity(cplValue, null);
+      const cplSev = cplSeverity(cplValue, cplTarget);
       const handlingSev = handlingSeverity(agg.goodLeads, totalLeads);
       const worst = [pacing, cplSev, handlingSev].sort((a, b) => severityRank(a) - severityRank(b))[0];
-      return { property: p, agg, totalLeads, cplValue, pacing, cplSev, handlingSev, worst };
+      return { property: p, agg, totalLeads, cplValue, cplTarget, budget, pacing, cplSev, handlingSev, worst };
     });
     return items.sort((a, b) => severityRank(a.worst) - severityRank(b.worst));
-  }, [rows, properties, mode, propertyId, portfolio.pctMonth]);
+  }, [rows, properties, mode, propertyId, portfolio.pctMonth, targetsByProperty]);
 
   return (
     <div className="space-y-4">
@@ -149,8 +204,16 @@ export default function Command() {
           <Skeleton className="h-14 w-full" />
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <Metric label="Spend" value={fmtCurrency(portfolio.spend)} />
-            <Metric label="Good leads" value={fmtNumber(portfolio.goodLeads)} />
+            <Metric
+              label="Spend"
+              value={fmtCurrency(portfolio.spend)}
+              sub={portfolio.totalBudget ? `of ${fmtCurrency(portfolio.expectedSpend)} expected` : undefined}
+            />
+            <Metric
+              label="Good leads"
+              value={fmtNumber(portfolio.goodLeads)}
+              sub={portfolio.totalGoal ? `of ${fmtNumber(Math.round(portfolio.expectedGoodLeads))} expected` : undefined}
+            />
             <Metric label="Total leads" value={fmtNumber(portfolio.totalLeads)} />
             <Metric label="Blended CPL" value={portfolio.blendedCpl ? fmtCurrency(portfolio.blendedCpl) : "—"} />
             <Metric label="Qual rate" value={portfolio.totalLeads ? `${(portfolio.qualRate * 100).toFixed(0)}%` : "—"} />
@@ -158,6 +221,7 @@ export default function Command() {
         )}
         <p className="text-[11px] text-muted-foreground mt-3">
           Month elapsed: {(portfolio.pctMonth * 100).toFixed(0)}%. Rates computed as Σ numerator ÷ Σ denominator across scope.
+          Total leads = good + bad + admissions (sale).
         </p>
       </Card>
 
@@ -183,6 +247,7 @@ export default function Command() {
                   <div className="text-sm font-medium truncate">{row.property.name}</div>
                   <div className="text-[11px] text-muted-foreground">
                     {fmtCurrency(row.agg.spend)} spend · {fmtNumber(row.agg.goodLeads)} good leads · CPL {row.cplValue ? fmtCurrency(row.cplValue) : "—"}
+                    {" "}<span className="text-muted-foreground/70">(target {fmtCurrency(row.cplTarget)})</span>
                   </div>
                 </div>
                 <DotGroup pacing={row.pacing} cpl={row.cplSev} handling={row.handlingSev} />
@@ -210,11 +275,12 @@ export default function Command() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="text-base font-semibold tabular-nums mt-0.5">{value}</div>
+      {sub && <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>}
     </div>
   );
 }

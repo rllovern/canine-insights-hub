@@ -1711,6 +1711,47 @@ export type Database = {
           },
         ]
       }
+      property_targets: {
+        Row: {
+          cpl_target: number | null
+          created_at: string
+          id: string
+          monthly_ad_budget: number | null
+          monthly_good_leads_goal: number | null
+          period_start: string
+          property_id: string
+          updated_at: string
+        }
+        Insert: {
+          cpl_target?: number | null
+          created_at?: string
+          id?: string
+          monthly_ad_budget?: number | null
+          monthly_good_leads_goal?: number | null
+          period_start: string
+          property_id: string
+          updated_at?: string
+        }
+        Update: {
+          cpl_target?: number | null
+          created_at?: string
+          id?: string
+          monthly_ad_budget?: number | null
+          monthly_good_leads_goal?: number | null
+          period_start?: string
+          property_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_targets_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_runs: {
         Row: {
           acknowledged_at: string | null
