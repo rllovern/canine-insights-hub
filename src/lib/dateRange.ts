@@ -100,7 +100,9 @@ export function daysUpTo(n: number, upToYesterday = false): DateRange {
 }
 
 export function priorPeriod(r: DateRange): DateRange {
-  const span = Math.round((r.to.getTime() - r.from.getTime()) / 86400000);
+  const fromDay = startOfDay(r.from);
+  const toDay = startOfDay(r.to);
+  const span = Math.max(0, Math.round((toDay.getTime() - fromDay.getTime()) / 86400000));
   const to = addDays(r.from, -1);
   const from = addDays(to, -span);
   return { from: startOfDay(from), to: endOfDay(to) };
