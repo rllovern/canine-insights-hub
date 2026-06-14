@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { SectionDivider } from "@/components/dashboard/SectionDivider";
 import { KpiCard } from "@/components/dashboard/KpiCard";
+import { useScope } from "@/contexts/ScopeContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,7 +35,9 @@ interface SoVRow {
 const COLORS = ["hsl(var(--primary))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "hsl(var(--chart-2))"];
 
 export default function Keywords() {
-  const { activeProperty } = useProperties();
+  const { activeProperty: scopeProperty, mode } = useScope();
+  const { properties } = useProperties();
+  const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
   const { realRole } = usePreviewMode();
   const [latest, setLatest] = useState<RankingRow[]>([]);
   const [history, setHistory] = useState<RankingRow[]>([]);
