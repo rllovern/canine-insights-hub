@@ -712,6 +712,12 @@ Deno.serve(async (req) => {
     counts.lead_facts = (data as Json | null)?.facts_written ?? 0;
   }, undefined);
 
+  await safe("sync_verified_sales_daily_metrics", async () => {
+    const { data, error } = await admin.rpc("sync_verified_sales_daily_metrics", { _property_id: property_id });
+    if (error) throw new Error(error.message);
+    counts.verified_sales_metrics = Number(data ?? 0);
+  }, undefined);
+
   // ===== Bookkeeping ================================================
   summary.finished_at = new Date().toISOString();
   await admin
