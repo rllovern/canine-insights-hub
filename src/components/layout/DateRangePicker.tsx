@@ -37,7 +37,8 @@ const fmtShort = (d: Date) => format(d, "M/d/yyyy");
 const fmtLong = (d: Date) => format(d, "MMM d, yyyy");
 
 function parseInput(v: string): Date | null {
-  const d = new Date(v);
+  const [year, month, day] = v.split("-").map(Number);
+  const d = year && month && day ? new Date(year, month - 1, day) : new Date(v);
   return isNaN(d.getTime()) ? null : d;
 }
 
