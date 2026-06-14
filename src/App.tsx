@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import Command from "./pages/Command";
 import CallTracking from "./pages/CallTracking";
 import Keywords from "./pages/Keywords";
 import PropertyPage from "./pages/PropertyPage";
@@ -56,6 +57,7 @@ const App = () => (
                   />
 
                   <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+                    <Route path="/command" element={<Command />} />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/calls" element={<CallTracking />} />
                     <Route path="/keywords" element={<Keywords />} />
