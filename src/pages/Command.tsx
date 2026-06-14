@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ArrowUpRight, Building2, Globe2, AlertTriangle, CheckCircle2, MinusCircle } from "lucide-react";
+import { ArrowUpRight, Building2, Globe2, MinusCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
