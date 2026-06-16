@@ -363,7 +363,7 @@ Deno.serve(async (req) => {
     // Tag refresh fallback: /contacts/search sometimes returns stale or empty tags.
     // For contacts in the window whose tags came back empty, fetch the detail
     // endpoint (cap to avoid burning the API budget).
-    const TAG_REFRESH_CAP = 300;
+    const TAG_REFRESH_CAP = MAX_TAG_REFRESH;
     const needsTagRefresh = buffer
       .filter((c) => {
         const t = (c as Json).tags;
