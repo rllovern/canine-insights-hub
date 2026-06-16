@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown, GripVertical } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { cn } from "@/lib/utils";
@@ -73,6 +73,18 @@ export function Sidebar() {
 
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
+  const dragCtxRef = useRef<{
+    groupKey: string;
+    items: NavItem[];
+    setItems: (v: NavItem[]) => void;
+  } | null>(null);
+
+  const findKeyAtPoint = (x: number, y: number, groupKey: string): string | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (!el) return null;
+    const row = el.closest<HTMLElement>(`[data-drag-group="${groupKey}"]`);
+    return row?.dataset.dragKey ?? null;
+  };
 
   const reorder = (
     groupKey: string,
@@ -113,57 +125,87 @@ export function Sidebar() {
     const draggable = !!opts?.groupKey;
     const isOver = draggable && overKey === it.key && dragKey && dragKey !== it.key;
     const linkClass = cn(
-      "group/nav relative flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-      opts?.indent && "pl-8",
+      "group/nav relative flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors flex-1 min-w-0",
+      opts?.indent && "pl-7",
       active
         ? "bg-white/[0.06] text-white"
         : "text-white/85 hover:bg-white/[0.04] hover:text-white",
-      draggable && "cursor-grab active:cursor-grabbing",
-      isOver && "ring-1 ring-white/30",
-      dragKey === it.key && "opacity-50",
     );
-    const dragProps = draggable
-      ? {
-          draggable: true,
-          onDragStart: (e: React.DragEvent) => {
-            setDragKey(it.key);
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", it.key);
-          },
-          onDragOver: (e: React.DragEvent) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            if (overKey !== it.key) setOverKey(it.key);
-          },
-          onDragLeave: () => { if (overKey === it.key) setOverKey(null); },
-          onDrop: (e: React.DragEvent) => {
-            e.preventDefault();
-            const fromKey = e.dataTransfer.getData("text/plain") || dragKey;
-            if (fromKey && opts?.items && opts?.setItems && opts?.groupKey) {
-              reorder(opts.groupKey, opts.items, opts.setItems, fromKey, it.key);
-            }
-            setDragKey(null); setOverKey(null);
-          },
-          onDragEnd: () => { setDragKey(null); setOverKey(null); },
-        }
-      : {};
     const inner = (
       <>
         <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-white/70 group-hover/nav:text-white")} />
         <span className="truncate">{it.label}</span>
       </>
     );
-    if (it.external) {
-      return (
-        <a key={it.key} href={it.to} target="_blank" rel="noopener" className={linkClass} {...dragProps}>
-          {inner}
-        </a>
-      );
-    }
-    return (
-      <NavLink key={it.key} to={it.to} className={linkClass} {...dragProps}>
+    const link = it.external ? (
+      <a href={it.to} target="_blank" rel="noopener" className={linkClass} draggable={false}>
+        {inner}
+      </a>
+    ) : (
+      <NavLink to={it.to} className={linkClass} draggable={false}>
         {inner}
       </NavLink>
+    );
+
+    if (!draggable) {
+      return <div key={it.key}>{link}</div>;
+    }
+
+    return (
+      <div
+        key={it.key}
+        data-drag-group={opts!.groupKey}
+        data-drag-key={it.key}
+        className={cn(
+          "group/row relative flex items-center rounded-md",
+          isOver && "ring-1 ring-white/50 bg-white/[0.03]",
+          dragKey === it.key && "opacity-40",
+        )}
+      >
+        <button
+          type="button"
+          aria-label="Drag to reorder"
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            dragCtxRef.current = {
+              groupKey: opts!.groupKey!,
+              items: opts!.items!,
+              setItems: opts!.setItems!,
+            };
+            setDragKey(it.key);
+            setOverKey(it.key);
+          }}
+          onPointerMove={(e) => {
+            if (!dragCtxRef.current) return;
+            const k = findKeyAtPoint(e.clientX, e.clientY, dragCtxRef.current.groupKey);
+            if (k && k !== overKey) setOverKey(k);
+          }}
+          onPointerUp={(e) => {
+            const ctx = dragCtxRef.current;
+            if (ctx && dragKey) {
+              const targetKey = findKeyAtPoint(e.clientX, e.clientY, ctx.groupKey) || overKey;
+              if (targetKey && targetKey !== dragKey) {
+                reorder(ctx.groupKey, ctx.items, ctx.setItems, dragKey, targetKey);
+              }
+            }
+            dragCtxRef.current = null;
+            setDragKey(null);
+            setOverKey(null);
+          }}
+          onPointerCancel={() => {
+            dragCtxRef.current = null;
+            setDragKey(null);
+            setOverKey(null);
+          }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center text-white/40 transition-colors hover:text-white active:cursor-grabbing touch-none select-none"
+        >
+          <GripVertical className="size-3" />
+        </button>
+        {link}
+      </div>
     );
   };
 
