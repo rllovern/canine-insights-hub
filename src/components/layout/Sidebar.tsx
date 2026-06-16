@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown, GripVertical } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { cn } from "@/lib/utils";
@@ -73,6 +73,18 @@ export function Sidebar() {
 
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
+  const dragCtxRef = useRef<{
+    groupKey: string;
+    items: NavItem[];
+    setItems: (v: NavItem[]) => void;
+  } | null>(null);
+
+  const findKeyAtPoint = (x: number, y: number, groupKey: string): string | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (!el) return null;
+    const row = el.closest<HTMLElement>(`[data-drag-group="${groupKey}"]`);
+    return row?.dataset.dragKey ?? null;
+  };
 
   const reorder = (
     groupKey: string,
@@ -142,44 +154,53 @@ export function Sidebar() {
     return (
       <div
         key={it.key}
+        data-drag-group={opts!.groupKey}
+        data-drag-key={it.key}
         className={cn(
           "group/row relative flex items-center rounded-md",
-          isOver && "ring-1 ring-white/40",
+          isOver && "ring-1 ring-white/50 bg-white/[0.03]",
           dragKey === it.key && "opacity-40",
         )}
-        onDragOver={(e) => {
-          if (!dragKey) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
-          if (overKey !== it.key) setOverKey(it.key);
-        }}
-        onDragLeave={(e) => {
-          // Only clear when leaving the row entirely
-          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-          if (overKey === it.key) setOverKey(null);
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          const fromKey = e.dataTransfer.getData("text/plain") || dragKey;
-          if (fromKey && opts?.items && opts?.setItems && opts?.groupKey) {
-            reorder(opts.groupKey, opts.items, opts.setItems, fromKey, it.key);
-          }
-          setDragKey(null);
-          setOverKey(null);
-        }}
       >
         <button
           type="button"
           aria-label="Drag to reorder"
-          draggable
-          onDragStart={(e) => {
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            dragCtxRef.current = {
+              groupKey: opts!.groupKey!,
+              items: opts!.items!,
+              setItems: opts!.setItems!,
+            };
             setDragKey(it.key);
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", it.key);
+            setOverKey(it.key);
           }}
-          onDragEnd={() => { setDragKey(null); setOverKey(null); }}
-          onClick={(e) => e.preventDefault()}
-          className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center text-white/40 transition-colors hover:text-white active:cursor-grabbing"
+          onPointerMove={(e) => {
+            if (!dragCtxRef.current) return;
+            const k = findKeyAtPoint(e.clientX, e.clientY, dragCtxRef.current.groupKey);
+            if (k && k !== overKey) setOverKey(k);
+          }}
+          onPointerUp={(e) => {
+            const ctx = dragCtxRef.current;
+            if (ctx && dragKey) {
+              const targetKey = findKeyAtPoint(e.clientX, e.clientY, ctx.groupKey) || overKey;
+              if (targetKey && targetKey !== dragKey) {
+                reorder(ctx.groupKey, ctx.items, ctx.setItems, dragKey, targetKey);
+              }
+            }
+            dragCtxRef.current = null;
+            setDragKey(null);
+            setOverKey(null);
+          }}
+          onPointerCancel={() => {
+            dragCtxRef.current = null;
+            setDragKey(null);
+            setOverKey(null);
+          }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center text-white/40 transition-colors hover:text-white active:cursor-grabbing touch-none select-none"
         >
           <GripVertical className="size-3" />
         </button>
