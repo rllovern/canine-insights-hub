@@ -20,12 +20,13 @@ const MAX_RPS = 8;             // ceiling per probe report
 const MAX_RETRIES = 5;
 const BACKOFF_BASE_MS = 2000;  // 2s, 4s, 8s, 16s, 32s
 const MAX_CONTACT_SEARCH_PAGES = 5;
-const MAX_CONVERSATION_SEARCH_PAGES = 5;
-const MAX_MESSAGE_PAGES_PER_CONVERSATION = 3;
-const MAX_TARGETED_CONVERSATION_LOOKUPS = 25;
-const MAX_CONVERSATIONS_FOR_MESSAGE_SYNC = 60;
-const MAX_TOTAL_MESSAGE_PAGES = 100;
-const MAX_OPPORTUNITY_PAGES = 20;
+const MAX_CONVERSATION_SEARCH_PAGES = 4;
+const MAX_MESSAGE_PAGES_PER_CONVERSATION = 2;
+const MAX_TARGETED_CONVERSATION_LOOKUPS = 20;
+const MAX_CONVERSATIONS_FOR_MESSAGE_SYNC = 35;
+const MAX_TOTAL_MESSAGE_PAGES = 50;
+const MAX_OPPORTUNITY_PAGES = 15;
+const MAX_TAG_REFRESH = 75;
 
 type Json = Record<string, unknown>;
 
@@ -362,7 +363,7 @@ Deno.serve(async (req) => {
     // Tag refresh fallback: /contacts/search sometimes returns stale or empty tags.
     // For contacts in the window whose tags came back empty, fetch the detail
     // endpoint (cap to avoid burning the API budget).
-    const TAG_REFRESH_CAP = 300;
+    const TAG_REFRESH_CAP = MAX_TAG_REFRESH;
     const needsTagRefresh = buffer
       .filter((c) => {
         const t = (c as Json).tags;
