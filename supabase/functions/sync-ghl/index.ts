@@ -321,6 +321,7 @@ Deno.serve(async (req) => {
       const reqBody: Json = { locationId, pageLimit: 100 };
       if (cursor) reqBody.searchAfter = cursor;
       const j = await ghlFetch("POST", "/contacts/search", token, reqBody);
+      pages++;
       const list = ((j.contacts as Json[]) ?? []);
       if (!list.length) break;
       buffer.push(...list);
@@ -328,19 +329,18 @@ Deno.serve(async (req) => {
       const sa = Array.isArray(last.searchAfter) ? last.searchAfter : null;
       if (!sa || list.length < 100) break;
       cursor = sa;
-      pages++;
     }
-    counts.contact_pages = pages + (buffer.length ? 1 : 0);
+    counts.contact_pages = pages;
     counts.contact_pagination_capped = buffer.length >= MAX_CONTACT_SEARCH_PAGES * 100;
 
     const rows = buffer.map((c) => {
       const a = c as Json;
       const id = String(a.id);
       const createdAt = (a.dateAdded ?? a.createdAt) as string | null;
+      if (!isWithinWindow(createdAt, dateFrom, dateTo)) return null;
       if (createdAt) contactCreatedAt.set(id, createdAt);
       contactLookup.set(id, { phone: (a.phone as string | null) ?? null, email: (a.email as string | null) ?? null });
       contactIds.push(id);
-      if (!isWithinWindow(createdAt, dateFrom, dateTo)) return null;
       return {
         property_id, ghl_location_id: locationId, ghl_contact_id: id,
         first_name: a.firstName ?? null,
