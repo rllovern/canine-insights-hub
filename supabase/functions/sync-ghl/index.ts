@@ -19,8 +19,12 @@ const GHL_VERSION = "2021-07-28";
 const MAX_RPS = 8;             // ceiling per probe report
 const MAX_RETRIES = 5;
 const BACKOFF_BASE_MS = 2000;  // 2s, 4s, 8s, 16s, 32s
+const MAX_CONTACT_SEARCH_PAGES = 20;
 const MAX_CONVERSATION_SEARCH_PAGES = 100;
 const MAX_MESSAGE_PAGES_PER_CONVERSATION = 25;
+const MAX_TARGETED_CONVERSATION_LOOKUPS = 150;
+const MAX_CONVERSATIONS_FOR_MESSAGE_SYNC = 300;
+const MAX_TOTAL_MESSAGE_PAGES = 600;
 const MAX_OPPORTUNITY_PAGES = 100;
 
 type Json = Record<string, unknown>;
@@ -165,6 +169,13 @@ function canonicalizeOppStatus(raw: unknown): "open" | "won" | "lost" | "abandon
   if (s === "lost") return "lost";
   if (s === "abandoned") return "abandoned";
   return "unknown";
+}
+
+function isWithinWindow(iso: unknown, from: Date, to: Date): boolean {
+  if (!iso) return true;
+  const time = new Date(String(iso)).getTime();
+  if (!Number.isFinite(time)) return true;
+  return time >= from.getTime() && time <= to.getTime();
 }
 
 // ---------- Chunked upsert ------------------------------------------
