@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { cn } from "@/lib/utils";
@@ -51,9 +51,46 @@ export function Sidebar() {
   const filterVisible = (items: NavItem[]) =>
     items.filter((i) => !i.internalOnly || effectiveRole === "internal");
 
-  const monitorItems = useMemo(() => filterVisible(MONITOR_ITEMS), [effectiveRole]);
-  const deliverItems = useMemo(() => filterVisible(DELIVER_ITEMS), [effectiveRole]);
-  const adminItems = useMemo(() => filterVisible(ADMIN_ITEMS), [effectiveRole]);
+  const applyOrder = (groupKey: string, items: NavItem[]) => {
+    try {
+      const raw = localStorage.getItem(`nav-order:${groupKey}`);
+      if (!raw) return items;
+      const order: string[] = JSON.parse(raw);
+      const map = new Map(items.map((i) => [i.key, i]));
+      const ordered: NavItem[] = [];
+      order.forEach((k) => { const it = map.get(k); if (it) { ordered.push(it); map.delete(k); } });
+      return [...ordered, ...map.values()];
+    } catch { return items; }
+  };
+
+  const [monitorItems, setMonitorItems] = useState<NavItem[]>(() => applyOrder("monitor", filterVisible(MONITOR_ITEMS)));
+  const [deliverItems, setDeliverItems] = useState<NavItem[]>(() => applyOrder("deliver", filterVisible(DELIVER_ITEMS)));
+  const [adminItems, setAdminItems] = useState<NavItem[]>(() => applyOrder("admin", filterVisible(ADMIN_ITEMS)));
+
+  useEffect(() => { setMonitorItems(applyOrder("monitor", filterVisible(MONITOR_ITEMS))); }, [effectiveRole]);
+  useEffect(() => { setDeliverItems(applyOrder("deliver", filterVisible(DELIVER_ITEMS))); }, [effectiveRole]);
+  useEffect(() => { setAdminItems(applyOrder("admin", filterVisible(ADMIN_ITEMS))); }, [effectiveRole]);
+
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
+
+  const reorder = (
+    groupKey: string,
+    items: NavItem[],
+    setItems: (v: NavItem[]) => void,
+    fromKey: string,
+    toKey: string,
+  ) => {
+    if (fromKey === toKey) return;
+    const from = items.findIndex((i) => i.key === fromKey);
+    const to = items.findIndex((i) => i.key === toKey);
+    if (from < 0 || to < 0) return;
+    const next = [...items];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setItems(next);
+    try { localStorage.setItem(`nav-order:${groupKey}`, JSON.stringify(next.map((i) => i.key))); } catch {}
+  };
 
   const adminActive = adminItems.some((i) => loc.pathname === i.to);
   const [adminOpen, setAdminOpen] = useState<boolean>(adminActive);
@@ -61,16 +98,55 @@ export function Sidebar() {
   const isActive = (it: NavItem) =>
     loc.pathname === it.to || (it.to === "/dashboard" && loc.pathname === "/");
 
-  const renderItem = (it: NavItem, opts?: { accent?: boolean; indent?: boolean }) => {
+  const renderItem = (
+    it: NavItem,
+    opts?: {
+      accent?: boolean;
+      indent?: boolean;
+      groupKey?: string;
+      items?: NavItem[];
+      setItems?: (v: NavItem[]) => void;
+    },
+  ) => {
     const Icon = it.icon;
     const active = isActive(it);
+    const draggable = !!opts?.groupKey;
+    const isOver = draggable && overKey === it.key && dragKey && dragKey !== it.key;
     const linkClass = cn(
       "group/nav relative flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
       opts?.indent && "pl-8",
       active
         ? "bg-white/[0.06] text-white"
         : "text-white/85 hover:bg-white/[0.04] hover:text-white",
+      draggable && "cursor-grab active:cursor-grabbing",
+      isOver && "ring-1 ring-white/30",
+      dragKey === it.key && "opacity-50",
     );
+    const dragProps = draggable
+      ? {
+          draggable: true,
+          onDragStart: (e: React.DragEvent) => {
+            setDragKey(it.key);
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", it.key);
+          },
+          onDragOver: (e: React.DragEvent) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            if (overKey !== it.key) setOverKey(it.key);
+          },
+          onDragLeave: () => { if (overKey === it.key) setOverKey(null); },
+          onDrop: (e: React.DragEvent) => {
+            e.preventDefault();
+            const fromKey = e.dataTransfer.getData("text/plain") || dragKey;
+            if (fromKey && opts?.items && opts?.setItems && opts?.groupKey) {
+              reorder(opts.groupKey, opts.items, opts.setItems, fromKey, it.key);
+            }
+            setDragKey(null); setOverKey(null);
+          },
+          onDragEnd: () => { setDragKey(null); setOverKey(null); },
+        }
+      : {};
     const inner = (
       <>
         <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-white/70 group-hover/nav:text-white")} />
@@ -79,13 +155,13 @@ export function Sidebar() {
     );
     if (it.external) {
       return (
-        <a key={it.key} href={it.to} target="_blank" rel="noopener" className={linkClass}>
+        <a key={it.key} href={it.to} target="_blank" rel="noopener" className={linkClass} {...dragProps}>
           {inner}
         </a>
       );
     }
     return (
-      <NavLink key={it.key} to={it.to} className={linkClass}>
+      <NavLink key={it.key} to={it.to} className={linkClass} {...dragProps}>
         {inner}
       </NavLink>
     );
@@ -112,14 +188,14 @@ export function Sidebar() {
         {monitorItems.length > 0 && (
           <>
             <GroupLabel>Monitor</GroupLabel>
-            {monitorItems.map((it) => renderItem(it))}
+            {monitorItems.map((it) => renderItem(it, { groupKey: "monitor", items: monitorItems, setItems: setMonitorItems }))}
           </>
         )}
 
         {deliverItems.length > 0 && (
           <>
             <GroupLabel>Deliver</GroupLabel>
-            {deliverItems.map((it) => renderItem(it))}
+            {deliverItems.map((it) => renderItem(it, { groupKey: "deliver", items: deliverItems, setItems: setDeliverItems }))}
           </>
         )}
 
@@ -142,7 +218,7 @@ export function Sidebar() {
             </button>
             {adminOpen && (
               <div className="space-y-0.5">
-                {adminItems.map((it) => renderItem(it, { indent: true }))}
+                {adminItems.map((it) => renderItem(it, { indent: true, groupKey: "admin", items: adminItems, setItems: setAdminItems }))}
               </div>
             )}
           </>
