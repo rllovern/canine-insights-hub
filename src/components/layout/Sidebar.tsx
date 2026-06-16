@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown, GripVertical } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
@@ -113,57 +113,78 @@ export function Sidebar() {
     const draggable = !!opts?.groupKey;
     const isOver = draggable && overKey === it.key && dragKey && dragKey !== it.key;
     const linkClass = cn(
-      "group/nav relative flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-      opts?.indent && "pl-8",
+      "group/nav relative flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors flex-1 min-w-0",
+      opts?.indent && "pl-7",
       active
         ? "bg-white/[0.06] text-white"
         : "text-white/85 hover:bg-white/[0.04] hover:text-white",
-      draggable && "cursor-grab active:cursor-grabbing",
-      isOver && "ring-1 ring-white/30",
-      dragKey === it.key && "opacity-50",
     );
-    const dragProps = draggable
-      ? {
-          draggable: true,
-          onDragStart: (e: React.DragEvent) => {
-            setDragKey(it.key);
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", it.key);
-          },
-          onDragOver: (e: React.DragEvent) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            if (overKey !== it.key) setOverKey(it.key);
-          },
-          onDragLeave: () => { if (overKey === it.key) setOverKey(null); },
-          onDrop: (e: React.DragEvent) => {
-            e.preventDefault();
-            const fromKey = e.dataTransfer.getData("text/plain") || dragKey;
-            if (fromKey && opts?.items && opts?.setItems && opts?.groupKey) {
-              reorder(opts.groupKey, opts.items, opts.setItems, fromKey, it.key);
-            }
-            setDragKey(null); setOverKey(null);
-          },
-          onDragEnd: () => { setDragKey(null); setOverKey(null); },
-        }
-      : {};
     const inner = (
       <>
         <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-white/70 group-hover/nav:text-white")} />
         <span className="truncate">{it.label}</span>
       </>
     );
-    if (it.external) {
-      return (
-        <a key={it.key} href={it.to} target="_blank" rel="noopener" className={linkClass} {...dragProps}>
-          {inner}
-        </a>
-      );
-    }
-    return (
-      <NavLink key={it.key} to={it.to} className={linkClass} {...dragProps}>
+    const link = it.external ? (
+      <a href={it.to} target="_blank" rel="noopener" className={linkClass} draggable={false}>
+        {inner}
+      </a>
+    ) : (
+      <NavLink to={it.to} className={linkClass} draggable={false}>
         {inner}
       </NavLink>
+    );
+
+    if (!draggable) {
+      return <div key={it.key}>{link}</div>;
+    }
+
+    return (
+      <div
+        key={it.key}
+        className={cn(
+          "group/row relative flex items-center rounded-md",
+          isOver && "ring-1 ring-white/40",
+          dragKey === it.key && "opacity-40",
+        )}
+        onDragOver={(e) => {
+          if (!dragKey) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          if (overKey !== it.key) setOverKey(it.key);
+        }}
+        onDragLeave={(e) => {
+          // Only clear when leaving the row entirely
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          if (overKey === it.key) setOverKey(null);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          const fromKey = e.dataTransfer.getData("text/plain") || dragKey;
+          if (fromKey && opts?.items && opts?.setItems && opts?.groupKey) {
+            reorder(opts.groupKey, opts.items, opts.setItems, fromKey, it.key);
+          }
+          setDragKey(null);
+          setOverKey(null);
+        }}
+      >
+        <button
+          type="button"
+          aria-label="Drag to reorder"
+          draggable
+          onDragStart={(e) => {
+            setDragKey(it.key);
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", it.key);
+          }}
+          onDragEnd={() => { setDragKey(null); setOverKey(null); }}
+          onClick={(e) => e.preventDefault()}
+          className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center text-white/30 opacity-0 transition-opacity hover:text-white/70 group-hover/row:opacity-100 active:cursor-grabbing"
+        >
+          <GripVertical className="size-3" />
+        </button>
+        {link}
+      </div>
     );
   };
 
