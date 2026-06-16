@@ -19,17 +19,18 @@ type Status = "healthy" | "failing" | "stale" | "never_run" | "not_connected";
 
 function rowStatus(r: HealthRow): Status {
   if (!r.is_connected) return "not_connected";
-  if (!r.last_run_at) return "never_run";
-  if (r.last_run_status === "failure") return "failing";
   if (!r.last_success_at) return "failing";
+  if (r.last_run_status === "failure" && (!r.last_failure_at || new Date(r.last_failure_at) > new Date(r.last_success_at))) return "failing";
+  if (!r.last_run_at) return "never_run";
   const hours = (Date.now() - new Date(r.last_success_at).getTime()) / 3_600_000;
   if (hours > 24) return "stale";
   return "healthy";
 }
 
 function aggregate(rows: HealthRow[]): Status {
-  const order: Status[] = ["failing", "stale", "never_run", "healthy", "not_connected"];
-  const present = rows.map(rowStatus);
+  const connected = rows.filter((r) => r.is_connected);
+  const present = (connected.length ? connected : rows).map(rowStatus);
+  const order: Status[] = ["failing", "stale", "healthy", "never_run", "not_connected"];
   if (!present.length) return "not_connected";
   for (const s of order) if (present.includes(s)) return s;
   return "not_connected";
