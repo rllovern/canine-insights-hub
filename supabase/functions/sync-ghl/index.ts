@@ -744,14 +744,19 @@ Deno.serve(async (req) => {
 
   // ===== Bookkeeping ================================================
   summary.finished_at = new Date().toISOString();
+  const blockingErrors = errs.filter((msg) =>
+    !msg.startsWith("rebuild_lead_facts:") &&
+    !msg.startsWith("sync_verified_sales_daily_metrics:"),
+  );
   await admin
     .from("property_data_sources")
-    .update({ last_synced_at: summary.finished_at, last_error: errs.length ? errs.join(" | ").slice(0, 1000) : null, status: errs.length ? "error" : "connected" })
+    .update({ last_synced_at: summary.finished_at, last_error: blockingErrors.length ? blockingErrors.join(" | ").slice(0, 1000) : null, status: blockingErrors.length ? "error" : "connected" })
     .eq("property_id", property_id).eq("source", "ghl");
   await admin.from("sync_runs").insert({
     property_id, source: "ghl",
-    status: errs.length ? "failure" : "success",
-    error_message: errs.length ? errs.join(" | ").slice(0, 1000) : null,
+    status: blockingErrors.length ? "failure" : "success",
+    error_message: blockingErrors.length ? blockingErrors.join(" | ").slice(0, 1000) : null,
+    stats: { warnings: errs.filter((msg) => !blockingErrors.includes(msg)) } as never,
   });
 
   return new Response(JSON.stringify(summary, null, 2), {
