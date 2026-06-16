@@ -1,57 +1,56 @@
-## Goal
+## Scope
 
-Add a compact "Data Sources" block to the bottom of the left sidebar (above the account row) showing each data source and whether it's healthy, scoped to the currently selected property/scope.
+Restyle the left navigation only — sidebar background, group labels, item rows, active state, account card, and the Data Sources panel — to match the reference screenshot. No structural changes to the nav hierarchy you previously approved (Command, Monitor group, Deliver group, Jarvis, Admin collapse) and no changes to any other page yet.
 
-## Layout
+## Visual target (from reference)
 
-Inserted in `src/components/layout/Sidebar.tsx` directly above the existing account card:
+- Surface: near-white sidebar (`#FAFAFA`-ish) with a hairline right border, no dark navy.
+- Brand block: blue rounded-square "R" mark + "Ridgeside K9" in bold, "Acquisition Intelligence" as a smaller muted subtitle. Thin divider below.
+- Group labels: small uppercase, letter-spaced, light gray (e.g. "REPORTING", "DATA SOURCES"). Same treatment for existing "Monitor" / "Deliver".
+- Nav rows: 14px, medium weight, dark slate text, subtle icon. Inactive = no background. Hover = very light gray. Active = bold text + a 2px black left bar + slightly darker text (no filled pill, no gold accent on the light theme).
+- Badges on rows: red circular count badge (e.g. Command "2"), neutral gray "SOON" pill — render only when data calls for them (kept generic, no hardcoded counts).
+- Data Sources panel: same row rhythm, colored dot on the left, label in dark slate, status text right-aligned in green ("Live") or red ("Blocked") — uppercase, small, medium weight.
+- Account card at the bottom: white card, hairline border, slightly smaller; initials chip uses the brand blue.
 
-```text
-DATA SOURCES
-● Google Ads              Live
-● CallTrackingMetrics     Live
-● GoHighLevel             Live
-● CTM / GHL match     Blocked
+## Token + typography changes (`src/index.css`)
+
+Light-mode sidebar tokens repointed to the reference palette; dark mode left untouched for now:
+
+```
+--sidebar-background: 0 0% 99%;
+--sidebar-foreground: 222 25% 18%;
+--sidebar-primary:    222 75% 52%;   /* brand blue used by R mark + active accents that need color */
+--sidebar-primary-foreground: 0 0% 100%;
+--sidebar-accent:     222 15% 95%;   /* hover bg */
+--sidebar-accent-foreground: 222 30% 12%;
+--sidebar-border:     220 14% 90%;
+--sidebar-ring:       222 75% 52%;
 ```
 
-- Section label `DATA SOURCES` reuses the same uppercase muted style as the `Monitor` / `Deliver` group labels.
-- Each row: small status dot + source label on the left, status word on the right, single line, truncates.
-- Four rows, in this order: Google Ads, CallTrackingMetrics, GoHighLevel, CTM / GHL match.
+Body font stays Inter (already set). No new font import required for parity with the reference.
 
-## Status logic
+## Component changes
 
-Reuses the existing `get_api_health_summary` RPC already powering `src/pages/admin/ApiHealth.tsx` (so no new backend work).
+`src/components/layout/Sidebar.tsx`
+- Replace gold/navy active treatment with: active row = `text-sidebar-accent-foreground font-semibold` + 2px black left bar (`before:bg-foreground`). Inactive = `text-sidebar-foreground/75`, hover = `bg-sidebar-accent`.
+- Drop the gold-tinted Jarvis accent variant in favor of the same row style with a subtle brand-blue icon, to fit the light theme. (Still a single distinct row, just not gold.)
+- Group label component restyled: `text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70`.
+- Brand block: replace the gold underline bar with the reference layout — small rounded-square brand-blue tile with "R", title "Ridgeside K9" in `font-semibold text-foreground`, "Acquisition Intelligence" subtitle in `text-xs text-muted-foreground`.
+- Account card: lighter border, white background, brand-blue initials chip, smaller secondary text.
 
-New component `src/components/layout/SourceHealthPanel.tsx`:
-
-- Fetches `get_api_health_summary` on mount and every 60s.
-- Filters rows by the current scope from `PropertyContext` / `ScopeContext`:
-  - Single property selected → only that property's rows.
-  - "All properties" / portfolio scope → aggregate across all visible properties.
-- For each of the three sync sources (`google_ads`, `ctm`, `ghl`) reduces rows to a single status using the same precedence already in `ApiHealth.tsx` (`failing > stale > never_run > healthy > not_connected`).
-- "CTM / GHL match" is a derived row: `Live` when both `ctm` and `ghl` aggregate to `healthy`, otherwise `Blocked` (with tooltip naming which side is the problem). This matches the screenshot's fourth row, which is a reconciliation indicator, not a raw source.
-
-Status → label/color mapping (Tailwind tokens, no hardcoded colors):
-
-| Status        | Label    | Dot / text color   |
-| ------------- | -------- | ------------------ |
-| healthy       | Live     | `text-success`     |
-| stale         | Stale    | `text-amber-600`   |
-| failing       | Blocked  | `text-destructive` |
-| never_run     | Off      | `text-muted-foreground` |
-| not_connected | Off      | `text-muted-foreground` |
-
-Each row has a `title` tooltip with the most recent `last_success_at` / `last_error_message` so hover gives context without expanding the sidebar.
-
-## Files
-
-- **edit** `src/components/layout/Sidebar.tsx` — render `<SourceHealthPanel />` inside the existing footer `div`, above the account card; add a thin `border-sidebar-border/60` divider above it.
-- **add** `src/components/layout/SourceHealthPanel.tsx` — the component described above.
-
-No backend, no schema, no route changes. Internal-only data is already gated by RLS on the RPC; viewers will simply see an empty panel if they have no access (the panel hides itself when the fetch returns zero rows).
+`src/components/layout/SourceHealthPanel.tsx`
+- Section label restyled to match new GroupLabel.
+- Row: dot (existing colors), label `text-sidebar-foreground/85`, status text right-aligned in `text-success` / `text-destructive` / `text-muted-foreground`, uppercase 10px, medium weight. Keep existing status logic untouched.
 
 ## Out of scope
 
-- No click-through to `/admin/api-health` (can be added later if wanted).
-- No changes to the existing `ApiHealth` admin page.
-- No changes to how sync runs or how health is computed server-side.
+- Nav structure / grouping (kept exactly as approved).
+- Top bar, page content, charts, KPI cards, and any other surface — addressed in follow-up turns.
+- Dark-mode sidebar tokens — unchanged this turn.
+- Data Sources logic (`rowStatus`, `aggregate`, RPC) — unchanged.
+
+## Files touched
+
+- `src/index.css` — sidebar tokens.
+- `src/components/layout/Sidebar.tsx` — styling only.
+- `src/components/layout/SourceHealthPanel.tsx` — styling only.

@@ -3,7 +3,6 @@ import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wa
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
-import { BrandMark } from "@/components/brand/BrandMark";
 import { cn } from "@/lib/utils";
 import { ScopeSelector } from "./ScopeSelector";
 import { SourceHealthPanel } from "./SourceHealthPanel";
@@ -65,19 +64,15 @@ export function Sidebar() {
     const Icon = it.icon;
     const active = isActive(it);
     const linkClass = cn(
-      "group/nav relative flex items-center gap-2.5 pl-2 pr-3 py-2 rounded-md text-sm font-medium transition-colors",
+      "group/nav relative flex items-center gap-2.5 pl-3 pr-3 py-1.5 rounded-md text-[13px] transition-colors",
       opts?.indent && "pl-8",
-      opts?.accent
-        ? active
-          ? "bg-sidebar-primary/15 text-sidebar-primary before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-sidebar-primary"
-          : "text-sidebar-primary hover:bg-sidebar-primary/10"
-        : active
-          ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-sidebar-primary"
-          : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+      active
+        ? "text-sidebar-accent-foreground font-semibold before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-r-full before:bg-foreground"
+        : "font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
     );
     const inner = (
       <>
-        <Icon className={cn("size-4", (active || opts?.accent) && "text-sidebar-primary")} />
+        <Icon className={cn("size-4 shrink-0", opts?.accent ? "text-sidebar-primary" : active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/60")} />
         <span className="truncate">{it.label}</span>
       </>
     );
@@ -96,21 +91,27 @@ export function Sidebar() {
   };
 
   const GroupLabel = ({ children }: { children: React.ReactNode }) => (
-    <div className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/45">
+    <div className="px-3 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/45">
       {children}
     </div>
   );
 
   return (
     <aside className="hidden md:flex flex-col w-60 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-      <div className="px-4 py-4 border-b border-sidebar-border">
-        <BrandMark variant="onDark" />
-        <div className="mt-2 h-[2px] w-10 rounded-full bg-sidebar-primary" />
+      <div className="px-4 py-4 flex items-center gap-2.5">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground text-sm font-bold">
+          R
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-sidebar-accent-foreground truncate leading-tight">Ridgeside K9</div>
+          <div className="text-[11px] text-sidebar-foreground/55 truncate leading-tight">Acquisition Intelligence</div>
+        </div>
       </div>
       <div className="px-3 pt-3">
         <ScopeSelector />
       </div>
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-2 py-3 space-y-px overflow-y-auto">
+        <GroupLabel>Reporting</GroupLabel>
         {renderItem(COMMAND_ITEM)}
 
         {monitorItems.length > 0 && (
@@ -137,12 +138,12 @@ export function Sidebar() {
               type="button"
               onClick={() => setAdminOpen((v) => !v)}
               className={cn(
-                "group/nav relative flex w-full items-center gap-2.5 pl-2 pr-3 py-2 rounded-md text-sm font-medium transition-colors",
-                "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                "group/nav relative flex w-full items-center gap-2.5 pl-3 pr-3 py-1.5 rounded-md text-[13px] font-medium transition-colors",
+                "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               )}
               aria-expanded={adminOpen}
             >
-              <Settings className="size-4" />
+              <Settings className="size-4 text-sidebar-foreground/60" />
               <span className="truncate flex-1 text-left">Admin</span>
               <ChevronDown className={cn("size-3.5 transition-transform", adminOpen && "rotate-180")} />
             </button>
@@ -154,16 +155,16 @@ export function Sidebar() {
           </div>
         )}
       </nav>
-      <div className="px-3 pb-3 space-y-3">
-        <div className="border-t border-sidebar-border/60 pt-3">
+      <div className="px-2 pb-3 space-y-3">
+        <div className="border-t border-sidebar-border pt-3">
           <SourceHealthPanel />
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-sidebar-border/60 px-2.5 py-2">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sidebar-accent text-[11px] font-semibold text-sidebar-primary">
+        <div className="mx-1 flex items-center gap-2 rounded-lg border border-sidebar-border bg-background px-2.5 py-2">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sidebar-primary text-[11px] font-semibold text-sidebar-primary-foreground">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium truncate text-sidebar-foreground">{user?.email ?? "Account"}</div>
+            <div className="text-xs font-medium truncate text-sidebar-accent-foreground">{user?.email ?? "Account"}</div>
             <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/55">
               {effectiveRole === "internal" ? "Administrator" : "Viewer"}
             </div>
