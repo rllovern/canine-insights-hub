@@ -19,9 +19,13 @@ const GHL_VERSION = "2021-07-28";
 const MAX_RPS = 8;             // ceiling per probe report
 const MAX_RETRIES = 5;
 const BACKOFF_BASE_MS = 2000;  // 2s, 4s, 8s, 16s, 32s
-const MAX_CONVERSATION_SEARCH_PAGES = 100;
-const MAX_MESSAGE_PAGES_PER_CONVERSATION = 25;
-const MAX_OPPORTUNITY_PAGES = 100;
+const MAX_CONTACT_SEARCH_PAGES = 5;
+const MAX_CONVERSATION_SEARCH_PAGES = 5;
+const MAX_MESSAGE_PAGES_PER_CONVERSATION = 3;
+const MAX_TARGETED_CONVERSATION_LOOKUPS = 25;
+const MAX_CONVERSATIONS_FOR_MESSAGE_SYNC = 60;
+const MAX_TOTAL_MESSAGE_PAGES = 100;
+const MAX_OPPORTUNITY_PAGES = 20;
 
 type Json = Record<string, unknown>;
 
@@ -167,6 +171,13 @@ function canonicalizeOppStatus(raw: unknown): "open" | "won" | "lost" | "abandon
   return "unknown";
 }
 
+function isWithinWindow(iso: unknown, from: Date, to: Date): boolean {
+  if (!iso) return true;
+  const time = new Date(String(iso)).getTime();
+  if (!Number.isFinite(time)) return true;
+  return time >= from.getTime() && time <= to.getTime();
+}
+
 // ---------- Chunked upsert ------------------------------------------
 async function upsertChunked(admin: ReturnType<typeof createClient>, table: string, rows: unknown[], onConflict: string, chunk = 200) {
   if (!rows.length) return 0;
@@ -306,10 +317,11 @@ Deno.serve(async (req) => {
     let cursor: unknown[] | null = null;
     let pages = 0;
     const buffer: Json[] = [];
-    while (pages < 100) {
+    while (pages < MAX_CONTACT_SEARCH_PAGES) {
       const reqBody: Json = { locationId, pageLimit: 100 };
       if (cursor) reqBody.searchAfter = cursor;
       const j = await ghlFetch("POST", "/contacts/search", token, reqBody);
+      pages++;
       const list = ((j.contacts as Json[]) ?? []);
       if (!list.length) break;
       buffer.push(...list);
@@ -317,13 +329,15 @@ Deno.serve(async (req) => {
       const sa = Array.isArray(last.searchAfter) ? last.searchAfter : null;
       if (!sa || list.length < 100) break;
       cursor = sa;
-      pages++;
     }
+    counts.contact_pages = pages;
+    counts.contact_pagination_capped = buffer.length >= MAX_CONTACT_SEARCH_PAGES * 100;
 
     const rows = buffer.map((c) => {
       const a = c as Json;
       const id = String(a.id);
       const createdAt = (a.dateAdded ?? a.createdAt) as string | null;
+      if (!isWithinWindow(createdAt, dateFrom, dateTo)) return null;
       if (createdAt) contactCreatedAt.set(id, createdAt);
       contactLookup.set(id, { phone: (a.phone as string | null) ?? null, email: (a.email as string | null) ?? null });
       contactIds.push(id);
@@ -340,7 +354,7 @@ Deno.serve(async (req) => {
         ghl_created_at: createdAt,
         raw: c,
       };
-    });
+    }).filter(Boolean) as Json[];
     counts.contacts_total_pulled = buffer.length;
     counts.contacts_synced = await upsertChunked(admin, "ghl_contacts", rows, "property_id,ghl_contact_id");
     samples.contact = buffer[0] ?? null;
@@ -403,7 +417,7 @@ Deno.serve(async (req) => {
     // location has more than the safety-capped pages. Hydrate every in-window
     // contact directly by contactId so old leads with visible GHL activity do
     // not end up with zero local messages.
-    for (const cid of contactIds) {
+    for (const cid of contactIds.slice(0, MAX_TARGETED_CONVERSATION_LOOKUPS)) {
       const alreadyHasConversation = Array.from(convMap.values()).some((conv) => String((conv as Json).contactId ?? "") === cid);
       if (alreadyHasConversation) continue;
       targetedConversationLookups++;
@@ -438,9 +452,13 @@ Deno.serve(async (req) => {
       }
       if (list.length && targetedConversationSamples.length < 10) targetedConversationSamples.push({ contact_id: cid, conversations_found: list.length });
     }
+    counts.targeted_conversation_lookup_cap = MAX_TARGETED_CONVERSATION_LOOKUPS;
 
-    const convs = Array.from(convMap.values());
-    counts.conversations = convs.length;
+    const allConvs = Array.from(convMap.values());
+    const convs = allConvs.slice(0, MAX_CONVERSATIONS_FOR_MESSAGE_SYNC);
+    counts.conversations = allConvs.length;
+    counts.conversations_message_sync_attempted = convs.length;
+    counts.conversation_message_sync_capped = allConvs.length > MAX_CONVERSATIONS_FOR_MESSAGE_SYNC;
     counts.conversation_pages = conversationPages;
     counts.conversation_search_capped = conversationSearchCapped;
     counts.targeted_conversation_lookups = targetedConversationLookups;
@@ -458,6 +476,10 @@ Deno.serve(async (req) => {
     const classCounts: Record<string, number> = { human: 0, automation: 0, ai: 0, system: 0, customer: 0, unknown: 0 };
 
     for (const c of convs) {
+      if (totalMessagePages >= MAX_TOTAL_MESSAGE_PAGES) {
+        messagePaginationCapped = true;
+        break;
+      }
       const cAny = c as Json;
       const conversationId = String(cAny.id ?? "");
       const contactId = String(cAny.contactId ?? "");
@@ -472,7 +494,7 @@ Deno.serve(async (req) => {
       let conversationMessageCount = 0;
       let stoppedByNoMore = false;
 
-      while (messagePages < MAX_MESSAGE_PAGES_PER_CONVERSATION) {
+      while (messagePages < MAX_MESSAGE_PAGES_PER_CONVERSATION && totalMessagePages < MAX_TOTAL_MESSAGE_PAGES) {
         const qs = new URLSearchParams({ limit: "100" });
         if (lastMessageId) qs.set("lastMessageId", lastMessageId);
         const mj = await ghlFetch("GET", `/conversations/${conversationId}/messages?${qs.toString()}`, token);
@@ -515,6 +537,8 @@ Deno.serve(async (req) => {
         }
         if (!lastMessageId) break;
       }
+
+      if (totalMessagePages >= MAX_TOTAL_MESSAGE_PAGES) messagePaginationCapped = true;
 
       if (conversationMessageCount === 100) conversationsExactly100++;
       if (!stoppedByNoMore && messagePages >= MAX_MESSAGE_PAGES_PER_CONVERSATION) {
@@ -720,14 +744,19 @@ Deno.serve(async (req) => {
 
   // ===== Bookkeeping ================================================
   summary.finished_at = new Date().toISOString();
+  const blockingErrors = errs.filter((msg) =>
+    !msg.startsWith("rebuild_lead_facts:") &&
+    !msg.startsWith("sync_verified_sales_daily_metrics:"),
+  );
   await admin
     .from("property_data_sources")
-    .update({ last_synced_at: summary.finished_at, last_error: errs.length ? errs.join(" | ").slice(0, 1000) : null, status: errs.length ? "error" : "connected" })
+    .update({ last_synced_at: summary.finished_at, last_error: blockingErrors.length ? blockingErrors.join(" | ").slice(0, 1000) : null, status: blockingErrors.length ? "error" : "connected" })
     .eq("property_id", property_id).eq("source", "ghl");
   await admin.from("sync_runs").insert({
     property_id, source: "ghl",
-    status: errs.length ? "failure" : "success",
-    error_message: errs.length ? errs.join(" | ").slice(0, 1000) : null,
+    status: blockingErrors.length ? "failure" : "success",
+    error_message: blockingErrors.length ? blockingErrors.join(" | ").slice(0, 1000) : null,
+    stats: { warnings: errs.filter((msg) => !blockingErrors.includes(msg)) } as never,
   });
 
   return new Response(JSON.stringify(summary, null, 2), {
