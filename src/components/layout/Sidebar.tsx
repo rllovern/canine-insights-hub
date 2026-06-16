@@ -65,7 +65,7 @@ export function Sidebar() {
     const Icon = it.icon;
     const active = isActive(it);
     const linkClass = cn(
-      "group/nav relative flex items-center gap-2 px-3 py-1.5 rounded-md text-[14px] font-medium transition-colors",
+      "group/nav relative flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
       opts?.indent && "pl-8",
       active
         ? "bg-white/[0.06] text-white"
@@ -133,7 +133,7 @@ export function Sidebar() {
               type="button"
               onClick={() => setAdminOpen((v) => !v)}
               className={cn(
-                "group/nav relative flex w-full items-center gap-2 px-3 py-1.5 rounded-md text-[14px] font-medium transition-colors",
+                "group/nav relative flex w-full items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
                 "text-white/85 hover:bg-white/[0.04] hover:text-white",
               )}
               aria-expanded={adminOpen}

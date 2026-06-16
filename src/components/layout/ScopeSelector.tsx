@@ -24,7 +24,7 @@ export function ScopeSelector() {
           size="sm"
           role="combobox"
           aria-expanded={open}
-          className="w-full h-auto py-2 px-3 justify-between rounded-md bg-white/[0.05] text-left text-[14px] font-medium text-white/85 hover:bg-white/[0.08] hover:text-white"
+          className="w-full h-auto py-2 px-3 justify-between rounded-md bg-white/[0.05] text-left text-xs font-medium text-white/85 hover:bg-white/[0.08] hover:text-white"
         >
           <span className="flex items-center gap-2 min-w-0">
             {mode === "agency" ? <Globe2 className="size-4 shrink-0 text-white/70" /> : <Building2 className="size-4 shrink-0 text-white/70" />}
