@@ -97,7 +97,7 @@ export function SourceHealthPanel() {
 
   return (
     <div className="space-y-0.5">
-      <div className="px-3 pt-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
+      <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
         Data Sources
       </div>
       {items.map((it) => {
@@ -106,7 +106,7 @@ export function SourceHealthPanel() {
           <div
             key={it.label}
             title={it.title}
-            className="flex items-center gap-2 px-3 py-1.5 text-[13px]"
+            className="flex items-center gap-2 px-3 py-1 text-[13px]"
           >
             <span className={cn("h-2 w-2 shrink-0 rounded-full", s.dot)} />
             <span className="truncate flex-1 text-white/80">{it.label}</span>
