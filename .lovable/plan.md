@@ -1,56 +1,60 @@
-## Scope
+## CR responses (pre-build checks)
 
-Restyle the left navigation only — sidebar background, group labels, item rows, active state, account card, and the Data Sources panel — to match the reference screenshot. No structural changes to the nav hierarchy you previously approved (Command, Monitor group, Deliver group, Jarvis, Admin collapse) and no changes to any other page yet.
+**CR-1 (dark-mode tokens) — confirmed: must update both modes.**
+Current `src/index.css` `.dark` block has `--sidebar-background: 222 55% 10%` (navy) and accent `222 45% 18%` — that's the old palette, not the true-dark target. Both `:root` and `.dark` sidebar token blocks will be repointed to the same values so the sidebar renders identically in either theme.
 
-## Visual target (from reference)
+**CR-3 (GHL pipe) — indicator is telling the truth.**
+`sync_runs` for `source='ghl'` shows the scheduled job has failed on every run for the last 72+ hours, every 6 hours, with `error_message: "Edge Function returned a non-2xx status code"`. `is_connected` is still true (token present) but the cron sync is broken. So:
+- The Data Sources rail showing GHL = BLOCKED is correct.
+- Lead Performance numbers you validated are reading data already in the DB; nothing new has landed for 3 days.
+- This is a real outage in the `sync-ghl` edge function, separate from the styling task. **Recommend a follow-up turn to inspect edge-function logs and fix the 5xx.** Styling pass does not touch this.
 
-- Surface: near-white sidebar (`#FAFAFA`-ish) with a hairline right border, no dark navy.
-- Brand block: blue rounded-square "R" mark + "Ridgeside K9" in bold, "Acquisition Intelligence" as a smaller muted subtitle. Thin divider below.
-- Group labels: small uppercase, letter-spaced, light gray (e.g. "REPORTING", "DATA SOURCES"). Same treatment for existing "Monitor" / "Deliver".
-- Nav rows: 14px, medium weight, dark slate text, subtle icon. Inactive = no background. Hover = very light gray. Active = bold text + a 2px black left bar + slightly darker text (no filled pill, no gold accent on the light theme).
-- Badges on rows: red circular count badge (e.g. Command "2"), neutral gray "SOON" pill — render only when data calls for them (kept generic, no hardcoded counts).
-- Data Sources panel: same row rhythm, colored dot on the left, label in dark slate, status text right-aligned in green ("Live") or red ("Blocked") — uppercase, small, medium weight.
-- Account card at the bottom: white card, hairline border, slightly smaller; initials chip uses the brand blue.
+**CR-4 (typeface) — confirmed Inter.**
+`src/index.css` body rule: `font-family: "Inter", ui-sans-serif, system-ui, …`. The reference's letterforms match Inter (single-story `a`, rounded `g`, geometric digits). No family swap needed — the visible difference is weight, opacity, and row spacing, which this plan fixes.
 
-## Token + typography changes (`src/index.css`)
+## Build plan (unchanged from approval, with CR-1 + CR-2 folded in)
 
-Light-mode sidebar tokens repointed to the reference palette; dark mode left untouched for now:
+### Token changes — `src/index.css`
+
+Repoint sidebar tokens in **both** `:root` and `.dark` to the same true-dark palette:
 
 ```
---sidebar-background: 0 0% 99%;
---sidebar-foreground: 222 25% 18%;
---sidebar-primary:    222 75% 52%;   /* brand blue used by R mark + active accents that need color */
+--sidebar-background: 220 14% 8%;
+--sidebar-foreground: 0 0% 100%;
+--sidebar-primary:    222 75% 60%;
 --sidebar-primary-foreground: 0 0% 100%;
---sidebar-accent:     222 15% 95%;   /* hover bg */
---sidebar-accent-foreground: 222 30% 12%;
---sidebar-border:     220 14% 90%;
---sidebar-ring:       222 75% 52%;
+--sidebar-accent:     0 0% 100%;     /* used with opacity utilities */
+--sidebar-accent-foreground: 0 0% 100%;
+--sidebar-border:     220 10% 16%;
+--sidebar-ring:       222 75% 60%;
 ```
 
-Body font stays Inter (already set). No new font import required for parity with the reference.
+### `src/components/layout/Sidebar.tsx`
 
-## Component changes
+- Brand block: revert to `<BrandMark variant="onDark" />`; remove blue "R" tile and "Acquisition Intelligence" subtitle row added last turn. Keep `border-b border-sidebar-border` divider.
+- Rows: `py-2 px-3 gap-2.5 text-[14px] font-medium text-white/75`. Hover `bg-white/[0.04] text-white`. **Active = `bg-white/[0.07] text-white` only — no `font-semibold`, no left bar, no colored stripe** (CR-2).
+- Icons: 16px, `text-white/55`; on hover/active `text-white`.
+- Group labels: `text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45`, `px-3 pt-4 pb-1.5`.
+- Jarvis row: identical row style to other items (no gold tint, no filled pill).
+- Admin button: same row style; chevron `text-white/45`.
+- Account card: `bg-white/[0.04] border border-white/10`, initials chip `bg-white/10 text-white`, email `text-white text-xs font-medium`, role `text-white/50 text-[10px] uppercase tracking-wider`, sign-out `text-white/55 hover:text-white hover:bg-white/[0.06]`.
 
-`src/components/layout/Sidebar.tsx`
-- Replace gold/navy active treatment with: active row = `text-sidebar-accent-foreground font-semibold` + 2px black left bar (`before:bg-foreground`). Inactive = `text-sidebar-foreground/75`, hover = `bg-sidebar-accent`.
-- Drop the gold-tinted Jarvis accent variant in favor of the same row style with a subtle brand-blue icon, to fit the light theme. (Still a single distinct row, just not gold.)
-- Group label component restyled: `text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70`.
-- Brand block: replace the gold underline bar with the reference layout — small rounded-square brand-blue tile with "R", title "Ridgeside K9" in `font-semibold text-foreground`, "Acquisition Intelligence" subtitle in `text-xs text-muted-foreground`.
-- Account card: lighter border, white background, brand-blue initials chip, smaller secondary text.
+### `src/components/layout/SourceHealthPanel.tsx`
 
-`src/components/layout/SourceHealthPanel.tsx`
-- Section label restyled to match new GroupLabel.
-- Row: dot (existing colors), label `text-sidebar-foreground/85`, status text right-aligned in `text-success` / `text-destructive` / `text-muted-foreground`, uppercase 10px, medium weight. Keep existing status logic untouched.
+- Section label uses the new group-label style.
+- Row: keep dot, label `text-white/80 text-[13px]`, status text right-aligned `text-[10px] font-semibold uppercase tracking-[0.14em]` in `text-success` / `text-destructive` / `text-white/40`.
+- No logic changes.
 
-## Out of scope
+## Out of scope (unchanged)
 
-- Nav structure / grouping (kept exactly as approved).
-- Top bar, page content, charts, KPI cards, and any other surface — addressed in follow-up turns.
-- Dark-mode sidebar tokens — unchanged this turn.
-- Data Sources logic (`rowStatus`, `aggregate`, RPC) — unchanged.
+- Logo image / `BrandMark` component internals.
+- Nav hierarchy, labels, order, routes.
+- Any non-sidebar surface.
+- GHL sync outage — flagged for a separate turn.
+- Data Sources data/RPC logic.
 
 ## Files touched
 
-- `src/index.css` — sidebar tokens.
-- `src/components/layout/Sidebar.tsx` — styling only.
-- `src/components/layout/SourceHealthPanel.tsx` — styling only.
+- `src/index.css` — `:root` and `.dark` sidebar token blocks.
+- `src/components/layout/Sidebar.tsx`
+- `src/components/layout/SourceHealthPanel.tsx`

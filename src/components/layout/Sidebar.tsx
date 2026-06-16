@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/brand/BrandMark";
 import { ScopeSelector } from "./ScopeSelector";
 import { SourceHealthPanel } from "./SourceHealthPanel";
 
@@ -64,15 +65,15 @@ export function Sidebar() {
     const Icon = it.icon;
     const active = isActive(it);
     const linkClass = cn(
-      "group/nav relative flex items-center gap-2.5 pl-3 pr-3 py-1.5 rounded-md text-[13px] transition-colors",
+      "group/nav relative flex items-center gap-2.5 px-3 py-2 rounded-md text-[14px] font-medium transition-colors",
       opts?.indent && "pl-8",
       active
-        ? "text-sidebar-accent-foreground font-semibold before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-r-full before:bg-foreground"
-        : "font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        ? "bg-white/[0.07] text-white"
+        : "text-white/75 hover:bg-white/[0.04] hover:text-white",
     );
     const inner = (
       <>
-        <Icon className={cn("size-4 shrink-0", opts?.accent ? "text-sidebar-primary" : active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/60")} />
+        <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-white/55 group-hover/nav:text-white")} />
         <span className="truncate">{it.label}</span>
       </>
     );
@@ -91,21 +92,15 @@ export function Sidebar() {
   };
 
   const GroupLabel = ({ children }: { children: React.ReactNode }) => (
-    <div className="px-3 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/45">
+    <div className="px-3 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
       {children}
     </div>
   );
 
   return (
     <aside className="hidden md:flex flex-col w-60 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-      <div className="px-4 py-4 flex items-center gap-2.5">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground text-sm font-bold">
-          R
-        </div>
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-sidebar-accent-foreground truncate leading-tight">Ridgeside K9</div>
-          <div className="text-[11px] text-sidebar-foreground/55 truncate leading-tight">Acquisition Intelligence</div>
-        </div>
+      <div className="px-4 py-4 border-b border-sidebar-border">
+        <BrandMark variant="onDark" />
       </div>
       <div className="px-3 pt-3">
         <ScopeSelector />
@@ -138,14 +133,14 @@ export function Sidebar() {
               type="button"
               onClick={() => setAdminOpen((v) => !v)}
               className={cn(
-                "group/nav relative flex w-full items-center gap-2.5 pl-3 pr-3 py-1.5 rounded-md text-[13px] font-medium transition-colors",
-                "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                "group/nav relative flex w-full items-center gap-2.5 px-3 py-2 rounded-md text-[14px] font-medium transition-colors",
+                "text-white/75 hover:bg-white/[0.04] hover:text-white",
               )}
               aria-expanded={adminOpen}
             >
-              <Settings className="size-4 text-sidebar-foreground/60" />
+              <Settings className="size-4 text-white/55 group-hover/nav:text-white" />
               <span className="truncate flex-1 text-left">Admin</span>
-              <ChevronDown className={cn("size-3.5 transition-transform", adminOpen && "rotate-180")} />
+              <ChevronDown className={cn("size-3.5 text-white/45 transition-transform", adminOpen && "rotate-180")} />
             </button>
             {adminOpen && (
               <div className="mt-0.5 space-y-0.5">
@@ -159,20 +154,20 @@ export function Sidebar() {
         <div className="border-t border-sidebar-border pt-3">
           <SourceHealthPanel />
         </div>
-        <div className="mx-1 flex items-center gap-2 rounded-lg border border-sidebar-border bg-background px-2.5 py-2">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sidebar-primary text-[11px] font-semibold text-sidebar-primary-foreground">
+        <div className="mx-1 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-semibold text-white">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium truncate text-sidebar-accent-foreground">{user?.email ?? "Account"}</div>
-            <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/55">
+            <div className="text-xs font-medium truncate text-white">{user?.email ?? "Account"}</div>
+            <div className="text-[10px] uppercase tracking-wider text-white/50">
               {effectiveRole === "internal" ? "Administrator" : "Viewer"}
             </div>
           </div>
           <button
             onClick={async () => { await signOut(); nav("/login"); }}
             title="Sign out"
-            className="grid h-7 w-7 place-items-center rounded-md text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent transition-colors"
+            className="grid h-7 w-7 place-items-center rounded-md text-white/55 hover:text-white hover:bg-white/[0.06] transition-colors"
           >
             <LogOut className="size-3.5" />
           </button>

@@ -66,15 +66,15 @@ All colors MUST be HSL.
     --radius: 0.625rem;
 
     /* Dark navy sidebar with cream text + gold active accent */
-    /* Light, minimal sidebar — white surface, dark text, brand-blue accents */
-    --sidebar-background: 0 0% 99%;
-    --sidebar-foreground: 222 25% 18%;
-    --sidebar-primary: 222 75% 52%;
+    /* Sidebar — true dark, identical in light + dark themes */
+    --sidebar-background: 220 14% 8%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 222 75% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 15% 95%;
-    --sidebar-accent-foreground: 222 30% 12%;
-    --sidebar-border: 220 14% 90%;
-    --sidebar-ring: 222 75% 52%;
+    --sidebar-accent: 0 0% 100%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 10% 16%;
+    --sidebar-ring: 222 75% 60%;
 
     /* Section divider — warm cream */
     --section: 36 30% 94%;
@@ -123,14 +123,14 @@ All colors MUST be HSL.
     --chart-6: 195 75% 60%;
     --chart-7: 340 70% 65%;
     --chart-8: 220 10% 65%;
-    --sidebar-background: 222 55% 10%;
-    --sidebar-foreground: 40 25% 90%;
-    --sidebar-primary: 42 75% 55%;
-    --sidebar-primary-foreground: 222 55% 13%;
-    --sidebar-accent: 222 45% 18%;
-    --sidebar-accent-foreground: 40 30% 96%;
-    --sidebar-border: 222 40% 20%;
-    --sidebar-ring: 42 75% 55%;
+    --sidebar-background: 220 14% 8%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 222 75% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 100%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 10% 16%;
+    --sidebar-ring: 222 75% 60%;
     --gold: 42 75% 60%;
     --gold-foreground: 222 55% 12%;
   }
