@@ -106,11 +106,11 @@ export function SourceHealthPanel() {
           <div
             key={it.label}
             title={it.title}
-            className="flex items-center gap-2 px-3 py-1.5 text-[9px]"
+            className="flex items-center gap-2 px-3 py-1.5 text-[11px]"
           >
             <span className={cn("h-2 w-2 shrink-0 rounded-full", s.dot)} />
             <span className="truncate flex-1 text-white/80">{it.label}</span>
-            <span className={cn("text-[10px] font-semibold uppercase tracking-[0.14em]", s.text)}>
+            <span className={cn("text-[11px] font-semibold uppercase tracking-[0.14em]", s.text)}>
               {s.label}
             </span>
           </div>
