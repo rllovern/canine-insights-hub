@@ -123,12 +123,10 @@ export function Sidebar() {
           </>
         )}
 
-        <div className="pt-1">
-          {renderItem(JARVIS_ITEM, { accent: true })}
-        </div>
+        {renderItem(JARVIS_ITEM, { accent: true })}
 
         {adminItems.length > 0 && (
-          <div className="pt-1">
+          <>
             <button
               type="button"
               onClick={() => setAdminOpen((v) => !v)}
@@ -143,11 +141,11 @@ export function Sidebar() {
               <ChevronDown className={cn("size-4 text-white/45 transition-transform", adminOpen && "rotate-180")} />
             </button>
             {adminOpen && (
-              <div className="mt-0.5 space-y-0.5">
+              <div className="space-y-0.5">
                 {adminItems.map((it) => renderItem(it, { indent: true }))}
               </div>
             )}
-          </div>
+          </>
         )}
       </nav>
       <div className="px-2 pb-2 space-y-2">

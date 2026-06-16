@@ -110,7 +110,7 @@ export function SourceHealthPanel() {
           >
             <span className={cn("h-2 w-2 shrink-0 rounded-full", s.dot)} />
             <span className="truncate flex-1 text-white/80">{it.label}</span>
-            <span className={cn("text-[11px] font-semibold uppercase tracking-[0.14em]", s.text)}>
+            <span className={cn("text-[11px] font-semibold tracking-[0.14em]", s.text)}>
               {s.label}
             </span>
           </div>
