@@ -67,13 +67,13 @@ All colors MUST be HSL.
 
     /* Dark navy sidebar with cream text + gold active accent */
     /* Sidebar — true dark, identical in light + dark themes */
-    --sidebar-background: 220 14% 8%;
+    --sidebar-background: 220 24% 9%;
     --sidebar-foreground: 0 0% 100%;
     --sidebar-primary: 222 75% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 0 0% 100%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 220 10% 16%;
+    --sidebar-border: 220 18% 16%;
     --sidebar-ring: 222 75% 60%;
 
     /* Section divider — warm cream */
@@ -123,13 +123,13 @@ All colors MUST be HSL.
     --chart-6: 195 75% 60%;
     --chart-7: 340 70% 65%;
     --chart-8: 220 10% 65%;
-    --sidebar-background: 220 14% 8%;
+    --sidebar-background: 220 24% 9%;
     --sidebar-foreground: 0 0% 100%;
     --sidebar-primary: 222 75% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 0 0% 100%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 220 10% 16%;
+    --sidebar-border: 220 18% 16%;
     --sidebar-ring: 222 75% 60%;
     --gold: 42 75% 60%;
     --gold-foreground: 222 55% 12%;
