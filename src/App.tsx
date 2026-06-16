@@ -21,6 +21,7 @@ import AdminSettings from "./pages/admin/AdminSettings";
 import AdminClientReports from "./pages/admin/AdminClientReports";
 import AdminPipelineMapping from "./pages/admin/AdminPipelineMapping";
 import AdminSlaSettings from "./pages/admin/AdminSlaSettings";
+import AdminDataSources from "./pages/admin/AdminDataSources";
 import LeadPerformance from "./pages/LeadPerformance";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PreviewModeProvider } from "./contexts/PreviewModeContext";
@@ -77,6 +78,10 @@ const App = () => (
                     <Route
                       path="/admin/sla-settings"
                       element={<RequireAuth requireRealRole="internal"><AdminSlaSettings /></RequireAuth>}
+                    />
+                    <Route
+                      path="/admin/data-sources"
+                      element={<RequireAuth requireRealRole="internal"><AdminDataSources /></RequireAuth>}
                     />
                     <Route
                       path="/admin/users"
