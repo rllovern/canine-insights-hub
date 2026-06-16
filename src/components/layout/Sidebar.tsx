@@ -65,15 +65,15 @@ export function Sidebar() {
     const Icon = it.icon;
     const active = isActive(it);
     const linkClass = cn(
-      "group/nav relative flex items-center gap-2.5 px-3 py-2 rounded-md text-[14px] font-medium transition-colors",
+      "group/nav relative flex items-center gap-2 px-3 py-1.5 rounded-md text-[14px] font-medium transition-colors",
       opts?.indent && "pl-8",
       active
         ? "bg-white/[0.07] text-white"
-        : "text-white/75 hover:bg-white/[0.04] hover:text-white",
+        : "text-white/85 hover:bg-white/[0.04] hover:text-white",
     );
     const inner = (
       <>
-        <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-white/55 group-hover/nav:text-white")} />
+        <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-white/65 group-hover/nav:text-white")} />
         <span className="truncate">{it.label}</span>
       </>
     );
@@ -92,20 +92,20 @@ export function Sidebar() {
   };
 
   const GroupLabel = ({ children }: { children: React.ReactNode }) => (
-    <div className="px-3 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
+    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
       {children}
     </div>
   );
 
   return (
-    <aside className="hidden md:flex flex-col w-60 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-      <div className="px-4 py-4 border-b border-sidebar-border">
+    <aside className="hidden md:flex flex-col w-56 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+      <div className="px-4 py-3 border-b border-sidebar-border">
         <BrandMark variant="onDark" />
       </div>
-      <div className="px-3 pt-3">
+      <div className="px-3 pt-2">
         <ScopeSelector />
       </div>
-      <nav className="flex-1 px-2 py-3 space-y-px overflow-y-auto">
+      <nav className="flex-1 px-2 py-2 space-y-px overflow-y-auto">
         <GroupLabel>Reporting</GroupLabel>
         {renderItem(COMMAND_ITEM)}
 
@@ -123,22 +123,22 @@ export function Sidebar() {
           </>
         )}
 
-        <div className="pt-3">
+        <div className="pt-2">
           {renderItem(JARVIS_ITEM, { accent: true })}
         </div>
 
         {adminItems.length > 0 && (
-          <div className="pt-3">
+          <div className="pt-2">
             <button
               type="button"
               onClick={() => setAdminOpen((v) => !v)}
               className={cn(
-                "group/nav relative flex w-full items-center gap-2.5 px-3 py-2 rounded-md text-[14px] font-medium transition-colors",
-                "text-white/75 hover:bg-white/[0.04] hover:text-white",
+                "group/nav relative flex w-full items-center gap-2 px-3 py-1.5 rounded-md text-[14px] font-medium transition-colors",
+                "text-white/85 hover:bg-white/[0.04] hover:text-white",
               )}
               aria-expanded={adminOpen}
             >
-              <Settings className="size-4 text-white/55 group-hover/nav:text-white" />
+              <Settings className="size-4 text-white/65 group-hover/nav:text-white" />
               <span className="truncate flex-1 text-left">Admin</span>
               <ChevronDown className={cn("size-3.5 text-white/45 transition-transform", adminOpen && "rotate-180")} />
             </button>
@@ -150,11 +150,11 @@ export function Sidebar() {
           </div>
         )}
       </nav>
-      <div className="px-2 pb-3 space-y-3">
-        <div className="border-t border-sidebar-border pt-3">
+      <div className="px-2 pb-2 space-y-2">
+        <div className="border-t border-sidebar-border pt-2">
           <SourceHealthPanel />
         </div>
-        <div className="mx-1 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2">
+        <div className="mx-1 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5">
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-semibold text-white">
             {initials}
           </div>
