@@ -27,7 +27,7 @@ const MONITOR_ITEMS: NavItem[] = [
 ];
 
 const DELIVER_ITEMS: NavItem[] = [
-  { key: "client-reports", to: "/admin/client-reports", label: "Client Reports", icon: FileSearch, internalOnly: true, external: true },
+  { key: "client-reports", to: "/admin/client-reports", label: "Performance Reports", icon: FileSearch, internalOnly: true, external: true },
   { key: "reports", to: "/reports", label: "Reports", icon: FileText },
 ];
 
@@ -106,7 +106,7 @@ export function Sidebar() {
         <ScopeSelector />
       </div>
       <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
-        <GroupLabel>Reporting</GroupLabel>
+        <GroupLabel>EXECUTIVE VIEW</GroupLabel>
         {renderItem(COMMAND_ITEM)}
 
         {monitorItems.length > 0 && (
