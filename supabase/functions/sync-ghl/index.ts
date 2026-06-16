@@ -417,7 +417,7 @@ Deno.serve(async (req) => {
     // location has more than the safety-capped pages. Hydrate every in-window
     // contact directly by contactId so old leads with visible GHL activity do
     // not end up with zero local messages.
-    for (const cid of contactIds) {
+    for (const cid of contactIds.slice(0, MAX_TARGETED_CONVERSATION_LOOKUPS)) {
       const alreadyHasConversation = Array.from(convMap.values()).some((conv) => String((conv as Json).contactId ?? "") === cid);
       if (alreadyHasConversation) continue;
       targetedConversationLookups++;
@@ -452,9 +452,13 @@ Deno.serve(async (req) => {
       }
       if (list.length && targetedConversationSamples.length < 10) targetedConversationSamples.push({ contact_id: cid, conversations_found: list.length });
     }
+    counts.targeted_conversation_lookup_cap = MAX_TARGETED_CONVERSATION_LOOKUPS;
 
-    const convs = Array.from(convMap.values());
-    counts.conversations = convs.length;
+    const allConvs = Array.from(convMap.values());
+    const convs = allConvs.slice(0, MAX_CONVERSATIONS_FOR_MESSAGE_SYNC);
+    counts.conversations = allConvs.length;
+    counts.conversations_message_sync_attempted = convs.length;
+    counts.conversation_message_sync_capped = allConvs.length > MAX_CONVERSATIONS_FOR_MESSAGE_SYNC;
     counts.conversation_pages = conversationPages;
     counts.conversation_search_capped = conversationSearchCapped;
     counts.targeted_conversation_lookups = targetedConversationLookups;
@@ -472,6 +476,10 @@ Deno.serve(async (req) => {
     const classCounts: Record<string, number> = { human: 0, automation: 0, ai: 0, system: 0, customer: 0, unknown: 0 };
 
     for (const c of convs) {
+      if (totalMessagePages >= MAX_TOTAL_MESSAGE_PAGES) {
+        messagePaginationCapped = true;
+        break;
+      }
       const cAny = c as Json;
       const conversationId = String(cAny.id ?? "");
       const contactId = String(cAny.contactId ?? "");
@@ -486,7 +494,7 @@ Deno.serve(async (req) => {
       let conversationMessageCount = 0;
       let stoppedByNoMore = false;
 
-      while (messagePages < MAX_MESSAGE_PAGES_PER_CONVERSATION) {
+      while (messagePages < MAX_MESSAGE_PAGES_PER_CONVERSATION && totalMessagePages < MAX_TOTAL_MESSAGE_PAGES) {
         const qs = new URLSearchParams({ limit: "100" });
         if (lastMessageId) qs.set("lastMessageId", lastMessageId);
         const mj = await ghlFetch("GET", `/conversations/${conversationId}/messages?${qs.toString()}`, token);
@@ -529,6 +537,8 @@ Deno.serve(async (req) => {
         }
         if (!lastMessageId) break;
       }
+
+      if (totalMessagePages >= MAX_TOTAL_MESSAGE_PAGES) messagePaginationCapped = true;
 
       if (conversationMessageCount === 100) conversationsExactly100++;
       if (!stoppedByNoMore && messagePages >= MAX_MESSAGE_PAGES_PER_CONVERSATION) {
