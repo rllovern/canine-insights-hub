@@ -1,0 +1,1 @@
+ALTER FUNCTION public.rebuild_lead_facts(uuid) SET statement_timeout TO '180s';
