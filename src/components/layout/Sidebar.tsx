@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown, GripVertical } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
@@ -77,6 +77,11 @@ export function Sidebar() {
     groupKey: string;
     items: NavItem[];
     setItems: (v: NavItem[]) => void;
+    startX: number;
+    startY: number;
+    started: boolean;
+    itemKey: string;
+    suppressClick: boolean;
   } | null>(null);
 
   const findKeyAtPoint = (x: number, y: number, groupKey: string): string | null => {
@@ -125,87 +130,114 @@ export function Sidebar() {
     const draggable = !!opts?.groupKey;
     const isOver = draggable && overKey === it.key && dragKey && dragKey !== it.key;
     const linkClass = cn(
-      "group/nav relative flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors flex-1 min-w-0",
-      opts?.indent && "pl-7",
+      "group/nav relative flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+      opts?.indent && "pl-8",
       active
         ? "bg-white/[0.06] text-white"
         : "text-white/85 hover:bg-white/[0.04] hover:text-white",
+      draggable && "touch-none select-none",
+      isOver && "ring-1 ring-white/40",
+      dragKey === it.key && "opacity-40",
     );
+
+    const dragHandlers = draggable
+      ? {
+          onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+            if (e.button !== 0) return;
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            dragCtxRef.current = {
+              groupKey: opts!.groupKey!,
+              items: opts!.items!,
+              setItems: opts!.setItems!,
+              startX: e.clientX,
+              startY: e.clientY,
+              started: false,
+              itemKey: it.key,
+              suppressClick: false,
+            };
+          },
+          onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+            const ctx = dragCtxRef.current;
+            if (!ctx || ctx.itemKey !== it.key) return;
+            if (!ctx.started) {
+              const dx = e.clientX - ctx.startX;
+              const dy = e.clientY - ctx.startY;
+              if (dx * dx + dy * dy < 25) return; // 5px threshold
+              ctx.started = true;
+              ctx.suppressClick = true;
+              setDragKey(it.key);
+              setOverKey(it.key);
+            }
+            const k = findKeyAtPoint(e.clientX, e.clientY, ctx.groupKey);
+            if (k && k !== overKey) setOverKey(k);
+          },
+          onPointerUp: (e: React.PointerEvent<HTMLElement>) => {
+            const ctx = dragCtxRef.current;
+            if (ctx && ctx.started) {
+              const targetKey = findKeyAtPoint(e.clientX, e.clientY, ctx.groupKey) || overKey;
+              if (targetKey && targetKey !== ctx.itemKey) {
+                reorder(ctx.groupKey, ctx.items, ctx.setItems, ctx.itemKey, targetKey);
+              }
+            }
+            setDragKey(null);
+            setOverKey(null);
+            // Keep ctx briefly so click handler can read suppressClick
+            const wasStarted = !!ctx?.started;
+            dragCtxRef.current = wasStarted ? { ...ctx!, started: false } : null;
+          },
+          onPointerCancel: () => {
+            dragCtxRef.current = null;
+            setDragKey(null);
+            setOverKey(null);
+          },
+          onClick: (e: React.MouseEvent) => {
+            const ctx = dragCtxRef.current;
+            if (ctx?.suppressClick) {
+              e.preventDefault();
+              e.stopPropagation();
+              dragCtxRef.current = null;
+            }
+          },
+        }
+      : {};
+
+    const dragAttrs = draggable
+      ? { "data-drag-group": opts!.groupKey, "data-drag-key": it.key }
+      : {};
+
     const inner = (
       <>
         <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-white/70 group-hover/nav:text-white")} />
         <span className="truncate">{it.label}</span>
       </>
     );
-    const link = it.external ? (
-      <a href={it.to} target="_blank" rel="noopener" className={linkClass} draggable={false}>
-        {inner}
-      </a>
-    ) : (
-      <NavLink to={it.to} className={linkClass} draggable={false}>
+    if (it.external) {
+      return (
+        <a
+          key={it.key}
+          href={it.to}
+          target="_blank"
+          rel="noopener"
+          className={linkClass}
+          draggable={false}
+          {...dragAttrs}
+          {...dragHandlers}
+        >
+          {inner}
+        </a>
+      );
+    }
+    return (
+      <NavLink
+        key={it.key}
+        to={it.to}
+        className={linkClass}
+        draggable={false}
+        {...dragAttrs}
+        {...dragHandlers}
+      >
         {inner}
       </NavLink>
-    );
-
-    if (!draggable) {
-      return <div key={it.key}>{link}</div>;
-    }
-
-    return (
-      <div
-        key={it.key}
-        data-drag-group={opts!.groupKey}
-        data-drag-key={it.key}
-        className={cn(
-          "group/row relative flex items-center rounded-md",
-          isOver && "ring-1 ring-white/50 bg-white/[0.03]",
-          dragKey === it.key && "opacity-40",
-        )}
-      >
-        <button
-          type="button"
-          aria-label="Drag to reorder"
-          onPointerDown={(e) => {
-            if (e.button !== 0) return;
-            e.preventDefault();
-            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-            dragCtxRef.current = {
-              groupKey: opts!.groupKey!,
-              items: opts!.items!,
-              setItems: opts!.setItems!,
-            };
-            setDragKey(it.key);
-            setOverKey(it.key);
-          }}
-          onPointerMove={(e) => {
-            if (!dragCtxRef.current) return;
-            const k = findKeyAtPoint(e.clientX, e.clientY, dragCtxRef.current.groupKey);
-            if (k && k !== overKey) setOverKey(k);
-          }}
-          onPointerUp={(e) => {
-            const ctx = dragCtxRef.current;
-            if (ctx && dragKey) {
-              const targetKey = findKeyAtPoint(e.clientX, e.clientY, ctx.groupKey) || overKey;
-              if (targetKey && targetKey !== dragKey) {
-                reorder(ctx.groupKey, ctx.items, ctx.setItems, dragKey, targetKey);
-              }
-            }
-            dragCtxRef.current = null;
-            setDragKey(null);
-            setOverKey(null);
-          }}
-          onPointerCancel={() => {
-            dragCtxRef.current = null;
-            setDragKey(null);
-            setOverKey(null);
-          }}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center text-white/40 transition-colors hover:text-white active:cursor-grabbing touch-none select-none"
-        >
-          <GripVertical className="size-3" />
-        </button>
-        {link}
-      </div>
     );
   };
 
