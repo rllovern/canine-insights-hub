@@ -6,6 +6,7 @@ import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { cn } from "@/lib/utils";
 import { ScopeSelector } from "./ScopeSelector";
+import { SourceHealthPanel } from "./SourceHealthPanel";
 
 type NavItem = {
   key: string;
@@ -154,6 +155,9 @@ export function Sidebar() {
         )}
       </nav>
       <div className="px-3 pb-3 space-y-3">
+        <div className="border-t border-sidebar-border/60 pt-3">
+          <SourceHealthPanel />
+        </div>
         <div className="flex items-center gap-2 rounded-lg border border-sidebar-border/60 px-2.5 py-2">
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sidebar-accent text-[11px] font-semibold text-sidebar-primary">
             {initials}
