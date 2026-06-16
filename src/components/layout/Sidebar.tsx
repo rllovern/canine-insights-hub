@@ -68,12 +68,12 @@ export function Sidebar() {
       "group/nav relative flex items-center gap-2 px-3 py-1.5 rounded-md text-[14px] font-medium transition-colors",
       opts?.indent && "pl-8",
       active
-        ? "bg-white/[0.07] text-white"
+        ? "bg-white/[0.06] text-white"
         : "text-white/85 hover:bg-white/[0.04] hover:text-white",
     );
     const inner = (
       <>
-        <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-white/65 group-hover/nav:text-white")} />
+        <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-white/70 group-hover/nav:text-white")} />
         <span className="truncate">{it.label}</span>
       </>
     );
@@ -92,20 +92,20 @@ export function Sidebar() {
   };
 
   const GroupLabel = ({ children }: { children: React.ReactNode }) => (
-    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
+    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
       {children}
     </div>
   );
 
   return (
-    <aside className="hidden md:flex flex-col w-56 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+    <aside className="hidden md:flex flex-col w-52 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
       <div className="px-4 py-3 border-b border-sidebar-border">
         <BrandMark variant="onDark" />
       </div>
       <div className="px-3 pt-2">
         <ScopeSelector />
       </div>
-      <nav className="flex-1 px-2 py-2 space-y-px overflow-y-auto">
+      <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
         <GroupLabel>Reporting</GroupLabel>
         {renderItem(COMMAND_ITEM)}
 
@@ -123,12 +123,12 @@ export function Sidebar() {
           </>
         )}
 
-        <div className="pt-2">
+        <div className="pt-1">
           {renderItem(JARVIS_ITEM, { accent: true })}
         </div>
 
         {adminItems.length > 0 && (
-          <div className="pt-2">
+          <div className="pt-1">
             <button
               type="button"
               onClick={() => setAdminOpen((v) => !v)}
@@ -138,9 +138,9 @@ export function Sidebar() {
               )}
               aria-expanded={adminOpen}
             >
-              <Settings className="size-4 text-white/65 group-hover/nav:text-white" />
+              <Settings className="size-4 text-white/70 group-hover/nav:text-white" />
               <span className="truncate flex-1 text-left">Admin</span>
-              <ChevronDown className={cn("size-3.5 text-white/45 transition-transform", adminOpen && "rotate-180")} />
+              <ChevronDown className={cn("size-4 text-white/45 transition-transform", adminOpen && "rotate-180")} />
             </button>
             {adminOpen && (
               <div className="mt-0.5 space-y-0.5">
@@ -154,8 +154,8 @@ export function Sidebar() {
         <div className="border-t border-sidebar-border pt-2">
           <SourceHealthPanel />
         </div>
-        <div className="mx-1 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-semibold text-white">
+        <div className="mx-1 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-2.5">
+          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-semibold text-white">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
@@ -169,7 +169,7 @@ export function Sidebar() {
             title="Sign out"
             className="grid h-7 w-7 place-items-center rounded-md text-white/55 hover:text-white hover:bg-white/[0.06] transition-colors"
           >
-            <LogOut className="size-3.5" />
+            <LogOut className="size-4" />
           </button>
         </div>
       </div>
