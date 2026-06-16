@@ -179,7 +179,7 @@ export function Sidebar() {
           }}
           onDragEnd={() => { setDragKey(null); setOverKey(null); }}
           onClick={(e) => e.preventDefault()}
-          className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center text-white/30 opacity-0 transition-opacity hover:text-white/70 group-hover/row:opacity-100 active:cursor-grabbing"
+          className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center text-white/40 transition-colors hover:text-white active:cursor-grabbing"
         >
           <GripVertical className="size-3" />
         </button>
