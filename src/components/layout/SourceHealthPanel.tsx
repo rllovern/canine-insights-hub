@@ -96,8 +96,8 @@ export function SourceHealthPanel() {
   ];
 
   return (
-    <div className="space-y-1">
-      <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/45">
+    <div className="space-y-0.5">
+      <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/45">
         Data Sources
       </div>
       {items.map((it) => {
@@ -106,11 +106,11 @@ export function SourceHealthPanel() {
           <div
             key={it.label}
             title={it.title}
-            className="flex items-center gap-2 px-2 py-0.5 text-xs"
+            className="flex items-center gap-2 px-3 py-1 text-[13px]"
           >
-            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", s.dot)} />
-            <span className="truncate flex-1 text-sidebar-foreground/85">{it.label}</span>
-            <span className={cn("text-[10px] font-medium uppercase tracking-wide", s.text)}>
+            <span className={cn("h-2 w-2 shrink-0 rounded-full", s.dot)} />
+            <span className="truncate flex-1 text-sidebar-foreground/80">{it.label}</span>
+            <span className={cn("text-[10px] font-semibold uppercase tracking-wider", s.text)}>
               {s.label}
             </span>
           </div>
