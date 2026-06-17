@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { safeDelta } from "@/lib/metrics";
 import { format as fmtDate, parseISO } from "date-fns";
 import { CARD_CHROME } from "./cardChrome";
-import { cn } from "@/lib/utils";
 
 export function KpiSparkCard({
   label,
