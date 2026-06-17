@@ -9,7 +9,7 @@ import { useCommandData } from "@/components/command/useCommandData";
 import { KpiSparkCard } from "@/components/command/KpiSparkCard";
 import { TIPS } from "@/components/command/tooltips";
 import { JourneyFunnel } from "@/components/command/JourneyFunnel";
-import { RevenueCaptureScore } from "@/components/command/RevenueCaptureScore";
+import { PortfolioVerdict } from "@/components/command/PortfolioVerdict";
 import {
   CallHandlingCard,
   MissedCallFollowUpCard,
@@ -42,11 +42,11 @@ export default function Command() {
 
       {/* 5 KPI cards */}
       {data.isLoading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
           <KpiSparkCard
             label="Ad Spend"
             value={fmtCurrency(data.current.spend)}
@@ -56,6 +56,7 @@ export default function Command() {
             tip={TIPS.spend}
             invertDelta
             formatValue={fmtCurrency}
+            sourceTable="daily_metrics.cost"
           />
           <KpiSparkCard
             label="Calls Received"
@@ -65,6 +66,7 @@ export default function Command() {
             compareLabel={cmpLabel}
             tip={TIPS.calls}
             formatValue={fmtNumber}
+            sourceTable="ctm_calls"
           />
           <KpiSparkCard
             label="Qualified Calls"
@@ -74,35 +76,28 @@ export default function Command() {
             compareLabel={cmpLabel}
             tip={TIPS.qualifiedCalls}
             formatValue={fmtNumber}
+            sourceTable="daily_metrics.good_leads"
           />
           <KpiSparkCard
-            label="Appointments Set"
+            label="AI-Projected Sale (count)"
             value={fmtNumber(data.current.appointments)}
             current={data.current.appointments} prior={data.prior.appointments}
             series={series("projected_sale")}
             compareLabel={cmpLabel}
             tip={TIPS.appointments}
             formatValue={fmtNumber}
-          />
-          <KpiSparkCard
-            label="Revenue Generated"
-            value={fmtCurrency(data.current.revenue)}
-            current={data.current.revenue} prior={data.prior.revenue}
-            series={series("verified_sale")}
-            compareLabel={cmpLabel}
-            tip={TIPS.revenue}
-            formatValue={fmtCurrency}
+            sourceTable="daily_metrics.projected_sale"
           />
         </div>
       )}
 
-      {/* Funnel + Revenue Capture */}
+      {/* Funnel + Portfolio Verdict */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[260px]">
         <div className="lg:col-span-2">
           {data.isLoading ? <Skeleton className="h-full min-h-[240px] rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} />}
         </div>
         <div>
-          {data.isLoading ? <Skeleton className="h-full min-h-[240px] rounded-2xl" /> : <RevenueCaptureScore current={data.current} prior={data.prior} />}
+          <PortfolioVerdict />
         </div>
       </div>
 
