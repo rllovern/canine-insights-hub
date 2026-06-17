@@ -45,13 +45,13 @@ export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: {
           <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.funnel}</TooltipContent>
         </Tooltip>
       </div>
-      <p className="text-[11px] text-slate-500 mt-0.5">Ad Spend → Calls → Qualified (good + AI-projected)</p>
+      <p className="text-[11px] text-slate-500 mt-0.5">Ad Spend → Records → Qualified (good + AI-projected)</p>
 
       {/* Single horizontal row: three stages on one baseline, long connector arrows. */}
       <div className="mt-3 flex items-start gap-2">
         <Stage s={{ label: "Ad Spend",       src: "Google Ads", value: fmtCurrency(t.spend), Icon: Megaphone, sub: "100%",                                           iconBg: "bg-blue-100",   iconColor: "text-blue-600" }} />
         <Connector />
-        <Stage s={{ label: "Calls Received", src: "CTM",        value: fmtNumber(t.calls),   Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—",     iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
+        <Stage s={{ label: "Records", src: "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
         <Connector />
         <QualifiedStage good={t.good} projected={t.projected} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
       </div>
