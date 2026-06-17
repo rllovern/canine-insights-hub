@@ -83,7 +83,7 @@ export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: {
   );
 }
 
-function SubKpi({ label, value, delta, invert, tip }: {
+function SubKpi({ label, value, delta, invert, tip, target, targetText, pass }: {
   label: string; value: string;
   delta: import("@/lib/metrics").SafeDelta;
   invert?: boolean; tip?: string;
