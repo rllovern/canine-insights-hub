@@ -140,7 +140,7 @@ export default function Command() {
           )}
         </div>
         <div>
-          <PortfolioVerdict totals={active} targets={data.targets} />
+          <PortfolioVerdict totals={active} targets={data.targets} viewMode={mode} />
         </div>
       </div>
 

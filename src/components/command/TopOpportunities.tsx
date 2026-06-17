@@ -16,6 +16,7 @@ import {
   totalLeads as canonicalTotalLeads,
   qualityTier,
   QUALITY_TARGETS,
+  LOW_SAMPLE_CAVEAT,
   formatQualityRate,
   type LeadCounts,
 } from "@/lib/leadModel";
@@ -38,7 +39,9 @@ export function TopOpportunities({ totals, speed, targets = DEFAULT_COMMAND_TARG
   const base = canonicalTotalLeads(counts);
   const rate = canonicalQualityRate(counts);
   const tier = qualityTier(rate, base);
-  if (tier === "amber" || tier === "red") {
+  // Guard: provisional samples (above the suppression floor but below the
+  // caveat threshold) are informational only — never fire opportunities.
+  if ((tier === "amber" || tier === "red") && base >= LOW_SAMPLE_CAVEAT) {
     const gap = Math.max(0, Math.round(base * QUALITY_TARGETS.green - qualityNumerator(counts)));
     ops.push({
       label: "Improve Lead Quality",
