@@ -57,7 +57,7 @@ export function KpiSparkCard({
         </div>
         {compareLabel && <div className="mt-0.5 text-[10px] text-slate-400 truncate">{compareLabel}</div>}
       </div>
-      <div className="h-8 mt-auto">
+      <div className="h-6 mt-auto">
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={series} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
