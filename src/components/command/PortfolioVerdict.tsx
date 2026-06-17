@@ -1,39 +1,41 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { AlertTriangle, AlertOctagon, CheckCircle2, ChevronRight } from "lucide-react";
+import { AlertTriangle, AlertOctagon, CheckCircle2, ChevronRight, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
-import { rangeToISO, fmtCurrency } from "@/lib/metrics";
+import { rangeToISO } from "@/lib/metrics";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
 import { TIPS } from "./tooltips";
 import { cn } from "@/lib/utils";
 import type { CommandTargets, Totals } from "./useCommandData";
 import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
+import {
+  qualityRate as canonicalQualityRate,
+  qualityTier,
+  totalLeads as canonicalTotalLeads,
+  QUALITY_TARGETS,
+  WINCHESTER_BENCHMARK,
+  LOW_SAMPLE_BASE,
+  formatQualityRate,
+  PROJECTED_LABEL,
+} from "@/lib/leadModel";
 
 type Row = {
   property_id: string;
   name: string;
-  spend: number;
-  good_leads: number;
-  calls: number;
-  cpgl: number;
-  qualRate: number;
+  total: number;
+  good: number;
+  projected: number;
+  bad: number;
+  rate: number;
+  tier: "green" | "amber" | "red" | "low-sample";
   verdict: "critical" | "warning" | "good";
   reason: string;
 };
 
-const CPGL_TARGET = 400; // fallback agency benchmark until per-location targets are loaded here
-const QUAL_RATE_TARGET = 0.45;
-
-function judge(row: Omit<Row, "verdict" | "reason">): { verdict: Row["verdict"]; reason: string } {
-  if (row.cpgl > CPGL_TARGET * 1.5) return { verdict: "critical", reason: `CPGL ${fmtCurrency(row.cpgl)} vs ${fmtCurrency(CPGL_TARGET)} target` };
-  if (row.qualRate > 0 && row.qualRate < QUAL_RATE_TARGET * 0.6) return { verdict: "critical", reason: `Only ${(row.qualRate * 100).toFixed(0)}% qualified calls` };
-  if (row.cpgl > CPGL_TARGET * 1.15) return { verdict: "warning", reason: `CPGL ${fmtCurrency(row.cpgl)} above target` };
-  if (row.qualRate > 0 && row.qualRate < QUAL_RATE_TARGET) return { verdict: "warning", reason: `Qualified-call rate below ${(QUAL_RATE_TARGET * 100).toFixed(0)}%` };
-  return { verdict: "good", reason: "On target" };
-}
+const tierToVerdict = (t: Row["tier"]): Row["verdict"] =>
+  t === "red" ? "critical" : t === "amber" ? "warning" : "good";
 
 function statusClasses(verdict: "critical" | "warning" | "good") {
   return verdict === "critical" ? "text-rose-600 bg-rose-500"
