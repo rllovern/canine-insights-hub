@@ -26,7 +26,7 @@ export const TIPS = {
   callQuality:
     "AI call score and score distribution. Pending — these come from the same un-ingested CTM disposition/scoring feed as call handling.",
   topOpps:
-    "Auto-detected gaps ranked by estimated cost saved (CPL/CPGL/SLA efficiency). Cost impact is attributable; revenue impact is not, so it's never shown as a dollar revenue figure.",
+    "Auto-detected gaps ranked by severity across CPL/CPGL/SLA efficiency. Dollar impact stays pending until the cost-impact formula is anchored to stable verified source counts and unit costs.",
   portfolioVerdict:
     "One-glance state of the business: critical / warning / good counts per location, judged against CPL, qualified-call rate, and SLA targets.",
 } as const;
