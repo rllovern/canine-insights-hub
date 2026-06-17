@@ -2,11 +2,8 @@ import { Link } from "react-router-dom";
 import { Info, ArrowUp, ArrowDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { fmtNumber } from "@/lib/metrics";
-import type { SpeedData } from "@/components/lead-perf/hooks";
 import type { Totals } from "./useCommandData";
 import { TIPS } from "./tooltips";
-import { PendingCard } from "./PendingCard";
 
 function CardShell({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
@@ -30,6 +27,21 @@ function Header({ title, href, tip }: { title: string; href?: string; tip?: stri
       </div>
       {href && <Link to={href} className="text-[11px] font-medium text-blue-600 hover:underline">View Details</Link>}
     </div>
+  );
+}
+
+function PendingBody({ reason }: { reason: string }) {
+  return (
+    <>
+      <div className="mt-2 flex items-center justify-between rounded-md border border-dashed border-slate-200 bg-slate-50 px-2.5 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">Pending</span>
+        <span className="text-[10.5px] text-slate-400">No confident figures</span>
+      </div>
+      <div className="mt-2 flex-1 flex items-start gap-2 text-[12px] text-slate-500 leading-snug">
+        <Info className="size-3.5 text-slate-400 shrink-0 mt-0.5" />
+        <span>{reason}</span>
+      </div>
+    </>
   );
 }
 
@@ -82,114 +94,29 @@ function Rail({
 export function CallHandlingCard({ totals }: { totals: Totals }) {
   void totals;
   return (
-    <PendingCard
-      title="Call Handling Performance"
-      reason="CTM call-disposition feed is not yet ingested, so answer rate, pickup time, and abandon rate can't be shown honestly. This card will populate automatically once disposition data lands in ctm_calls."
-      href="/calls"
-    />
-  );
-}
-
-/** Missed-call follow-up — uses lead_perf_speed where possible. */
-export function MissedCallFollowUpCard({ speed }: { speed: SpeedData | null }) {
-  const missed = speed?.never_responded ?? 0;
-  const total = speed?.total_leads ?? 0;
-  const missedPct = total ? (missed / total) * 100 : 0;
-  const u5 = speed?.pct_under_5m ?? 0;
-  const u15 = speed?.pct_under_15m ?? 0;
-  const never = speed?.pct_never_responded ?? 0;
-
-  return (
     <CardShell>
-      <Header title="Missed Call Follow-Up Performance" href="/lead-performance" tip={TIPS.missedFollowUp} />
-      <div className="mt-1.5 flex items-baseline justify-between">
-        <div>
-          <div className="text-[10.5px] text-slate-500">Missed Calls</div>
-          <div className="text-xl font-bold tabular-nums text-slate-900">{fmtNumber(missed)}</div>
-        </div>
-        <div className="text-[10.5px] text-slate-500">
-          {total ? `${missedPct.toFixed(1)}% of total calls` : "—"}
-        </div>
-      </div>
-      <div className="mt-1.5 space-y-1.5 flex-1">
-        <Rail label="Returned < 5 min" value={`${u5.toFixed(1)}%`} pct={u5} goal={60} tone="primary"
-          deltaText="7.8%" deltaPositive goalText="Goal: 60%" />
-        <Rail label="Returned < 30 min" value={`${u15.toFixed(1)}%`} pct={u15} goal={80} tone="success"
-          deltaText="5.4%" deltaPositive goalText="Goal: 80%" />
-        <Rail label="Never Returned" value={`${never.toFixed(1)}%`} pct={never} goal={10} tone="danger"
-          deltaText="-3.2%" deltaPositive goalText="Goal: < 10%" />
-      </div>
-      {!speed && <div className="mt-2 text-[10px] text-slate-400">No response data in window.</div>}
+      <Header title="Call Handling Performance" href="/calls" tip={TIPS.callHandling} />
+      <PendingBody reason="CTM call-disposition feed is not yet ingested, so answer rate, pickup time, and abandon rate can't be shown honestly. This card will populate automatically once the disposition feed lands." />
     </CardShell>
   );
 }
 
-/** Call Quality (AI Score) — lead-quality buckets shown as proxy. */
-export function CallQualityCard({ buckets }: { buckets: Record<string, number> }) {
-  const order: { key: string; label: string; color: string; weight: number }[] = [
-    { key: "projected_sale", label: "Excellent (4.5 - 5.0)", color: "#10b981", weight: 5 },
-    { key: "good",           label: "Good (3.5 - 4.4)",      color: "#3b82f6", weight: 4 },
-    { key: "bad",            label: "Average (2.5 - 3.4)",   color: "#f59e0b", weight: 2.5 },
-    { key: "spam",           label: "Poor (1.0 - 2.4)",      color: "#ef4444", weight: 1 },
-  ];
+/** Missed-call follow-up — pending until the CTM disposition feed is ingested. */
+export function MissedCallFollowUpCard() {
+  return (
+    <CardShell>
+      <Header title="Missed Call Follow-Up Performance" href="/lead-performance" tip={TIPS.missedFollowUp} />
+      <PendingBody reason="Missed-call counts and return status come from the same un-ingested CTM call-disposition feed as call handling. They will populate together once that feed lands; until then no missed-call numbers render as confident figures." />
+    </CardShell>
+  );
+}
 
-  const rows = order.map((o) => ({ ...o, n: buckets[o.key] ?? 0 }));
-  const sumScored = rows.reduce((s, r) => s + r.n, 0);
-  const total = Object.values(buckets).reduce((a, b) => a + b, 0);
-
-  if (!sumScored) {
-    return (
-      <PendingCard
-        title="Call Quality (AI Score)"
-        reason="No calls were scored in this window. Once CTM AI scoring runs on this period's calls, the bucket distribution and weighted average will appear here."
-        href="/calls"
-      />
-    );
-  }
-
-  const avg = sumScored ? rows.reduce((s, r) => s + r.weight * r.n, 0) / sumScored : 0;
-
-  const c = 2 * Math.PI * 36;
-  let acc = 0;
-  const segs = sumScored ? rows.filter(r => r.n > 0).map((r) => {
-    const frac = r.n / sumScored;
-    const dash = `${frac * c} ${c}`;
-    const off = -acc;
-    acc += frac * c;
-    return { ...r, dash, off };
-  }) : [];
-
+/** Call Quality (AI Score) — pending until the CTM disposition/scoring feed is ingested. */
+export function CallQualityCard() {
   return (
     <CardShell>
       <Header title="Call Quality (AI Score)" href="/calls" tip={TIPS.callQuality} />
-      <div className="mt-2 flex items-center gap-3 flex-1">
-        <div className="relative size-24 shrink-0">
-          <svg viewBox="0 0 96 96" className="size-full -rotate-90">
-            <circle cx="48" cy="48" r="36" stroke="#e5e7eb" strokeWidth="12" fill="none" />
-            {segs.map((s) => (
-              <circle key={s.key} cx="48" cy="48" r="36" fill="none" strokeWidth="12"
-                stroke={s.color} strokeDasharray={s.dash} strokeDashoffset={s.off} />
-            ))}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-xl font-bold tabular-nums text-slate-900 leading-none">{avg ? avg.toFixed(1) : "—"}</div>
-            <div className="text-[9px] text-slate-500 mt-0.5">/5.0 avg</div>
-          </div>
-        </div>
-        <div className="flex-1 space-y-1.5 text-[11px] min-w-0">
-          {rows.map((r) => {
-            const pct = total ? (r.n / total) * 100 : 0;
-            return (
-              <div key={r.key} className="flex items-center gap-2">
-                <span className="size-2.5 rounded-full shrink-0" style={{ background: r.color }} />
-                <span className="flex-1 text-slate-600">{r.label}</span>
-                <span className="tabular-nums font-semibold text-slate-900">{total ? `${pct.toFixed(0)}%` : "—"}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="mt-2 text-[10.5px] text-slate-400">{sumScored} scored calls in window.</div>
+      <PendingBody reason="AI score, scored-call counts, and score distribution depend on the same un-ingested CTM disposition/scoring feed. This card stays pending until that source is verified, so no proxy bucket is presented as a real score." />
     </CardShell>
   );
 }
