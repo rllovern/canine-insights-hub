@@ -1,61 +1,93 @@
-# Match Executive Overview design 1:1 with the mockup
 
-The current `/command` page uses the right data but keeps the existing app shell, dark cards, and dense typography. Rebuild it as a self-contained page that visually matches the PerformX mockup pixel-for-pixel.
+# Command Center — Honest Rebuild
 
-## Visual spec to match
+Goal: every number on `/command` is attributable, judged inline, and actionable. Funnel ends where tracking ends. No fabricated deltas, no placeholder styled as real.
 
-- Page background: light gray (`~#f7f8fa`), no app card chrome.
-- Cards: pure white, large border-radius (`rounded-2xl`), soft shadow, generous padding.
-- Typography: dark slate headings, light gray subtitles, larger title sizes than today.
-- Top bar inside the page:
-  - Left: "Executive Overview" (large, bold) + subtitle "Real-time performance across the customer journey".
-  - Right: date-range pill button (calendar icon + "May 12 – May 18, 2025" + chevron), "Share" button (outline + upload icon), three-dot menu. Below, small "Compare to: …" caption.
-- KPI strip: 5 evenly spaced cards. Each card:
-  - Tiny gray label.
-  - Big bold value (~28px).
-  - Inline green/red pill with up/down arrow and % delta.
-  - Subline "vs May 5 – May 11, 2025".
-  - Soft blue area sparkline filling the bottom third.
-- Customer Journey Funnel: white card, ~2/3 width. Stage row of 5 large pale-gray circles with brand-colored icons, connected by thin gray arrows. Under each: label, value, conversion %. Below funnel, a thin divider, then a 4-column sub-KPI row (Overall Conversion Rate, Cost Per Qualified Call, Cost Per Appointment, Cost Per Revenue $) with bold values + green/red delta pills.
-- Revenue Capture Score: white card, ~1/3 width, equal height to funnel. Large green progress ring with score in center + "/100". To the right: short message, then "Estimated Revenue Lost This Week" in red, delta caption below, "View Revenue Impact →" button at bottom (full width, outline).
-- Bottom row, 3 equal cards:
-  - **Call Handling Performance** — three horizontal progress rails (Answer Rate blue, Avg Answer Time green, Abandon Rate red), each with metric value on the left and goal/delta on the right.
-  - **Missed Call Follow-Up Performance** — Missed Calls big number + % caption, then three rails (Returned <5m, Returned <30m, Never Returned) with values, deltas, goals.
-  - **Call Quality (AI Score)** — multi-color donut (red/yellow/green/blue segments) with "3.6 / 5.0 Average Score" center, color-coded legend rows on the right with % values, delta caption underneath.
-- Top Opportunities to Improve: white card, full width, table with columns Opportunity / Impact (red bold $) / Why It Matters / Action (outline "View Details" button). 4 rows.
-- "View Details" link in the top-right of each card uses the brand blue.
+## Build order
 
-## Layout / shell
+### 1. Strip revenue-as-dollars
+- `KpiSparkCard` "Revenue Generated" → removed. KPI row goes from 5 → 4 tiles (Ad Spend, Calls, Qualified Calls, Appointments).
+- `RevenueCaptureScore.tsx` → deleted. Card slot reclaimed for the new **Portfolio Verdict / Ranked Locations** block.
+- `JourneyFunnel`:
+  - Drop "Revenue Generated" stage. Funnel ends at **AI-Projected Sale (count)** plus a pending **Verified Sale (count, GHL Won — not piped)** stage.
+  - Remove "Cost Per Revenue $" sub-KPI. Keep Overall Conversion, Cost/Qualified Call, Cost/Appointment.
+- `TopOpportunities` impact column stays — it's cost saved, not revenue.
 
-- Mount this page outside the existing dashboard `Card` styling. Wrap the page in a `bg-[hsl(220_20%_97%)]` (or token equivalent) `min-h-full` container with `p-6 lg:p-8`.
-- Keep using the app sidebar/topbar — the mockup's left nav already exists via `Sidebar.tsx`. Only the page body is redesigned.
-- Spacing: `gap-5` between major rows, `p-6` inside white cards, no inner card borders.
+### 2. Reclassify bottom of funnel to counts
+- `projected_sale` rendered as count, label "AI-projected sale" with info tip "CTM transcript projection — count only, not dollars."
+- `verified_sale` rendered as a pending stage ("— / not piped") until GHL Won feed is wired. Greyed style, dashed border, info tip explaining attribution gap.
 
-## Component changes (no new data wiring)
+### 3. Fix data-honesty bugs
+- New helper `safeDelta(curr, prior, { minBase = 25 })` in `src/lib/metrics.ts`:
+  - prior === 0 → returns `{ kind: 'no-prior' }`
+  - base < minBase → returns `{ kind: 'low-sample', abs: curr - prior }`
+  - else → `{ kind: 'pct', value }`
+- All delta renderers (`KpiSparkCard`, `JourneyFunnel.SubKpi`, `Delta.tsx`) consume this discriminated union: render "no prior data", "+N (low sample)", or "%". No more `+100%`.
+- `PerformanceCards`:
+  - `CallHandlingCard` → if CTM disposition not wired, collapse to compact "Pending — CTM disposition not mapped" empty state (not full-styled card).
+  - `CallQualityCard` → if `buckets` is empty/unscored-only, same pending state. AI Score 3.7 placeholder removed.
+- Confirm compare window: when `priorDaily` sums are all zero, KPI shows "no prior data" instead of green +100%.
 
-Rewrite the existing files; do not change data sources or the `useCommandData` hook.
+### 4. Portfolio verdict + ranked locations (scope-aware hero)
+- New `src/components/command/PortfolioVerdict.tsx`:
+  - **Agency scope** (`propertyIds === null` or length > 1): hero line "X critical · Y warning · Z good" with colored counts. Below it, ranked location list (worst-first), each row: `{name} — {verdict} · {deciding reason}` e.g. "Ashtabula — critical · CPL $449 vs $200 target".
+  - **Location scope** (single property): hide ranking, show that location's verdict sentence + its own funnel only.
+- New `src/components/command/useLocationRollup.ts`: fetches per-property aggregates for the window, computes ratio-of-sums per property, judges each against targets from `property_targets`, returns sorted list.
+- Verdict thresholds (initial, configurable later): CPL > target × 1.5 = critical; > target × 1.15 = warning; else good. Same pattern for CPGL, qualified-call rate, SLA.
 
-- `src/pages/Command.tsx` — new layout shell with header, date pill, share, KPI row, 2-col grid, 3-col grid, opportunities table.
-- `src/components/command/KpiSparkCard.tsx` — restyle to white card, large value, pill delta, blue area sparkline anchored to bottom.
-- `src/components/command/JourneyFunnel.tsx` — bigger stage circles (size-16), thin arrows between, divider, 4-column sub-KPI row with delta pills.
-- `src/components/command/RevenueCaptureScore.tsx` — larger ring (size-40), green stroke when >=75, right-side panel with red lost-revenue number and full-width outline CTA.
-- `src/components/command/PerformanceCards.tsx`:
-  - `CallHandlingCard` — render 3 progress rails using local (still-mocked) shape until CTM disposition lands; keep the "data not connected" note as a tooltip rather than the entire card body. Pass any partial values we do have (call count) so the layout matches the mockup even when underlying numbers are placeholders flagged with a small "—" hint.
-  - `MissedCallFollowUpCard` — match the mockup's row layout (label · % · goal · delta).
-  - `CallQualityCard` — match donut + legend layout; render the empty state inside the same skeleton (donut hidden, legend rows shown grayed out) so the card size matches the others.
-- `src/components/command/TopOpportunities.tsx` — table styling: row hover, bold red impact, outline button on the right.
+### 5. Complete attributable funnel
+- Funnel stages with explicit data-source badges on hover:
+  `Ad Spend (Google Ads)` → `Calls (CTM)` → `Qualified Calls (CTM scored)` → `Worked w/in SLA (GHL)` → `AI-Projected Sale (CTM)` → `Verified Sale (GHL Won — pending)`.
+- Seam stages (Worked/SLA, Verified) marked pending with dashed treatment until their feed is confirmed live.
 
-## Tokens / styling
+### 6. Lead handling + speed-to-lead as first-class
+- Promote `useSpeed` data into a dedicated **Lead Handling** card (replaces current `MissedCallFollowUpCard`): answer rate, median response time, never-responded count — each judged vs SLA from `property_sla_settings`.
+- Only render once the underlying query returns non-empty; otherwise pending state.
 
-- Use Tailwind utility classes scoped to this page. Keep semantic tokens (`bg-card`, `text-foreground`) but override per element with light-mode-only values (`bg-white`, `text-slate-900`, etc.) to match the mockup. Document at the top of `Command.tsx` that this page intentionally locks to the light palette; dark-mode parity is a follow-up.
+### 7. Two-lane opportunity feed
+- Refactor `TopOpportunities` into two lanes inside one card:
+  - **Lane A — Data integrity**: stale syncs (`sync_runs` last_success > 24h), placeholder-still-live, reconciliation gaps, AI self-audit flags.
+  - **Lane B — Performance**: existing dollar-ranked CPL/CPGL/SLA/qual opportunities.
+- Each row keeps the "Why It Matters" narration column.
+
+### 8. AI self-audit (Role 2)
+- New edge function `supabase/functions/command-self-audit/index.ts` using Lovable AI Gateway (`google/gemini-3-flash-preview`, structured output via `Output.object`).
+- Client sends the computed dashboard snapshot (totals, deltas, flags, scope). Function returns `{ flags: [{ severity, message, location? }] }`.
+- Flags surface in Lane A. Examples it must catch: implausible revenue/spend ratio, repeated identical deltas, card labeled placeholder still rendering as real, prior-period-empty patterns.
+- Narration (Role 1) for portfolio verdict sentence + per-opportunity "why" reuses same function with a different prompt mode.
+- No chat widget on this page — Jarvis stays the conversational surface.
+
+## Governing rules (enforced in code, not just docs)
+- `safeDelta` is the only path to render a delta.
+- `KpiSparkCard` requires a `sourceTable` prop shown in tooltip — forces every tile to declare attribution.
+- Any card whose data dependency is empty renders `<PendingCard reason={...} />` instead of styled zeros.
+
+## Files
+
+**New**
+- `src/components/command/PortfolioVerdict.tsx`
+- `src/components/command/RankedLocations.tsx`
+- `src/components/command/LeadHandlingCard.tsx`
+- `src/components/command/PendingCard.tsx`
+- `src/components/command/useLocationRollup.ts`
+- `src/components/command/useSelfAudit.ts`
+- `supabase/functions/command-self-audit/index.ts`
+
+**Edited**
+- `src/pages/Command.tsx` — 4-tile KPI row; hero swap; scope-aware layout.
+- `src/components/command/JourneyFunnel.tsx` — drop revenue stage + CPR sub-KPI; add Worked/SLA + pending Verified stages; counts only.
+- `src/components/command/KpiSparkCard.tsx` — `safeDelta`, `sourceTable` prop, no revenue tile.
+- `src/components/command/PerformanceCards.tsx` — pending states; remove fake AI score.
+- `src/components/command/TopOpportunities.tsx` — two-lane layout, integrate self-audit flags.
+- `src/components/command/useCommandData.ts` — expose per-property rollups + integrity signals.
+- `src/components/command/tooltips.ts` — drop revenue tips; add source-attribution tips.
+- `src/lib/metrics.ts` — `safeDelta`, low-sample helpers.
+- `src/components/ui/Delta.tsx` — consume `safeDelta` result.
+
+**Deleted**
+- `src/components/command/RevenueCaptureScore.tsx`
 
 ## Out of scope
-
-- No new data sources, RPC changes, or migrations.
-- Sidebar styling stays as is.
-- Real CTM Answer Rate / Abandon Rate / Avg Answer Time wiring (still placeholders behind the new layout, surfaced with a small subscript note).
-
-## Verification
-
-- Typecheck/build runs automatically after edits.
-- Visual diff: open `/command` in preview at 1504-wide; cross-check KPI strip, funnel + score row, three performance cards, opportunities table against the mockup.
+- Real GHL Won → CTM revenue reconciliation (returns revenue dollars only when that pipe exists).
+- Conversational AI on `/command`.
+- Dark-mode parity (still deferred).
