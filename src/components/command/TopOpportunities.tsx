@@ -8,6 +8,8 @@ import type { SpeedData } from "@/components/lead-perf/hooks";
 import type { CommandTargets, Totals } from "./useCommandData";
 import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 import { TIPS } from "./tooltips";
+import { CARD_CHROME } from "./cardChrome";
+import { cn } from "@/lib/utils";
 import {
   qualityRate as canonicalQualityRate,
   qualityNumerator,
@@ -117,7 +119,7 @@ export function TopOpportunities({ totals, speed, targets = DEFAULT_COMMAND_TARG
   const lanes = (integrity.data ?? []).length + top.length;
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-4">
+    <div className={cn(CARD_CHROME, "p-4")}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <h3 className="text-sm font-semibold text-slate-900">Top Opportunities to Improve</h3>

@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { safeDelta } from "@/lib/metrics";
 import { format as fmtDate, parseISO } from "date-fns";
+import { CARD_CHROME } from "./cardChrome";
 
 export function KpiSparkCard({
   label,
@@ -65,7 +66,7 @@ export function KpiSparkCard({
     : (sourceTable ? `Source: ${sourceTable}` : undefined);
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
+    <div className={cn(CARD_CHROME, "hover:shadow-md transition-shadow overflow-hidden flex flex-col min-h-[112px]")}>
       <div className="px-4 pt-3 pb-1">
         <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
           <span className="truncate">{label}</span>
@@ -88,12 +89,12 @@ export function KpiSparkCard({
             <AreaChart data={series} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
               <defs>
                 <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.18} />
                   <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <XAxis dataKey="date" hide />
-              <YAxis hide domain={["auto", "auto"]} />
+              <YAxis hide domain={[0, "auto"]} />
               <RTooltip
                 cursor={{ stroke: "#94a3b8", strokeWidth: 1, strokeDasharray: "3 3" }}
                 contentStyle={{
@@ -114,8 +115,10 @@ export function KpiSparkCard({
                 dataKey="v"
                 stroke="#6366f1"
                 strokeWidth={1.5}
-                fill={`url(#${gid})`}
+                fill="transparent"
                 isAnimationActive={false}
+                connectNulls
+                dot={false}
               />
             </AreaChart>
           </ResponsiveContainer>
