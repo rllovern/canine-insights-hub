@@ -2,7 +2,7 @@ export const TIPS = {
   spend:
     "Total advertising investment across all paid channels (Google, Meta, etc.) for the selected period. Pulled from daily_metrics.cost. Lower spend with stable revenue is positive — delta arrow is inverted.",
   calls:
-    "Total inbound phone calls tracked by CallTrackingMetrics (CTM) attributed to your campaigns in the selected period. One row per call.",
+    "Records = calls + forms (the superset). No Entry, Spam, Bad, Good, and AI-projected are slices INSIDE Records, never added on top. Source: v_lead_counts_daily.records (daily_metrics.record_count).",
   qualifiedCalls:
     "Good leads — real, workable prospects (not spam, wrong number, or existing customer). Source: daily_metrics.good_leads. Parallel quality tier to AI-projected sale (neither is inside the other). Higher is better.",
   appointments:
@@ -10,9 +10,9 @@ export const TIPS = {
   verifiedPending:
     "Verified sales come from GHL Won records. That feed is not yet piped into Command Center, so this stage shows pending until it is — count only, never dollars.",
   funnel:
-    "Attributable customer journey: Ad Spend → Calls (CTM) → two parallel quality tiers (Good leads & AI-projected sale, both scored from CTM transcripts — neither is inside the other) → Verified Sale (GHL Won, pending). Total Leads = bad + good + AI-projected. Quality = (good + AI-projected) ÷ total. Counts only — revenue dollars aren't attributable here by design.",
+    "Attributable customer journey: Ad Spend → Records (calls + forms, the superset) → two parallel quality tiers (Good leads & AI-projected sale, both scored from CTM transcripts — neither is inside the other) → Verified Sale (GHL Won, pending). No Entry / Spam / Bad / Good / AI-projected are slices INSIDE Records, never added on top. Total Leads = bad + good + AI-projected. Quality = (good + AI-projected) ÷ total. Counts only — revenue dollars aren't attributable here by design.",
   overallConv:
-    "Appointments Set ÷ Calls Received. The share of every call that becomes a booked appointment. Industry healthy range: 15–25%.",
+    "Appointments Set ÷ Records. The share of records that becomes a booked appointment. Industry healthy range: 15–25%.",
   cpl:
     "Ad Spend ÷ Total Leads (bad + good + AI-projected). Lower is better; judged against the configured CPL target.",
   cpQualified:
