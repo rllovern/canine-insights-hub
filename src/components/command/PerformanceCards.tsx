@@ -9,7 +9,7 @@ import { TIPS } from "./tooltips";
 
 function CardShell({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col", className)}>
+    <div className={cn("rounded-2xl bg-white border border-slate-200/70 shadow-sm p-2.5 h-full flex flex-col", className)}>
       {children}
     </div>
   );
@@ -89,7 +89,7 @@ export function CallHandlingCard({ totals }: { totals: Totals }) {
   return (
     <CardShell>
       <Header title="Call Handling Performance" href="/calls" tip={TIPS.callHandling} />
-      <div className="mt-2 space-y-2 flex-1">
+      <div className="mt-1.5 space-y-1.5 flex-1">
         <Rail
           label="Answer Rate" value={`${answerRate.toFixed(1)}%`} pct={answerRate} goal={70} tone="primary"
           deltaText="5.6%" deltaPositive
@@ -123,7 +123,7 @@ export function MissedCallFollowUpCard({ speed }: { speed: SpeedData | null }) {
   return (
     <CardShell>
       <Header title="Missed Call Follow-Up Performance" href="/lead-performance" tip={TIPS.missedFollowUp} />
-      <div className="mt-2 flex items-baseline justify-between">
+      <div className="mt-1.5 flex items-baseline justify-between">
         <div>
           <div className="text-[10.5px] text-slate-500">Missed Calls</div>
           <div className="text-xl font-bold tabular-nums text-slate-900">{fmtNumber(missed)}</div>
@@ -132,7 +132,7 @@ export function MissedCallFollowUpCard({ speed }: { speed: SpeedData | null }) {
           {total ? `${missedPct.toFixed(1)}% of total calls` : "—"}
         </div>
       </div>
-      <div className="mt-2 space-y-2 flex-1">
+      <div className="mt-1.5 space-y-1.5 flex-1">
         <Rail label="Returned < 5 min" value={`${u5.toFixed(1)}%`} pct={u5} goal={60} tone="primary"
           deltaText="7.8%" deltaPositive goalText="Goal: 60%" />
         <Rail label="Returned < 30 min" value={`${u15.toFixed(1)}%`} pct={u15} goal={80} tone="success"
@@ -173,7 +173,7 @@ export function CallQualityCard({ buckets }: { buckets: Record<string, number> }
   return (
     <CardShell>
       <Header title="Call Quality (AI Score)" href="/calls" tip={TIPS.callQuality} />
-      <div className="mt-3 flex items-center gap-4 flex-1">
+      <div className="mt-2 flex items-center gap-3 flex-1">
         <div className="relative size-24 shrink-0">
           <svg viewBox="0 0 96 96" className="size-full -rotate-90">
             <circle cx="48" cy="48" r="36" stroke="#e5e7eb" strokeWidth="12" fill="none" />
