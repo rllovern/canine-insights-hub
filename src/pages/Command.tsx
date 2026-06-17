@@ -31,7 +31,7 @@ export default function Command() {
     data.currentDaily.map((d) => ({ date: d.date, v: d[key] }));
 
   return (
-    <div className="-m-4 md:-m-6 p-4 lg:p-5 bg-[hsl(220_20%_97%)] min-h-[calc(100vh-3rem)] text-slate-900">
+      <div className="-m-4 md:-m-6 p-3 lg:p-4 bg-[hsl(220_20%_97%)] min-h-[calc(100vh-3rem)] text-slate-900">
       {/* Header */}
       <div className="flex items-end justify-between gap-3 mb-2">
         <div className="min-w-0">
