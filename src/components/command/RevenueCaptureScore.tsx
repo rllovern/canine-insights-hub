@@ -33,7 +33,7 @@ export function RevenueCaptureScore({ current, prior }: { current: Totals; prior
   const offset = c * (1 - score / 100);
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-4 h-full flex flex-col">
+    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
       <div className="flex items-center gap-1.5">
         <h3 className="text-sm font-semibold text-slate-900">Revenue Capture Score</h3>
         <Tooltip>
