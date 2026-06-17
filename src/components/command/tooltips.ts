@@ -4,21 +4,23 @@ export const TIPS = {
   calls:
     "Total inbound phone calls tracked by CallTrackingMetrics (CTM) attributed to your campaigns in the selected period. One row per call.",
   qualifiedCalls:
-    "Calls that passed lead-quality scoring as a real prospect (not spam, wrong number, or existing customer). Source: daily_metrics.good_leads. Higher is better.",
+    "Good leads — real, workable prospects (not spam, wrong number, or existing customer). Source: daily_metrics.good_leads. Parallel quality tier to AI-projected sale (neither is inside the other). Higher is better.",
   appointments:
-    "AI-projected sales (count) generated from qualified calls. Source: daily_metrics.projected_sale, derived from CTM transcript projections. Count only — never a dollar figure (revenue isn't attributable in this stack).",
+    "AI-projected sale — a separate quality tier the CTM transcript flagged as high conviction. NOT a forecast, pipeline, or revenue proxy; never multiplied by ticket size. Source: daily_metrics.projected_sale. Counts toward the quality rate alongside good leads.",
   verifiedPending:
     "Verified sales come from GHL Won records. That feed is not yet piped into Command Center, so this stage shows pending until it is — count only, never dollars.",
   funnel:
-    "Attributable customer journey: Ad Spend → Calls (CTM) → Qualified Calls (CTM scored) → AI-Projected Sale (CTM, count) → Verified Sale (GHL Won, count — pending). The % under each stage is its conversion from the previous stage. The funnel ends in counts because the close happens outside CTM tracking — revenue dollars aren't attributable here by design.",
+    "Attributable customer journey: Ad Spend → Calls (CTM) → two parallel quality tiers (Good leads & AI-projected sale, both scored from CTM transcripts — neither is inside the other) → Verified Sale (GHL Won, pending). Total Leads = bad + good + AI-projected. Quality = (good + AI-projected) ÷ total. Counts only — revenue dollars aren't attributable here by design.",
   overallConv:
     "Appointments Set ÷ Calls Received. The share of every call that becomes a booked appointment. Industry healthy range: 15–25%.",
   cpl:
-    "Ad Spend ÷ Calls Received. Cost to capture one attributable inbound call. Lower is better and the value is judged against the configured CPL target.",
+    "Ad Spend ÷ Total Leads (bad + good + AI-projected). Lower is better; judged against the configured CPL target.",
   cpQualified:
-    "Ad Spend ÷ Qualified Calls. What it costs you in media to produce one real prospect. Lower is better and the value is judged against the configured CPGL target.",
+    "Ad Spend ÷ (good + AI-projected) — cost per quality lead. Same numerator as the quality metric. Lower is better; judged against the configured CPGL target.",
   cpAppt:
-    "Ad Spend ÷ AI-Projected Sales. Marketing cost per projected appointment. Compare against your average ticket size to gauge ROI.",
+    "Ad Spend ÷ AI-projected sales (count). Cost per AI-projected sale. AI-projected is a quality signal — do not read this as cost-per-sale or ROI.",
+  qualityRate:
+    "Quality = (good + AI-projected) ÷ (bad + good + AI-projected). Target: ≥55% green, 45–54% amber, <45% red. Winchester (≈50%) is shown as a benchmark reference line, not the pass/fail threshold.",
   callHandling:
     "Answer rate, avg pickup time, abandon rate. Pending — CTM call-disposition feed is not yet ingested.",
   missedFollowUp:
@@ -28,5 +30,5 @@ export const TIPS = {
   topOpps:
     "Auto-detected gaps ranked by severity across CPL/CPGL/SLA efficiency. Dollar impact stays pending until the cost-impact formula is anchored to stable verified source counts and unit costs.",
   portfolioVerdict:
-    "One-glance state of the business: critical / warning / good counts per location, judged against CPL, qualified-call rate, and SLA targets.",
+    "One-glance state of the business per location, judged on the canonical quality rate = (good + AI-projected) ÷ total leads. Target ≥55% green, 45–54% amber, <45% red. Locations with fewer than 25 leads in window show as low-sample, not red.",
 } as const;
