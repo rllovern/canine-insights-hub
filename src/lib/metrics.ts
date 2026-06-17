@@ -54,6 +54,24 @@ export function pctChange(curr: number, prev: number): number {
   return ((curr - prev) / prev) * 100;
 }
 
+/**
+ * Honest delta. Never fabricates a +100% when prior period is empty.
+ * - prior <= 0 → no-prior  (UI: "no prior data")
+ * - max(curr, prior) < minBase → low-sample (UI: absolute change, not %)
+ * - else → pct
+ */
+export type SafeDelta =
+  | { kind: "no-prior" }
+  | { kind: "low-sample"; abs: number }
+  | { kind: "pct"; value: number };
+
+export function safeDelta(curr: number, prior: number, opts: { minBase?: number } = {}): SafeDelta {
+  const minBase = opts.minBase ?? 25;
+  if (!prior || prior <= 0) return { kind: "no-prior" };
+  if (Math.max(curr, prior) < minBase) return { kind: "low-sample", abs: curr - prior };
+  return { kind: "pct", value: ((curr - prior) / prior) * 100 };
+}
+
 // Per-call helpers used by CTM
 export const costPerCall = (cost: number, n: number) => (n ? cost / n : null);
 export const costPerLead = (cost: number, leads: number) => (leads ? cost / leads : 0);
