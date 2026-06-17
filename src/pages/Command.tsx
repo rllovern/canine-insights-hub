@@ -33,7 +33,7 @@ export default function Command() {
   return (
     <div className="-m-4 md:-m-6 p-4 lg:p-5 bg-[hsl(220_20%_97%)] min-h-[calc(100vh-3rem)] text-slate-900">
       {/* Header */}
-      <div className="flex items-end justify-between gap-3 mb-3">
+      <div className="flex items-end justify-between gap-3 mb-2">
         <div className="min-w-0">
           <h1 className="text-[20px] font-bold tracking-tight text-slate-900 leading-tight">Executive Overview</h1>
           <p className="text-[11px] text-slate-500 mt-0.5">Real-time performance across the customer journey · {label}</p>
@@ -42,11 +42,11 @@ export default function Command() {
 
       {/* 5 KPI cards */}
       {data.isLoading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2">
           <KpiSparkCard
             label="Ad Spend"
             value={fmtCurrency(data.current.spend)}
@@ -92,17 +92,17 @@ export default function Command() {
       )}
 
       {/* Funnel + Revenue Capture */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2">
         <div className="lg:col-span-2">
-          {data.isLoading ? <Skeleton className="h-56 rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} />}
+          {data.isLoading ? <Skeleton className="h-48 rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} />}
         </div>
         <div>
-          {data.isLoading ? <Skeleton className="h-56 rounded-2xl" /> : <RevenueCaptureScore current={data.current} prior={data.prior} />}
+          {data.isLoading ? <Skeleton className="h-48 rounded-2xl" /> : <RevenueCaptureScore current={data.current} prior={data.prior} />}
         </div>
       </div>
 
       {/* 3 Performance cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2">
         <CallHandlingCard totals={data.current} />
         <MissedCallFollowUpCard speed={speed.data ?? null} />
         <CallQualityCard buckets={data.buckets} />
