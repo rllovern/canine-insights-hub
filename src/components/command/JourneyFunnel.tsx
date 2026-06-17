@@ -217,7 +217,7 @@ function Stage({ s }: { s: { label: string; src: string; value: string; Icon: an
   );
 }
 
-function SubKpi({ label, value, delta, invert, tip, target, targetText, pass }: {
+function SubKpi({ label, value, delta, invert, tip, target, targetText, pass, footnote }: {
   label: string; value: string;
   delta: import("@/lib/metrics").SafeDelta;
   invert?: boolean; tip?: string;
@@ -249,8 +249,8 @@ function SubKpi({ label, value, delta, invert, tip, target, targetText, pass }: 
           )}
         </TooltipContent>
       </Tooltip>
-      {arguments[0].footnote && (
-        <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{arguments[0].footnote}</div>
+      {footnote && (
+        <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{footnote}</div>
       )}
     </div>
   );
