@@ -710,8 +710,8 @@ function buildTools(ctx: Ctx) {
         const to = new Date();
         const from = new Date(to.getTime() - i.days * 86400_000);
         const { data, error } = await ctx.supabase
-          .from("daily_metrics")
-          .select("date,ad_source,cost,clicks,impressions,record_count,good_leads")
+          .from("v_lead_counts_daily")
+          .select("date,ad_source,cost,clicks,impressions,records,good_leads")
           .eq("property_id", id)
           .gte("date", from.toISOString().slice(0, 10))
           .lte("date", to.toISOString().slice(0, 10))
@@ -727,7 +727,7 @@ function buildTools(ctx: Ctx) {
             bucket.cost += Number(r.cost ?? 0);
             bucket.clicks += Number(r.clicks ?? 0);
             bucket.impressions += Number(r.impressions ?? 0);
-            bucket.calls += Number(r.record_count ?? 0);
+            bucket.calls += Number(r.records ?? 0);
             bucket.good_leads += Number(r.good_leads ?? 0);
           };
           if (!byDate.has(date)) byDate.set(date, { cost: 0, clicks: 0, impressions: 0, calls: 0, good_leads: 0 });
