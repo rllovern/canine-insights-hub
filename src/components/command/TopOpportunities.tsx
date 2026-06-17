@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
-import { Card } from "@/components/ui/card";
+import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtCurrency } from "@/lib/metrics";
 import type { SpeedData } from "@/components/lead-perf/hooks";
 import type { Totals } from "./useCommandData";
@@ -63,32 +64,38 @@ export function TopOpportunities({ totals, speed }: { totals: Totals; speed: Spe
   const top = ops.slice(0, 4);
 
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold">Top Opportunities to Improve</h3>
-        <Link to="/lead-performance" className="text-[11px] text-primary hover:underline">View All Opportunities</Link>
+    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-base font-semibold text-slate-900">Top Opportunities to Improve</h3>
+          <Tooltip>
+            <TooltipTrigger><Info className="size-3.5 text-slate-400" /></TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs">Ranked by estimated revenue lift from closing the gap.</TooltipContent>
+          </Tooltip>
+        </div>
+        <Link to="/lead-performance" className="text-xs font-medium text-blue-600 hover:underline">View All Opportunities</Link>
       </div>
       {top.length === 0 ? (
-        <div className="py-6 text-center text-xs text-muted-foreground">No major gaps detected — performance is healthy across the funnel.</div>
+        <div className="py-6 text-center text-xs text-slate-500">No major gaps detected — performance is healthy across the funnel.</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border">
-                <th className="py-2 pr-3 font-medium">Opportunity</th>
-                <th className="py-2 pr-3 font-medium">Impact</th>
-                <th className="py-2 pr-3 font-medium">Why It Matters</th>
-                <th className="py-2 pr-3 font-medium text-right">Action</th>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
+                <th className="py-2.5 pr-3 font-medium">Opportunity</th>
+                <th className="py-2.5 pr-3 font-medium">Impact</th>
+                <th className="py-2.5 pr-3 font-medium">Why It Matters</th>
+                <th className="py-2.5 pr-3 font-medium text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {top.map((o) => (
-                <tr key={o.label} className="border-b border-border/60 last:border-0">
-                  <td className="py-3 pr-3 font-medium">{o.label}</td>
-                  <td className="py-3 pr-3 font-semibold text-rose-500 tabular-nums">{fmtCurrency(o.impact)}</td>
-                  <td className="py-3 pr-3 text-muted-foreground">{o.why}</td>
-                  <td className="py-3 pr-3 text-right">
-                    <Button asChild size="sm" variant="outline">
+                <tr key={o.label} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
+                  <td className="py-3.5 pr-3 font-medium text-slate-900">{o.label}</td>
+                  <td className="py-3.5 pr-3 font-bold text-rose-500 tabular-nums">{fmtCurrency(o.impact)}</td>
+                  <td className="py-3.5 pr-3 text-slate-600">{o.why}</td>
+                  <td className="py-3.5 pr-3 text-right">
+                    <Button asChild size="sm" variant="outline" className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50">
                       <Link to={o.href}>View Details</Link>
                     </Button>
                   </td>
@@ -98,6 +105,6 @@ export function TopOpportunities({ totals, speed }: { totals: Totals; speed: Spe
           </table>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
