@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { eachDateISO, rangeToISO, priorRange, type DateRange } from "@/lib/metrics";
+import { totalLeads as canonicalTotalLeads, qualityRate as canonicalQualityRate, type LeadCounts } from "@/lib/leadModel";
 
 export type DailyAgg = {
   date: string;
@@ -19,6 +20,11 @@ export type Totals = {
   appointments: number;
   revenue: number;
   totalLeads: number;
+  /** Canonical lead-model fields (parallel tiers — never nested). */
+  good: number;
+  projected: number;
+  bad: number;
+  qualityRate: number;
 };
 
 export type CommandTargets = {
@@ -116,16 +122,30 @@ async function fetchTargets(propertyIds: string[] | null, periodStart: string): 
 }
 
 export function totalsOf(rows: DailyAgg[]): Totals {
-  const t: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0 };
+  let spend = 0, calls = 0, good = 0, bad = 0, projected = 0, verified = 0;
   for (const r of rows) {
-    t.spend += r.cost;
-    t.calls += r.calls;
-    t.qualifiedCalls += r.good_leads;
-    t.appointments += r.projected_sale;
-    t.revenue += r.verified_sale;
-    t.totalLeads += r.good_leads + r.bad_leads + r.projected_sale;
+    spend += r.cost;
+    calls += r.calls;
+    good += r.good_leads;
+    bad += r.bad_leads;
+    projected += r.projected_sale;
+    verified += r.verified_sale;
   }
-  return t;
+  const counts: LeadCounts = { bad, good, projected, verified };
+  return {
+    spend,
+    calls,
+    // Legacy aliases preserved for surfaces still wired to them.
+    qualifiedCalls: good,
+    appointments: projected,
+    revenue: verified,
+    // Canonical model — all lead totals/quality flow through leadModel.ts.
+    good,
+    projected,
+    bad,
+    totalLeads: canonicalTotalLeads(counts),
+    qualityRate: canonicalQualityRate(counts),
+  };
 }
 
 export function useCommandData(
