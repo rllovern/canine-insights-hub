@@ -74,6 +74,19 @@ async function ghlFetch(method: string, path: string, token: string, body?: Json
       attempt++;
       continue;
     }
+    // Transient gateway errors from GHL: 5xx, or 401/408 bodies that say "Command timed out".
+    // GHL occasionally returns a 401 envelope for upstream timeouts on /users — retry instead
+    // of treating it as an auth failure.
+    const transient =
+      res.status >= 500 ||
+      res.status === 408 ||
+      ((res.status === 401 || res.status === 403) && /timed out|timeout/i.test(text));
+    if (transient && attempt < MAX_RETRIES) {
+      const waitMs = BACKOFF_BASE_MS * Math.pow(2, attempt);
+      await new Promise((r) => setTimeout(r, waitMs));
+      attempt++;
+      continue;
+    }
     if (!res.ok) throw new GhlError(path, res.status, text);
     try { return JSON.parse(text) as Json; } catch { return {}; }
   }
