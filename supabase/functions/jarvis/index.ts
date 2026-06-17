@@ -1116,34 +1116,38 @@ function buildTools(ctx: Ctx) {
         const id = resolveProperty(ctx, i.property_id, "get_google_ads_performance");
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
-        let q = ctx.supabase.from("daily_metrics")
-          .select("date,ad_source,campaign,cost,impressions,clicks,record_count,leads,good_leads,projected_sale,verified_sale")
+        // Canonical Lead Model: read v_lead_counts_daily for total_leads / quality.
+        let q = ctx.supabase.from("v_lead_counts_daily")
+          .select("date,ad_source,campaign,cost,impressions,clicks,records,bad_leads,good_leads,projected_sales,verified_sales,total_leads,quality_numerator")
           .eq("property_id", id).gte("date", from).lte("date", to);
         if (i.ad_source) q = q.eq("ad_source", i.ad_source);
         if (i.campaign) q = q.eq("campaign", i.campaign);
         const { data, error } = await q;
         if (error) throw new Error(error.message);
         const rows = data ?? [];
-        const tot = { cost: 0, impressions: 0, clicks: 0, leads: 0, good_leads: 0, projected_sale: 0, verified_sale: 0 };
+        const tot = { cost: 0, impressions: 0, clicks: 0, leads: 0, bad_leads: 0, good_leads: 0, projected_sale: 0, verified_sale: 0, quality_num: 0 };
         const byCampaign = new Map<string, { campaign: string; cost: number; clicks: number; impressions: number; leads: number }>();
         const byDate = new Map<string, { date: string; cost: number; clicks: number; leads: number }>();
         for (const r of rows) {
           tot.cost += Number(r.cost ?? 0); tot.impressions += Number(r.impressions ?? 0);
-          tot.clicks += Number(r.clicks ?? 0); tot.leads += Number(r.leads ?? 0);
-          tot.good_leads += Number(r.good_leads ?? 0); tot.projected_sale += Number(r.projected_sale ?? 0); tot.verified_sale += Number(r.verified_sale ?? 0);
+          tot.clicks += Number(r.clicks ?? 0); tot.leads += Number(r.total_leads ?? 0);
+          tot.bad_leads += Number(r.bad_leads ?? 0);
+          tot.good_leads += Number(r.good_leads ?? 0); tot.projected_sale += Number(r.projected_sales ?? 0); tot.verified_sale += Number(r.verified_sales ?? 0);
+          tot.quality_num += Number(r.quality_numerator ?? 0);
           const ck = r.campaign || "(unknown)";
           const c = byCampaign.get(ck) ?? { campaign: ck, cost: 0, clicks: 0, impressions: 0, leads: 0 };
           c.cost += Number(r.cost ?? 0); c.clicks += Number(r.clicks ?? 0);
-          c.impressions += Number(r.impressions ?? 0); c.leads += Number(r.leads ?? 0);
+          c.impressions += Number(r.impressions ?? 0); c.leads += Number(r.total_leads ?? 0);
           byCampaign.set(ck, c);
           const d = byDate.get(r.date) ?? { date: r.date, cost: 0, clicks: 0, leads: 0 };
-          d.cost += Number(r.cost ?? 0); d.clicks += Number(r.clicks ?? 0); d.leads += Number(r.leads ?? 0);
+          d.cost += Number(r.cost ?? 0); d.clicks += Number(r.clicks ?? 0); d.leads += Number(r.total_leads ?? 0);
           byDate.set(r.date, d);
         }
         return {
           property_id: id, from, to,
           totals: {
             ...tot,
+            quality_rate: tot.leads > 0 ? tot.quality_num / tot.leads : 0,
             ctr: tot.impressions > 0 ? tot.clicks / tot.impressions : 0,
             cpc: tot.clicks > 0 ? tot.cost / tot.clicks : 0,
             cpl: tot.leads > 0 ? tot.cost / tot.leads : 0,
@@ -1153,7 +1157,7 @@ function buildTools(ctx: Ctx) {
             .map(c => ({ ...c, cpl: c.leads > 0 ? c.cost / c.leads : 0, ctr: c.impressions > 0 ? c.clicks / c.impressions : 0 }))
             .sort((a, b) => b.cost - a.cost),
           daily: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
-          sources_used: ["daily_metrics"],
+          sources_used: ["v_lead_counts_daily"],
           caveats: rows.length === 0 ? ["No metrics rows in window"] : [],
         };
       }),
