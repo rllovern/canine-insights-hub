@@ -1,4 +1,4 @@
-import { Megaphone, PhoneCall, Award, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Info, Minus } from "lucide-react";
+import { Megaphone, PhoneCall, Award, ArrowRight, ArrowUp, ArrowDown, Info, Minus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtCurrency, fmtNumber, safeDelta } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
@@ -45,17 +45,15 @@ export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: {
           <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.funnel}</TooltipContent>
         </Tooltip>
       </div>
-      <p className="text-[11px] text-slate-500 mt-0.5">Ad Spend → Calls → Qualified (good + AI-projected) → Verified (pending)</p>
+      <p className="text-[11px] text-slate-500 mt-0.5">Ad Spend → Calls → Qualified (good + AI-projected)</p>
 
-      {/* Single horizontal row: all four stages on one baseline. */}
-      <div className="mt-3 flex items-start gap-1">
-        <Stage s={{ label: "Ad Spend",       src: "Google Ads", value: fmtCurrency(t.spend), Icon: Megaphone, sub: "100%",                                           iconBg: "bg-blue-100",   iconColor: "text-blue-600",   pending: false }} />
-        <ArrowRight className="size-3 text-slate-300 mt-5 shrink-0" />
-        <Stage s={{ label: "Calls Received", src: "CTM",        value: fmtNumber(t.calls),   Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—",     iconBg: "bg-indigo-100", iconColor: "text-indigo-600", pending: false }} />
-        <ArrowRight className="size-3 text-slate-300 mt-5 shrink-0" />
-        <QualifiedStage good={t.good} projected={t.projected} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
-        <ArrowRight className="size-3 text-slate-300 mt-5 shrink-0" />
-        <Stage s={{ label: "Verified Sale", src: "GHL Won (pending)", value: "—", Icon: CheckCircle2, sub: "pending", iconBg: "bg-slate-100", iconColor: "text-slate-400", pending: true }} />
+      {/* Single horizontal row: three stages on one baseline, long connector arrows. */}
+      <div className="mt-3 flex items-start gap-2">
+        <Stage s={{ label: "Ad Spend",       src: "Google Ads", value: fmtCurrency(t.spend), Icon: Megaphone, sub: "100%",                                           iconBg: "bg-blue-100",   iconColor: "text-blue-600" }} />
+        <Connector />
+        <Stage s={{ label: "Calls Received", src: "CTM",        value: fmtNumber(t.calls),   Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—",     iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
+        <Connector />
+        <QualifiedStage good={t.good} projected={t.projected} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
@@ -70,35 +68,64 @@ export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: {
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
           pass={tier === "green"}
         />
-        <div>
-          <div className="text-[10.5px] text-slate-500 mb-0.5">Lead Mix</div>
-          <div className="text-base font-bold tabular-nums text-slate-900">{t.totalLeads} <span className="text-[10.5px] font-normal text-slate-500">total</span></div>
-          <div className="text-[10.5px] text-slate-500 tabular-nums">
-            {t.bad} bad · <span className="text-purple-600 font-medium">{t.good} good</span> · <span className="text-amber-600 font-medium">{t.projected} AI-proj</span>
-          </div>
-          <div className="text-[9.5px] text-slate-400 mt-0.5">Winchester benchmark {(WINCHESTER_BENCHMARK * 100).toFixed(0)}%</div>
-        </div>
+        <LeadMix bad={t.bad} good={t.good} projected={t.projected} total={t.totalLeads} />
       </div>
     </div>
   );
 }
 
-function QualifiedStage({ good, projected, qualityRatePct, hasBase, leadsConvPct }: { good: number; projected: number; qualityRatePct: number; hasBase: boolean; leadsConvPct: number }) {
-  const total = good + projected;
+/** Long thin connector arrow between funnel stages, matching the reference layout. */
+function Connector() {
+  return (
+    <div className="flex items-center justify-center flex-1 min-w-[40px] mt-5">
+      <div className="h-px flex-1 bg-slate-200" />
+      <ArrowRight className="size-3.5 text-slate-300 shrink-0 -ml-0.5" />
+    </div>
+  );
+}
+
+/** Lead Mix tile — total only by default, full breakdown on hover. */
+function LeadMix({ bad, good, projected, total }: { bad: number; good: number; projected: number; total: number }) {
+  const moreGood = good > bad;
+  const moreBad = bad > good;
+  const numCls = moreGood ? "text-emerald-600" : moreBad ? "text-rose-600" : "text-slate-900";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex flex-col items-center text-center flex-1 rounded-md p-0.5">
+        <div className="cursor-help">
+          <div className="text-[10.5px] text-slate-500 mb-0.5">Lead Mix</div>
+          <div className={cn("text-base font-bold tabular-nums", numCls)}>
+            {total} <span className="text-[10.5px] font-normal text-slate-500">total</span>
+          </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="text-xs leading-snug">
+        <div className="font-semibold mb-1">Lead mix · {total} total</div>
+        <div className="tabular-nums">
+          <span className="text-rose-600">{bad} bad</span> ·{" "}
+          <span className="text-purple-600">{good} good</span> ·{" "}
+          <span className="text-amber-600">{projected} AI-projected</span>
+        </div>
+        <div className="text-[10px] text-slate-400 mt-1">Winchester benchmark {(WINCHESTER_BENCHMARK * 100).toFixed(0)}%</div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function QualifiedStage({ good, projected, bad, qualityRatePct, hasBase, leadsConvPct }: { good: number; projected: number; bad: number; qualityRatePct: number; hasBase: boolean; leadsConvPct: number }) {
+  const total = good + projected;
+  const moreGood = good > bad;
+  const moreBad = bad > good;
+  const numCls = moreGood ? "text-emerald-600" : moreBad ? "text-rose-600" : "text-slate-900";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex flex-col items-center text-center flex-1 rounded-md p-0.5 cursor-help">
           <div className="flex size-9 items-center justify-center rounded-full bg-emerald-100">
             <Award className="size-4 text-emerald-600" />
           </div>
           <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Qualified Leads</div>
-          <div className="text-[13px] font-bold tabular-nums mt-0.5 leading-tight text-slate-900">{fmtNumber(total)}</div>
-          <div className="text-[10px] tabular-nums leading-tight">
-            <span className="text-purple-600 font-medium">{good} good</span>
-            <span className="text-slate-400"> · </span>
-            <span className="text-amber-600 font-medium">{projected} AI-projected</span>
-          </div>
+          <div className={cn("text-[13px] font-bold tabular-nums mt-0.5 leading-tight", numCls)}>{fmtNumber(total)}</div>
           <div className="text-[10px] text-slate-500 tabular-nums mt-0.5">
             {hasBase ? `${qualityRatePct.toFixed(0)}% quality` : `${leadsConvPct.toFixed(0)}% of calls`}
           </div>
@@ -106,6 +133,11 @@ function QualifiedStage({ good, projected, qualityRatePct, hasBase, leadsConvPct
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-snug">
         <div className="font-semibold">Qualified leads (good + AI-projected)</div>
+        <div className="mt-1 tabular-nums">
+          <span className="text-purple-600 font-medium">{good} good</span>
+          <span className="text-slate-400"> · </span>
+          <span className="text-amber-600 font-medium">{projected} AI-projected</span>
+        </div>
         <div className="text-slate-400 text-[10px] mt-0.5">Source: CTM scored + CTM transcript projection</div>
         <div className="mt-1">Good and AI-projected are parallel quality outcomes, not a sequence. Both count toward quality rate.</div>
       </TooltipContent>
@@ -113,7 +145,7 @@ function QualifiedStage({ good, projected, qualityRatePct, hasBase, leadsConvPct
   );
 }
 
-function Stage({ s }: { s: { label: string; src: string; value: string; Icon: any; sub: string; iconBg: string; iconColor: string; pending: boolean } }) {
+function Stage({ s }: { s: { label: string; src: string; value: string; Icon: any; sub: string; iconBg: string; iconColor: string; pending?: boolean } }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -144,24 +176,28 @@ function SubKpi({ label, value, delta, invert, tip, target, targetText, pass }: 
   const judged = target != null && value !== "—" && pass != null;
   return (
     <div>
-      <div className="flex items-center gap-1 text-[10.5px] text-slate-500 mb-0.5">
-        <span>{label}</span>
-        {tip && (
-          <Tooltip>
-            <TooltipTrigger asChild><button type="button"><Info className="size-3 text-slate-400" /></button></TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs leading-snug">{tip}</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <div className={cn("text-base font-bold tabular-nums", judged ? (pass ? "text-emerald-600" : "text-rose-600") : "text-slate-900")}>{value}</div>
-        {judged && (
-          <span className={cn("text-[10.5px] font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
-            · target {targetText} {pass ? "✓" : "✕"}
-          </span>
-        )}
-        {value !== "—" && <DeltaBadge d={delta} invert={invert} />}
-      </div>
+      <div className="text-[10.5px] text-slate-500 mb-0.5">{label}</div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={cn("text-base font-bold tabular-nums cursor-help inline-block", judged ? (pass ? "text-emerald-600" : "text-rose-600") : "text-slate-900")}>
+            {value}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs leading-snug">
+          {tip && <div className="mb-1.5 max-w-xs">{tip}</div>}
+          {judged && (
+            <div className={cn("font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
+              Target {targetText} {pass ? "✓" : "✕"}
+            </div>
+          )}
+          {value !== "—" && (
+            <div className="mt-1 flex items-center gap-1">
+              <span className="text-slate-400">vs prior period:</span>
+              <DeltaBadge d={delta} invert={invert} />
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
