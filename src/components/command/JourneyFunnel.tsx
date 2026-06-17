@@ -2,7 +2,8 @@ import { Megaphone, PhoneCall, Award, Calendar, CheckCircle2, ArrowRight, ArrowU
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtCurrency, fmtNumber, safeDelta } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
-import type { Totals } from "./useCommandData";
+import type { CommandTargets, Totals } from "./useCommandData";
+import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 import { TIPS } from "./tooltips";
 
 function pct(num: number, den: number) {
@@ -12,7 +13,7 @@ function pct(num: number, den: number) {
 
 const EMPTY_TOTALS: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0 };
 
-export function JourneyFunnel({ t, prior }: { t?: Totals; prior?: Totals }) {
+export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: { t?: Totals; prior?: Totals; targets?: CommandTargets }) {
   t = t ?? EMPTY_TOTALS;
   prior = prior ?? EMPTY_TOTALS;
   const stages = [
@@ -31,6 +32,8 @@ export function JourneyFunnel({ t, prior }: { t?: Totals; prior?: Totals }) {
   const priorQualRate = prior.calls ? (prior.qualifiedCalls / prior.calls) * 100 : 0;
   const apptRate = t.qualifiedCalls ? (t.appointments / t.qualifiedCalls) * 100 : 0;
   const priorApptRate = prior.qualifiedCalls ? (prior.appointments / prior.qualifiedCalls) * 100 : 0;
+  const cpl = t.calls ? t.spend / t.calls : 0;
+  const priorCpl = prior.calls ? prior.spend / prior.calls : 0;
 
   return (
     <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
@@ -71,10 +74,10 @@ export function JourneyFunnel({ t, prior }: { t?: Totals; prior?: Totals }) {
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
-        <SubKpi tip={TIPS.cpQualified} label="Cost / Qualified Call"   value={cpQualified ? fmtCurrency(cpQualified) : "—"} delta={safeDelta(cpQualified, priorCpQ)} invert />
-        <SubKpi tip={TIPS.cpAppt}      label="Cost / Projected Sale"   value={cpAppt ? fmtCurrency(cpAppt) : "—"}           delta={safeDelta(cpAppt, priorCpA)} invert />
-        <SubKpi                       label="Qualified Call Rate"     value={t.calls ? `${qualRate.toFixed(1)}%` : "—"}     delta={safeDelta(qualRate, priorQualRate)} />
-        <SubKpi                       label="Projection Rate"          value={t.qualifiedCalls ? `${apptRate.toFixed(1)}%` : "—"} delta={safeDelta(apptRate, priorApptRate)} />
+        <SubKpi tip={TIPS.cpl}         label="CPL"                   value={cpl ? fmtCurrency(cpl) : "—"}                       delta={safeDelta(cpl, priorCpl)} target={targets.cpl} targetText={fmtCurrency(targets.cpl)} pass={cpl > 0 && cpl <= targets.cpl} invert />
+        <SubKpi tip={TIPS.cpQualified} label="CPGL"                  value={cpQualified ? fmtCurrency(cpQualified) : "—"}       delta={safeDelta(cpQualified, priorCpQ)} target={targets.cpgl} targetText={fmtCurrency(targets.cpgl)} pass={cpQualified > 0 && cpQualified <= targets.cpgl} invert />
+        <SubKpi tip={TIPS.cpAppt}      label="Cost / Projected Sale" value={cpAppt ? fmtCurrency(cpAppt) : "—"}                 delta={safeDelta(cpAppt, priorCpA)} target={targets.costPerProjected} targetText={fmtCurrency(targets.costPerProjected)} pass={cpAppt > 0 && cpAppt <= targets.costPerProjected} invert />
+        <SubKpi                       label="Qualified Call Rate"   value={t.calls ? `${qualRate.toFixed(1)}%` : "—"}           delta={safeDelta(qualRate, priorQualRate)} target={targets.qualRate * 100} targetText={`${(targets.qualRate * 100).toFixed(0)}%`} pass={t.calls > 0 && qualRate >= targets.qualRate * 100} />
       </div>
     </div>
   );
@@ -84,7 +87,9 @@ function SubKpi({ label, value, delta, invert, tip }: {
   label: string; value: string;
   delta: import("@/lib/metrics").SafeDelta;
   invert?: boolean; tip?: string;
+  target?: number; targetText?: string; pass?: boolean;
 }) {
+  const judged = target != null && value !== "—" && pass != null;
   return (
     <div>
       <div className="flex items-center gap-1 text-[10.5px] text-slate-500 mb-0.5">
@@ -96,8 +101,13 @@ function SubKpi({ label, value, delta, invert, tip }: {
           </Tooltip>
         )}
       </div>
-      <div className="flex items-center gap-1.5">
-        <div className="text-base font-bold tabular-nums text-slate-900">{value}</div>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <div className={cn("text-base font-bold tabular-nums", judged ? (pass ? "text-emerald-600" : "text-rose-600") : "text-slate-900")}>{value}</div>
+        {judged && (
+          <span className={cn("text-[10.5px] font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
+            · target {targetText} {pass ? "✓" : "✕"}
+          </span>
+        )}
         {value !== "—" && <DeltaBadge d={delta} invert={invert} />}
       </div>
     </div>
