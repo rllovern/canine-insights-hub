@@ -1,60 +1,71 @@
-## CR responses (pre-build checks)
+# Executive Overview — Command page rebuild
 
-**CR-1 (dark-mode tokens) — confirmed: must update both modes.**
-Current `src/index.css` `.dark` block has `--sidebar-background: 222 55% 10%` (navy) and accent `222 45% 18%` — that's the old palette, not the true-dark target. Both `:root` and `.dark` sidebar token blocks will be repointed to the same values so the sidebar renders identically in either theme.
+Replace the current `/command` page with the PerformX-style Executive Overview from the mockup, wired to real data wherever it exists. Same data scope as today (uses `useScope` + `useDateRange`).
 
-**CR-3 (GHL pipe) — indicator is telling the truth.**
-`sync_runs` for `source='ghl'` shows the scheduled job has failed on every run for the last 72+ hours, every 6 hours, with `error_message: "Edge Function returned a non-2xx status code"`. `is_connected` is still true (token present) but the cron sync is broken. So:
-- The Data Sources rail showing GHL = BLOCKED is correct.
-- Lead Performance numbers you validated are reading data already in the DB; nothing new has landed for 3 days.
-- This is a real outage in the `sync-ghl` edge function, separate from the styling task. **Recommend a follow-up turn to inspect edge-function logs and fix the 5xx.** Styling pass does not touch this.
+## Sections (top → bottom)
 
-**CR-4 (typeface) — confirmed Inter.**
-`src/index.css` body rule: `font-family: "Inter", ui-sans-serif, system-ui, …`. The reference's letterforms match Inter (single-story `a`, rounded `g`, geometric digits). No family swap needed — the visible difference is weight, opacity, and row spacing, which this plan fixes.
+1. **Header** — "Executive Overview / Real-time performance across the customer journey", existing date range + compare picker on the right.
 
-## Build plan (unchanged from approval, with CR-1 + CR-2 folded in)
+2. **5 KPI cards with sparklines** (vs prior period delta):
+   - Ad Spend = Σ `daily_metrics.cost`
+   - Calls Received = Σ CTM calls (`ctm_calls` count in window)
+   - Qualified Calls = Σ `daily_metrics.good_leads`
+   - Appointments Set = Σ `daily_metrics.projected_sale`
+   - Revenue Generated = Σ `daily_metrics.verified_sale`
+   Each card: big value, % delta vs comparable prior window, mini area sparkline of daily values.
 
-### Token changes — `src/index.css`
+3. **Customer Journey Funnel** (left, 2/3 width) — 5 stacked icons + values + conversion % between each stage:
+   Ad Spend → Calls → Qualified → Appointments → Revenue.
+   Below: 4 sub-KPIs — Overall Conversion Rate (revenue count / calls), Cost per Qualified Call, Cost per Appointment, Cost per Revenue $.
 
-Repoint sidebar tokens in **both** `:root` and `.dark` to the same true-dark palette:
+4. **Revenue Capture Score** (right, 1/3 width) — donut 0–100:
+   Score = weighted blend of answer-rate, qualified-call rate, and appointment-set rate (clamped 0–100). Show "Estimated Revenue Lost This Week" = (expected revenue at goal − actual revenue), with delta vs prior period. CTA → `/lead-performance`.
 
-```
---sidebar-background: 220 14% 8%;
---sidebar-foreground: 0 0% 100%;
---sidebar-primary:    222 75% 60%;
---sidebar-primary-foreground: 0 0% 100%;
---sidebar-accent:     0 0% 100%;     /* used with opacity utilities */
---sidebar-accent-foreground: 0 0% 100%;
---sidebar-border:     220 10% 16%;
---sidebar-ring:       222 75% 60%;
-```
+5. **Call Handling Performance** (1/3) — from `lead_perf_handling` + CTM:
+   - Answer Rate (CTM answered / total calls) with progress bar + goal 70%
+   - Avg Answer Time (CTM `time_to_answer` mean) + goal <20s
+   - Abandon Rate (CTM abandoned / total) + goal <10%
 
-### `src/components/layout/Sidebar.tsx`
+6. **Missed Call Follow-Up Performance** (1/3) — from `lead_perf_speed`:
+   - Missed Calls count + % of total
+   - Returned <5m, Returned <30m, Never Returned (each a row with %, goal, delta)
+   Where the speed RPC doesn't cover a bucket, show "—" with "data not wired" hint.
 
-- Brand block: revert to `<BrandMark variant="onDark" />`; remove blue "R" tile and "Acquisition Intelligence" subtitle row added last turn. Keep `border-b border-sidebar-border` divider.
-- Rows: `py-2 px-3 gap-2.5 text-[14px] font-medium text-white/75`. Hover `bg-white/[0.04] text-white`. **Active = `bg-white/[0.07] text-white` only — no `font-semibold`, no left bar, no colored stripe** (CR-2).
-- Icons: 16px, `text-white/55`; on hover/active `text-white`.
-- Group labels: `text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45`, `px-3 pt-4 pb-1.5`.
-- Jarvis row: identical row style to other items (no gold tint, no filled pill).
-- Admin button: same row style; chevron `text-white/45`.
-- Account card: `bg-white/[0.04] border border-white/10`, initials chip `bg-white/10 text-white`, email `text-white text-xs font-medium`, role `text-white/50 text-[10px] uppercase tracking-wider`, sign-out `text-white/55 hover:text-white hover:bg-white/[0.06]`.
+7. **Call Quality (AI Score)** (1/3) — donut of average score + legend (Excellent/Good/Average/Poor distribution).
+   Data source: `ctm_calls.score` if populated; otherwise render the card with "AI scoring not yet connected" empty state.
 
-### `src/components/layout/SourceHealthPanel.tsx`
+8. **Top Opportunities to Improve** — derived from the section severities above. Each row: Opportunity, Impact ($ recoverable estimate), Why It Matters, "View Details" link to the relevant page. Generate up to 4 rows by sorting handling/speed/quality gaps vs goal.
 
-- Section label uses the new group-label style.
-- Row: keep dot, label `text-white/80 text-[13px]`, status text right-aligned `text-[10px] font-semibold uppercase tracking-[0.14em]` in `text-success` / `text-destructive` / `text-white/40`.
-- No logic changes.
+## Data plumbing
 
-## Out of scope (unchanged)
+New hooks/queries in `src/pages/Command.tsx` (or new `src/components/command/*`):
+- Existing: `daily_metrics` query already returns most KPIs.
+- Add `ctm_calls` aggregate query (count, answered, abandoned, avg time_to_answer, avg score) over the date+scope.
+- Reuse `lead_perf_speed` / `lead_perf_handling` RPCs (already wired in `src/components/lead-perf/hooks.ts`).
+- Prior-period query: re-run the same selects shifted by window length to compute deltas + sparkline series.
 
-- Logo image / `BrandMark` component internals.
-- Nav hierarchy, labels, order, routes.
-- Any non-sidebar surface.
-- GHL sync outage — flagged for a separate turn.
-- Data Sources data/RPC logic.
+## Files
 
-## Files touched
+- Rewrite `src/pages/Command.tsx` — new layout.
+- Add `src/components/command/`:
+  - `KpiSparkCard.tsx` (KPI + delta + sparkline using Recharts area)
+  - `JourneyFunnel.tsx` (5-stage row with conversion % between stages + cost sub-KPIs)
+  - `RevenueCaptureScore.tsx` (donut + lost-revenue panel)
+  - `CallHandlingCard.tsx`, `MissedCallFollowUpCard.tsx`, `CallQualityCard.tsx`
+  - `TopOpportunitiesTable.tsx`
+  - `useCommandData.ts` — single hook returning current+prior aggregates, sparkline series, CTM rollup.
 
-- `src/index.css` — `:root` and `.dark` sidebar token blocks.
-- `src/components/layout/Sidebar.tsx`
-- `src/components/layout/SourceHealthPanel.tsx`
+## Empty / unavailable data
+
+- CTM AI Score, Missed-Call Follow-Up buckets that don't exist yet → render the card with values dashed and a one-line "Data source not connected" note. No fake numbers.
+- Targets-driven goals pulled from `property_targets` (already loaded); fall back to sensible defaults (Answer 70%, <20s, Abandon <10%, <5m returned 60%, <30m 80%) shown as "Goal" labels.
+
+## Out of scope (this round)
+
+- Wiring AI call-quality scores or missed-call return-time pipelines (data plumbing for those is a separate task).
+- The current "Error feed" placeholder card is removed; nothing else on the site links to it.
+
+## Verification
+
+- Typecheck/build is run automatically after the edit.
+- Visual check via preview at `/command` for agency scope and one property scope.

@@ -1,0 +1,138 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { eachDateISO, rangeToISO, priorRange, type DateRange } from "@/lib/metrics";
+
+export type DailyAgg = {
+  date: string;
+  cost: number;
+  good_leads: number;
+  bad_leads: number;
+  projected_sale: number;
+  verified_sale: number;
+  calls: number;
+};
+
+export type Totals = {
+  spend: number;
+  calls: number;
+  qualifiedCalls: number;
+  appointments: number;
+  revenue: number;
+  totalLeads: number;
+};
+
+function zeroDay(date: string): DailyAgg {
+  return { date, cost: 0, good_leads: 0, bad_leads: 0, projected_sale: 0, verified_sale: 0, calls: 0 };
+}
+
+async function fetchWindow(
+  propertyIds: string[] | null,
+  from: string,
+  to: string,
+): Promise<DailyAgg[]> {
+  // daily_metrics: cost + leads + sales
+  let dm = supabase
+    .from("daily_metrics")
+    .select("date, cost, good_leads, bad_leads, projected_sale, verified_sale")
+    .gte("date", from)
+    .lte("date", to);
+  if (propertyIds) dm = dm.in("property_id", propertyIds);
+  const dmRes = await dm;
+  if (dmRes.error) throw dmRes.error;
+
+  // ctm_calls: counts per day
+  let cc = supabase
+    .from("ctm_calls")
+    .select("called_at, property_id")
+    .gte("called_at", `${from}T00:00:00.000Z`)
+    .lte("called_at", `${to}T23:59:59.999Z`);
+  if (propertyIds) cc = cc.in("property_id", propertyIds);
+  const ccRes = await cc;
+  if (ccRes.error) throw ccRes.error;
+
+  const map = new Map<string, DailyAgg>();
+  for (const d of eachDateISO(new Date(from), new Date(to))) map.set(d, zeroDay(d));
+  for (const r of (dmRes.data ?? []) as any[]) {
+    const day = map.get(r.date) ?? zeroDay(r.date);
+    day.cost += Number(r.cost ?? 0);
+    day.good_leads += Number(r.good_leads ?? 0);
+    day.bad_leads += Number(r.bad_leads ?? 0);
+    day.projected_sale += Number(r.projected_sale ?? 0);
+    day.verified_sale += Number(r.verified_sale ?? 0);
+    map.set(r.date, day);
+  }
+  for (const r of (ccRes.data ?? []) as any[]) {
+    const date = (r.called_at as string).slice(0, 10);
+    const day = map.get(date) ?? zeroDay(date);
+    day.calls += 1;
+    map.set(date, day);
+  }
+  return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function totalsOf(rows: DailyAgg[]): Totals {
+  const t: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0 };
+  for (const r of rows) {
+    t.spend += r.cost;
+    t.calls += r.calls;
+    t.qualifiedCalls += r.good_leads;
+    t.appointments += r.projected_sale;
+    t.revenue += r.verified_sale;
+    t.totalLeads += r.good_leads + r.bad_leads + r.projected_sale;
+  }
+  return t;
+}
+
+export function useCommandData(
+  propertyIds: string[] | null,
+  range: DateRange,
+  compareRange: DateRange | null,
+) {
+  const iso = rangeToISO(range);
+  const cmpIso = compareRange ? rangeToISO(compareRange) : rangeToISO(priorRange(range));
+
+  const key = propertyIds?.join(",") ?? "all";
+
+  const current = useQuery({
+    queryKey: ["command-window", key, iso.from, iso.to],
+    queryFn: () => fetchWindow(propertyIds, iso.from, iso.to),
+  });
+  const prior = useQuery({
+    queryKey: ["command-window", key, cmpIso.from, cmpIso.to],
+    queryFn: () => fetchWindow(propertyIds, cmpIso.from, cmpIso.to),
+  });
+
+  // CTM call-score distribution for AI Quality card (we have buckets but they
+  // are lead-quality buckets, not AI Excellent/Good/Average/Poor — surface
+  // raw bucket counts and let the card decide what to render).
+  const buckets = useQuery({
+    queryKey: ["command-buckets", key, iso.from, iso.to],
+    queryFn: async () => {
+      let q = supabase
+        .from("ctm_calls")
+        .select("call_score_bucket, call_score_label")
+        .gte("called_at", `${iso.from}T00:00:00.000Z`)
+        .lte("called_at", `${iso.to}T23:59:59.999Z`);
+      if (propertyIds) q = q.in("property_id", propertyIds);
+      const { data, error } = await q;
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      for (const row of (data ?? []) as any[]) {
+        const k = (row.call_score_bucket as string | null) ?? "unscored";
+        counts[k] = (counts[k] ?? 0) + 1;
+      }
+      return counts;
+    },
+  });
+
+  return {
+    isLoading: current.isLoading || prior.isLoading,
+    currentDaily: current.data ?? [],
+    priorDaily: prior.data ?? [],
+    current: totalsOf(current.data ?? []),
+    prior: totalsOf(prior.data ?? []),
+    buckets: buckets.data ?? {},
+    bucketsLoading: buckets.isLoading,
+    compareRangeIso: cmpIso,
+  };
+}
