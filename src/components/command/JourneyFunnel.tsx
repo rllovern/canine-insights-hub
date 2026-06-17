@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { fmtCurrency, fmtNumber, pctChange } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 import type { Totals } from "./useCommandData";
+import { TIPS } from "./tooltips";
 
 function pct(num: number, den: number) {
   if (!den) return "—";
@@ -32,56 +33,60 @@ export function JourneyFunnel({ t, prior }: { t?: Totals; prior?: Totals }) {
   const priorCpR = prior.revenue ? prior.spend / prior.revenue : 0;
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-6 h-full">
+    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-4 h-full flex flex-col">
       <div className="flex items-center gap-1.5">
-        <h3 className="text-base font-semibold text-slate-900">Customer Journey Funnel</h3>
+        <h3 className="text-sm font-semibold text-slate-900">Customer Journey Funnel</h3>
         <Tooltip>
-          <TooltipTrigger>
-            <Info className="size-3.5 text-slate-400" />
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs text-xs">
-            From ad spend → calls → qualified leads → appointments → verified revenue.
-          </TooltipContent>
+          <TooltipTrigger asChild><button type="button"><Info className="size-3.5 text-slate-400" /></button></TooltipTrigger>
+          <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.funnel}</TooltipContent>
         </Tooltip>
       </div>
-      <p className="text-xs text-slate-500 mt-0.5">From ad spend to revenue</p>
+      <p className="text-[11px] text-slate-500 mt-0.5">From ad spend to revenue</p>
 
-      <div className="mt-7 flex items-start justify-between gap-2 px-2">
+      <div className="mt-3 flex items-start justify-between gap-1">
         {stages.map((s, i) => (
-          <div key={s.label} className="flex items-start gap-2 flex-1">
+          <div key={s.label} className="flex items-start gap-1 flex-1">
             <div className="flex flex-col items-center text-center flex-1">
-              <div className={cn("flex size-16 items-center justify-center rounded-full", s.iconBg)}>
-                <s.Icon className={cn("size-7", s.iconColor)} />
+              <div className={cn("flex size-11 items-center justify-center rounded-full", s.iconBg)}>
+                <s.Icon className={cn("size-5", s.iconColor)} />
               </div>
-              <div className="mt-3 text-xs font-medium text-slate-600">{s.label}</div>
-              <div className="text-base font-bold tabular-nums text-slate-900 mt-0.5">{s.value}</div>
-              <div className="text-[11px] text-slate-500 tabular-nums">{s.conv}</div>
+              <div className="mt-1.5 text-[10.5px] font-medium text-slate-600 leading-tight">{s.label}</div>
+              <div className="text-sm font-bold tabular-nums text-slate-900 mt-0.5 leading-tight">{s.value}</div>
+              <div className="text-[10px] text-slate-500 tabular-nums">{s.conv}</div>
             </div>
             {i < stages.length - 1 && (
-              <ArrowRight className="size-4 text-slate-300 mt-6 shrink-0" />
+              <ArrowRight className="size-3.5 text-slate-300 mt-4 shrink-0" />
             )}
           </div>
         ))}
       </div>
 
-      <div className="mt-7 grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-slate-200 pt-5">
-        <SubKpi label="Overall Conversion Rate" value={t.calls ? `${overallConv.toFixed(1)}%` : "—"} delta={pctChange(overallConv, priorConv)} />
-        <SubKpi label="Cost Per Qualified Call" value={cpQualified ? fmtCurrency(cpQualified) : "—"} delta={pctChange(cpQualified, priorCpQ)} invert />
-        <SubKpi label="Cost Per Appointment" value={cpAppt ? fmtCurrency(cpAppt) : "—"} delta={pctChange(cpAppt, priorCpA)} invert />
-        <SubKpi label="Cost Per Revenue $" value={cpRev ? `$${cpRev.toFixed(2)}` : "—"} delta={pctChange(cpRev, priorCpR)} invert />
+      <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-3">
+        <SubKpi tip={TIPS.overallConv} label="Overall Conversion Rate" value={t.calls ? `${overallConv.toFixed(1)}%` : "—"} delta={pctChange(overallConv, priorConv)} />
+        <SubKpi tip={TIPS.cpQualified} label="Cost Per Qualified Call" value={cpQualified ? fmtCurrency(cpQualified) : "—"} delta={pctChange(cpQualified, priorCpQ)} invert />
+        <SubKpi tip={TIPS.cpAppt} label="Cost Per Appointment" value={cpAppt ? fmtCurrency(cpAppt) : "—"} delta={pctChange(cpAppt, priorCpA)} invert />
+        <SubKpi tip={TIPS.cpRev} label="Cost Per Revenue $" value={cpRev ? `$${cpRev.toFixed(2)}` : "—"} delta={pctChange(cpRev, priorCpR)} invert />
       </div>
     </div>
   );
 }
 
-function SubKpi({ label, value, delta, invert }: { label: string; value: string; delta: number; invert?: boolean }) {
+function SubKpi({ label, value, delta, invert, tip }: { label: string; value: string; delta: number; invert?: boolean; tip?: string }) {
   const positive = invert ? delta < 0 : delta >= 0;
   const show = Number.isFinite(delta) && delta !== 0;
   return (
     <div>
-      <div className="text-[11px] text-slate-500 mb-1">{label}</div>
+      <div className="flex items-center gap-1 text-[10.5px] text-slate-500 mb-0.5">
+        <span>{label}</span>
+        {tip && (
+          <Tooltip>
+            <TooltipTrigger asChild><button type="button"><Info className="size-3 text-slate-400" /></button></TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs leading-snug">{tip}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
       <div className="flex items-center gap-1.5">
-        <div className="text-xl font-bold tabular-nums text-slate-900">{value}</div>
+        <div className="text-base font-bold tabular-nums text-slate-900">{value}</div>
         {show && value !== "—" && (
           <span className={cn("inline-flex items-center text-[11px] font-semibold", positive ? "text-emerald-600" : "text-rose-600")}>
             {delta >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
