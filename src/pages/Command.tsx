@@ -136,6 +136,7 @@ export default function Command() {
               targets={data.targets}
               mode={mode}
               blendedTotalLeads={data.current.totalLeads}
+              benchmarkLabel={label}
             />
           )}
         </div>

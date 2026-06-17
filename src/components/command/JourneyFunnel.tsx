@@ -137,7 +137,21 @@ function Connector() {
 }
 
 /** Lead Mix tile — total only by default, full breakdown on hover. */
-function LeadMix({ bad, good, projected, total }: { bad: number; good: number; projected: number; total: number }) {
+function LeadMix({
+  bad,
+  good,
+  projected,
+  total,
+  benchmarkLabel,
+  benchmarkRate,
+}: {
+  bad: number;
+  good: number;
+  projected: number;
+  total: number;
+  benchmarkLabel: string;
+  benchmarkRate: string;
+}) {
   const moreGood = good > bad;
   const moreBad = bad > good;
   const numCls = moreGood ? "text-emerald-600" : moreBad ? "text-rose-600" : "text-slate-900";
@@ -158,7 +172,7 @@ function LeadMix({ bad, good, projected, total }: { bad: number; good: number; p
           <span className="text-purple-600">{good} good</span> ·{" "}
           <span className="text-amber-600">{projected} AI-projected</span>
         </div>
-        <div className="text-[10px] text-slate-400 mt-1">Winchester benchmark {(WINCHESTER_BENCHMARK * 100).toFixed(0)}%</div>
+        <div className="text-[10px] text-slate-400 mt-1">{benchmarkLabel} benchmark {benchmarkRate}</div>
       </TooltipContent>
     </Tooltip>
   );
