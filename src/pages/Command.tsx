@@ -54,7 +54,7 @@ export default function Command() {
           <h1 className="text-[20px] font-bold tracking-tight text-slate-900 leading-tight">Executive Overview</h1>
           <p className="text-[11px] text-slate-500 mt-0.5">
             Real-time performance across the customer journey · {label}
-            {isAds && <span className="ml-1 text-amber-700">· Ads view (Google PPC only, est.)</span>}
+            {isAds && <span className="ml-1 text-amber-700">· Ads view (Google PPC only)</span>}
           </p>
         </div>
         <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-[11px] shadow-sm shrink-0">
@@ -83,17 +83,15 @@ export default function Command() {
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
           <KpiSparkCard
-            label={isAds ? "Ad Spend (Google PPC, est. 30-day)" : "Ad Spend"}
+            label={isAds ? "Ad Spend (Google PPC)" : "Ad Spend"}
             value={fmtCurrency(active.spend)}
             current={active.spend} prior={activePrior.spend}
             series={series("cost")}
             compareLabel={cmpLabel}
-            tip={isAds ? TIPS.adSpendEst : TIPS.spend}
+            tip={isAds ? TIPS.adSpend : TIPS.spend}
             invertDelta
             formatValue={fmtCurrency}
             sourceTable={isAds ? "daily_metrics.cost where ad_source = 'Google PPC'" : "daily_metrics.cost"}
-            estimated={isAds}
-            methodNote={isAds ? data.adsCurrent.spendMethod : undefined}
           />
           <KpiSparkCard
             label={isAds ? "PPC Records" : "Records"}

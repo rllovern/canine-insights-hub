@@ -1,32 +1,41 @@
-# Funnel Top-Stage Fix — Records (calls + forms)
 
-The top funnel stage currently sums raw rows from `ctm_calls` and labels them "Calls Received". That count omits forms entirely on some scopes, and on Winchester it lands at 304 because elsewhere we've been folding No Entry on top of the call count. The canonical source for the superset is `public.v_lead_counts_daily.records` — and No Entry / Spam / Bad / Good / AI-projected are slices *inside* Records, never additions.
+# Ads mode: use actual PPC spend over the active date range
 
-Quality math, Total Leads, Lead Mix, and the AI-projected tier are correct and will not be touched.
+The current Ads view ignores the date picker for spend and shows a fabricated "estimated 30-day" number. We have real daily PPC spend in `daily_metrics`, so the toggle should use it directly — same date range as every other card.
 
 ## Changes
 
-### 1. `src/components/command/useCommandData.ts`
-- In `fetchWindow`, stop counting `ctm_calls` rows for the funnel's top stage. Pull `records` per day from `v_lead_counts_daily` instead (same scope filter — `property_id in propertyIds`, `date` between from/to).
-- Sum `records` into `DailyAgg.calls` so the rest of the surface keeps working without a rename. (Field name stays `calls` internally to minimize blast radius; it now means "Records = calls + forms".)
-- Leave `good_leads`, `bad_leads`, `projected_sale`, `verified_sale` exactly as they are — those continue to come from `daily_metrics` and feed the unchanged quality / total-leads / lead-mix math.
-- `ctm_calls` query stays only if another surface needs it; if it's only used here, drop it. (Will confirm during implementation with a quick `rg`.)
+1. **`useCommandData.ts`**
+   - Remove `fetchPpcMtdSpend`, the elapsed-fraction math, and the `spendIsEstimated` / `spendMethod` / `spendMtd` / `elapsedFraction` fields on `adsCurrent` / `adsPrior`.
+   - `adsCurrent` / `adsPrior` become a plain `Totals` built from `fetchPpcWindow(propertyIds, iso.from, iso.to)` — actual PPC spend, records, good, bad, projected, AI-projected for whatever range the top date picker is on. Same for prior.
+   - Drop the third extra query; only the two PPC window queries remain.
 
-### 2. `src/components/command/JourneyFunnel.tsx`
-- Rename the middle stage from `Calls Received` to `Records`, source label `CTM + Forms`.
-- Update the funnel sub-header from `Ad Spend → Calls → Qualified (good + AI-projected)` to `Ad Spend → Records → Qualified (good + AI-projected)`.
-- Update the conversion sub-line currently shown on the Qualified node (`{leadsConvPct}% of calls`) to `{leadsConvPct}% of records`.
-- No structural / styling changes; still one horizontal row, still three stages.
+2. **`Command.tsx`**
+   - Drop the `estimated` and `methodNote` props on the Ad Spend tile (the KpiSparkCard props themselves stay — still useful elsewhere — they just go unused here).
+   - Rename the Ad Spend tile from "Ad Spend (Google PPC, est. 30-day)" to **"Ad Spend (Google PPC)"**.
+   - Page subtitle in Ads mode: drop "est." — just `Ads view (Google PPC only)`.
+
+3. **`JourneyFunnel.tsx`**
+   - Funnel title in Ads mode: `Customer Journey Funnel · Ads (Google PPC)` (unchanged).
+   - Funnel sub-header in Ads mode: `PPC Spend → PPC Records → PPC Qualified (good + AI-projected)` (drop "est. 30-day").
+   - First stage label: `PPC Spend` (drop "(est.)").
+   - First stage source tooltip: `daily_metrics.cost · Google PPC` (drop the MTD/elapsed line).
+   - Bottom-right footnote in Ads mode: drop `Estimates ±15% directional`.
+
+4. **`tooltips.ts`**
+   - Replace `adSpendEst` with `adSpend`: "Google PPC spend over the selected date range. Source: daily_metrics.cost where ad_source = 'Google PPC'."
+   - Update `adCpl` / `adCpgl` tooltips to drop "est. 30-day" wording — they're just `PPC spend ÷ …` over the active window.
+
+5. **No DB changes. No date-range plumbing changes.** The top date toggle already drives `useCommandData(propertyIds, range, …)`; we just stop overriding spend with MTD.
 
 ## Verification
 
-- Winchester scope, current window: top stage should read ≈ 273 (the `records` value in `v_lead_counts_daily` for that scope+window), not 304.
-- Lead Mix still reads 97 total = 43 bad + 43 good + 11 AI-projected.
-- Quality Rate still reads 55.7%.
-- Header text reads `Ad Spend → Records → Qualified (good + AI-projected)`.
+- Set top date range to "This month" with NoVA scope → Ad Spend tile shows the actual MTD PPC spend (not the $16,499 extrapolated value), and Ad CPL / Ad CPGL recompute from that real spend ÷ PPC leads in the same window.
+- Switch date range to "Last 30 days" → all four tiles, funnel sub-KPIs, and Media Efficiency Ratio update together (no card stuck on a different window).
+- `est.` chip and method tooltip are gone from the Ad Spend tile.
+- Business mode is unchanged.
 
-## Out of scope (do not touch)
+## Out of scope
 
-- `qualityRate`, `totalLeads`, `qualityNumerator`, lead-tier definitions in `src/lib/leadModel.ts`.
-- Verified Sale / pending treatments.
-- KPI tiles, PortfolioVerdict gauge, card chrome.
+- No changes to PortfolioVerdict, PerformanceCards, TopOpportunities (already respect the date range).
+- No new RPC, no schema work, no Winchester benchmark changes (the $338 reference line under Ad CPGL stays).
