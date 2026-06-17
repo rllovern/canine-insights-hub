@@ -9,7 +9,11 @@ function pct(num: number, den: number) {
   return `${((num / den) * 100).toFixed(1)}%`;
 }
 
-export function JourneyFunnel({ t, prior }: { t: Totals; prior: Totals }) {
+const EMPTY_TOTALS: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0 };
+
+export function JourneyFunnel({ t, prior }: { t?: Totals; prior?: Totals }) {
+  t = t ?? EMPTY_TOTALS;
+  prior = prior ?? EMPTY_TOTALS;
   const stages = [
     { label: "Ad Spend", value: fmtCurrency(t.spend), Icon: Megaphone, conv: "100%", iconBg: "bg-blue-100", iconColor: "text-blue-600" },
     { label: "Calls Received", value: fmtNumber(t.calls), Icon: PhoneCall, conv: t.spend ? pct(t.calls, t.spend) : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" },
