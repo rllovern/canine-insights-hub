@@ -33,21 +33,6 @@ export const qualityRate = (c: LeadCounts) => {
 export const QUALITY_TARGETS = { green: 0.55, amber: 0.45 } as const;
 
 /**
- * Legacy single-location benchmark. Kept exported for back-compat only.
- * DO NOT introduce new usages — the Location Verdict and any new benchmarks
- * must derive a portfolio average for the active scope + mode (PPC vs
- * blended), never pin to one location and never cross scopes.
- */
-export const WINCHESTER_BENCHMARK = 0.50;
-
-/**
- * Winchester's ads-only cost per quality lead (good + AI-projected).
- * Reference line in Ads mode — NOT a pass/fail threshold. Unit economics
- * don't exist yet, so we never color CPL/CPGL pass/fail in Ads mode.
- */
-export const AD_CPGL_BENCHMARK = 338;
-
-/**
  * Small-sample floor. Below this we suppress the rate entirely (genuinely
  * coin-flip territory). Calibrated for PPC-level lead volume, where even the
  * highest-spend location only produces ~12 quality leads per 30 days.
