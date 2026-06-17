@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { pctChange } from "@/lib/metrics";
 
@@ -12,6 +13,7 @@ export function KpiSparkCard({
   series,
   invertDelta,
   compareLabel,
+  tip,
 }: {
   label: string;
   value: ReactNode;
@@ -20,6 +22,7 @@ export function KpiSparkCard({
   series: { date: string; v: number }[];
   invertDelta?: boolean;
   compareLabel?: string;
+  tip?: string;
 }) {
   const delta = pctChange(current, prior);
   const positive = invertDelta ? delta < 0 : delta >= 0;
@@ -28,10 +31,18 @@ export function KpiSparkCard({
   const showDelta = prior > 0 || current > 0;
   return (
     <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
-      <div className="px-5 pt-5 pb-2">
-        <div className="text-[12px] font-medium text-slate-500">{label}</div>
-        <div className="mt-2 flex items-center gap-2">
-          <div className="text-[26px] font-bold tabular-nums tracking-tight text-slate-900 leading-none">{value}</div>
+      <div className="px-4 pt-3 pb-1">
+        <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
+          <span className="truncate">{label}</span>
+          {tip && (
+            <Tooltip>
+              <TooltipTrigger asChild><button type="button" className="inline-flex"><Info className="size-3 text-slate-400" /></button></TooltipTrigger>
+              <TooltipContent className="max-w-xs text-xs leading-snug">{tip}</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+        <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+          <div className="text-[22px] font-bold tabular-nums tracking-tight text-slate-900 leading-none">{value}</div>
           {showDelta && (
             <span
               className={cn(
@@ -44,9 +55,9 @@ export function KpiSparkCard({
             </span>
           )}
         </div>
-        {compareLabel && <div className="mt-1 text-[11px] text-slate-400">{compareLabel}</div>}
+        {compareLabel && <div className="mt-0.5 text-[10px] text-slate-400 truncate">{compareLabel}</div>}
       </div>
-      <div className="h-12 mt-1">
+      <div className="h-6 mt-auto">
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={series} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
