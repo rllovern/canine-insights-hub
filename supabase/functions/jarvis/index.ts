@@ -1000,8 +1000,10 @@ function buildTools(ctx: Ctx) {
         const id = resolveProperty(ctx, i.property_id, "compare_periods");
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const fetchRange = async (from: string, to: string) => {
-          let q = ctx.supabase.from("daily_metrics")
-            .select("date,ad_source,campaign,cost,impressions,clicks,record_count,leads,good_leads,projected_sale,verified_sale")
+          // Canonical Lead Model: read v_lead_counts_daily so total_leads / quality
+          // come from the SQL source of truth, never from local arithmetic.
+          let q = ctx.supabase.from("v_lead_counts_daily")
+            .select("date,ad_source,campaign,cost,impressions,clicks,records,bad_leads,good_leads,projected_sales,verified_sales,total_leads,quality_numerator,quality_rate")
             .eq("property_id", id).gte("date", from).lte("date", to);
           if (i.campaign) q = q.eq("campaign", i.campaign);
           const { data, error } = await q;
@@ -1013,25 +1015,31 @@ function buildTools(ctx: Ctx) {
           fetchRange(i.previous_from, i.previous_to),
         ]);
         const totals = (rows: typeof cur) => {
-          const t = { cost: 0, impressions: 0, clicks: 0, calls: 0, leads: 0, good_leads: 0, projected_sale: 0, verified_sale: 0 };
+          const t = { cost: 0, impressions: 0, clicks: 0, calls: 0, bad_leads: 0, good_leads: 0, projected_sale: 0, verified_sale: 0, total_leads: 0, quality_num: 0 };
           for (const r of rows) {
             t.cost += Number(r.cost ?? 0);
             t.impressions += Number(r.impressions ?? 0);
             t.clicks += Number(r.clicks ?? 0);
-            t.calls += Number(r.record_count ?? 0);
-            t.leads += Number(r.leads ?? 0);
+            t.calls += Number(r.records ?? 0);
+            t.bad_leads += Number(r.bad_leads ?? 0);
             t.good_leads += Number(r.good_leads ?? 0);
-            t.projected_sale += Number(r.projected_sale ?? 0);
-            t.verified_sale += Number(r.verified_sale ?? 0);
+            t.projected_sale += Number(r.projected_sales ?? 0);
+            t.verified_sale += Number(r.verified_sales ?? 0);
+            t.total_leads += Number(r.total_leads ?? 0);
+            t.quality_num += Number(r.quality_numerator ?? 0);
           }
           return t;
         };
         const derive = (t: ReturnType<typeof totals>) => ({
           ...t,
+          // Canonical: never use the legacy `leads` column. total_leads is
+          // already summed from v_lead_counts_daily (bad+good+projected).
+          leads: t.total_leads,
+          quality_rate: t.total_leads > 0 ? t.quality_num / t.total_leads : 0,
           ctr: t.impressions > 0 ? t.clicks / t.impressions : 0,
           cpc: t.clicks > 0 ? t.cost / t.clicks : 0,
-          cpl: t.leads > 0 ? t.cost / t.leads : 0,
-          conv_rate: t.clicks > 0 ? t.leads / t.clicks : 0,
+          cpl: t.total_leads > 0 ? t.cost / t.total_leads : 0,
+          conv_rate: t.clicks > 0 ? t.total_leads / t.clicks : 0,
         });
         const c = derive(totals(cur));
         const p = derive(totals(prev));
@@ -1043,11 +1051,13 @@ function buildTools(ctx: Ctx) {
           ctr: { current: c.ctr, previous: p.ctr, ...delta(c.ctr, p.ctr) },
           cpc: { current: c.cpc, previous: p.cpc, ...delta(c.cpc, p.cpc) },
           calls: { current: c.calls, previous: p.calls, ...delta(c.calls, p.calls) },
-          leads: { current: c.leads, previous: p.leads, ...delta(c.leads, p.leads) },
+          total_leads: { current: c.leads, previous: p.leads, ...delta(c.leads, p.leads) },
+          bad_leads: { current: c.bad_leads, previous: p.bad_leads, ...delta(c.bad_leads, p.bad_leads) },
           good_leads: { current: c.good_leads, previous: p.good_leads, ...delta(c.good_leads, p.good_leads) },
+          ai_projected_sale: { current: c.projected_sale, previous: p.projected_sale, ...delta(c.projected_sale, p.projected_sale) },
+          quality_rate: { current: c.quality_rate, previous: p.quality_rate, ...delta(c.quality_rate, p.quality_rate) },
           cpl: { current: c.cpl, previous: p.cpl, ...delta(c.cpl, p.cpl) },
           conv_rate: { current: c.conv_rate, previous: p.conv_rate, ...delta(c.conv_rate, p.conv_rate) },
-          projected_sale: { current: c.projected_sale, previous: p.projected_sale, ...delta(c.projected_sale, p.projected_sale) },
           verified_sale: { current: c.verified_sale, previous: p.verified_sale, ...delta(c.verified_sale, p.verified_sale) },
         };
         const byCampaign = new Map<string, { current: ReturnType<typeof totals>; previous: ReturnType<typeof totals> }>();
@@ -1066,16 +1076,16 @@ function buildTools(ctx: Ctx) {
         const campaign_breakdown = [...byCampaign.entries()].map(([campaign, v]) => ({
           campaign,
           spend_current: v.current.cost, spend_previous: v.previous.cost,
-          leads_current: v.current.leads, leads_previous: v.previous.leads,
-          cpl_current: v.current.leads > 0 ? v.current.cost / v.current.leads : 0,
-          cpl_previous: v.previous.leads > 0 ? v.previous.cost / v.previous.leads : 0,
+          leads_current: v.current.total_leads, leads_previous: v.previous.total_leads,
+          cpl_current: v.current.total_leads > 0 ? v.current.cost / v.current.total_leads : 0,
+          cpl_previous: v.previous.total_leads > 0 ? v.previous.cost / v.previous.total_leads : 0,
           spend_delta_pct: v.previous.cost > 0 ? (v.current.cost - v.previous.cost) / v.previous.cost : null,
-          leads_delta_pct: v.previous.leads > 0 ? (v.current.leads - v.previous.leads) / v.previous.leads : null,
+          leads_delta_pct: v.previous.total_leads > 0 ? (v.current.total_leads - v.previous.total_leads) / v.previous.total_leads : null,
         })).sort((a, b) => b.spend_current - a.spend_current).slice(0, 50);
         const dailyMap = new Map<string, { date: string; cost: number; leads: number }>();
         for (const r of cur) {
           const d = dailyMap.get(r.date) ?? { date: r.date, cost: 0, leads: 0 };
-          d.cost += Number(r.cost ?? 0); d.leads += Number(r.leads ?? 0);
+          d.cost += Number(r.cost ?? 0); d.leads += Number(r.total_leads ?? 0);
           dailyMap.set(r.date, d);
         }
         const daily_current = [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date));
@@ -1084,7 +1094,7 @@ function buildTools(ctx: Ctx) {
           current_range: { from: i.current_from, to: i.current_to },
           previous_range: { from: i.previous_from, to: i.previous_to },
           metrics, campaign_breakdown, daily_current,
-          sources_used: ["daily_metrics"],
+          sources_used: ["v_lead_counts_daily"],
           caveats: cur.length === 0 ? ["No daily_metrics rows for current period"] :
                    prev.length === 0 ? ["No daily_metrics rows for previous period — deltas vs zero baseline"] : [],
         };
