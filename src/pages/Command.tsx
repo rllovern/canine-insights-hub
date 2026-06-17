@@ -91,7 +91,7 @@ export default function Command() {
             tip={isAds ? TIPS.adSpend : TIPS.spend}
             invertDelta
             formatValue={fmtCurrency}
-            sourceTable={isAds ? "daily_metrics.cost where ad_source = 'Google PPC'" : "daily_metrics.cost"}
+            sourceTable={isAds ? "daily_metrics.cost where ad_source = 'Google PPC' AND campaign labeled for this location" : "daily_metrics.cost"}
           />
           <KpiSparkCard
             label={isAds ? "PPC Records" : "Records"}
