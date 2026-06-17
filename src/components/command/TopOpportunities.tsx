@@ -8,6 +8,15 @@ import type { SpeedData } from "@/components/lead-perf/hooks";
 import type { CommandTargets, Totals } from "./useCommandData";
 import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 import { TIPS } from "./tooltips";
+import {
+  qualityRate as canonicalQualityRate,
+  qualityNumerator,
+  totalLeads as canonicalTotalLeads,
+  qualityTier,
+  QUALITY_TARGETS,
+  formatQualityRate,
+  type LeadCounts,
+} from "@/lib/leadModel";
 
 type Op = { label: string; severity: "critical" | "warning"; why: string; href: string; formula: string };
 type Flag = { label: string; severity: "critical" | "warning"; why: string; href: string };
@@ -20,16 +29,21 @@ export function TopOpportunities({ totals, speed, targets = DEFAULT_COMMAND_TARG
   // formula mixed live period spend with fallback conversion constants, which is
   // why opportunity dollars could swing by ~200x between builds.
 
-  // Qualified-call gap
-  const qualRate = totals.calls ? totals.qualifiedCalls / totals.calls : 0;
-  if (totals.calls && qualRate < targets.qualRate) {
-    const additionalQual = Math.round(totals.calls * targets.qualRate - totals.qualifiedCalls);
-    if (additionalQual > 0) ops.push({
-      label: "Improve Call Qualification",
-      severity: qualRate < targets.qualRate * 0.6 ? "critical" : "warning",
-      why: `${(qualRate * 100).toFixed(0)}% of calls are qualified. Target ${(targets.qualRate * 100).toFixed(0)}% implies ~${additionalQual} additional qualified calls.`,
+  // Lead-quality gap — judged on canonical (good + AI-projected) ÷ total
+  // tiers from leadModel.ts. Never good ÷ calls (that's the banned
+  // record-denominator that caused the false "Critical" verdict).
+  const counts: LeadCounts = { bad: totals.bad, good: totals.good, projected: totals.projected };
+  const base = canonicalTotalLeads(counts);
+  const rate = canonicalQualityRate(counts);
+  const tier = qualityTier(rate, base);
+  if (tier === "amber" || tier === "red") {
+    const gap = Math.max(0, Math.round(base * QUALITY_TARGETS.green - qualityNumerator(counts)));
+    ops.push({
+      label: "Improve Lead Quality",
+      severity: tier === "red" ? "critical" : "warning",
+      why: `${formatQualityRate(rate)} quality ((good + AI-projected) ÷ ${base} leads). Target ${formatQualityRate(QUALITY_TARGETS.green)}${gap > 0 ? ` · ~${gap} more quality leads to hit target` : ""}.`,
       href: "/calls",
-      formula: "Pending dollar impact: additional qualified calls × verified projection rate × anchored cost-per-projected sale.",
+      formula: "Pending dollar impact: quality-lead gap × anchored cost-per-quality-lead.",
     });
   }
   // Speed-to-lead

@@ -67,3 +67,31 @@ export const TIER_DOT: Record<QualityTier, string> = {
 export function formatQualityRate(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
+
+/**
+ * Helper: build canonical totals/quality for an arbitrary row that already
+ * carries `bad_leads`, `good_leads`, `projected_sale` columns. Use this from
+ * grouped-by-source / grouped-by-campaign tables so they never re-derive
+ * total_leads or quality_rate inline.
+ */
+export function rowLeadCounts(row: {
+  bad_leads?: number | null;
+  good_leads?: number | null;
+  projected_sale?: number | null;
+  verified_sale?: number | null;
+}): LeadCounts {
+  return {
+    bad: Number(row.bad_leads ?? 0),
+    good: Number(row.good_leads ?? 0),
+    projected: Number(row.projected_sale ?? 0),
+    verified: Number(row.verified_sale ?? 0),
+  };
+}
+
+export function rowTotalLeads(row: Parameters<typeof rowLeadCounts>[0]) {
+  return totalLeads(rowLeadCounts(row));
+}
+
+export function rowQualityRate(row: Parameters<typeof rowLeadCounts>[0]) {
+  return qualityRate(rowLeadCounts(row));
+}
