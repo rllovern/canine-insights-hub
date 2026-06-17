@@ -59,14 +59,14 @@ export default function Command() {
             sourceTable="daily_metrics.cost"
           />
           <KpiSparkCard
-            label="Calls Received"
+            label="Records"
             value={fmtNumber(data.current.calls)}
             current={data.current.calls} prior={data.prior.calls}
             series={series("calls")}
             compareLabel={cmpLabel}
             tip={TIPS.calls}
             formatValue={fmtNumber}
-            sourceTable="ctm_calls"
+            sourceTable="v_lead_counts_daily.records (calls + forms)"
           />
           <KpiSparkCard
             label="Qualified Calls"
