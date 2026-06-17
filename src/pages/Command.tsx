@@ -94,10 +94,10 @@ export default function Command() {
       {/* Funnel + Revenue Capture */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2">
         <div className="lg:col-span-2">
-          {data.isLoading ? <Skeleton className="h-48 rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} />}
+          {data.isLoading ? <Skeleton className="h-40 rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} />}
         </div>
         <div>
-          {data.isLoading ? <Skeleton className="h-48 rounded-2xl" /> : <RevenueCaptureScore current={data.current} prior={data.prior} />}
+          {data.isLoading ? <Skeleton className="h-40 rounded-2xl" /> : <RevenueCaptureScore current={data.current} prior={data.prior} />}
         </div>
       </div>
 
