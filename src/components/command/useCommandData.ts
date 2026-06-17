@@ -64,15 +64,18 @@ async function fetchWindow(
   const dmRes = await dm;
   if (dmRes.error) throw dmRes.error;
 
-  // ctm_calls: counts per day
-  let cc = supabase
-    .from("ctm_calls")
-    .select("called_at, property_id")
-    .gte("called_at", `${from}T00:00:00.000Z`)
-    .lte("called_at", `${to}T23:59:59.999Z`);
-  if (propertyIds) cc = cc.in("property_id", propertyIds);
-  const ccRes = await cc;
-  if (ccRes.error) throw ccRes.error;
+  // Records superset (calls + forms) — canonical source for the funnel's
+  // top stage. No Entry / Spam / Bad / Good / AI-projected are slices
+  // INSIDE records, never additions on top. Counting ctm_calls rows here
+  // would double-count by stacking call rows on top of records.
+  let rc = supabase
+    .from("v_lead_counts_daily")
+    .select("date, records")
+    .gte("date", from)
+    .lte("date", to);
+  if (propertyIds) rc = rc.in("property_id", propertyIds);
+  const rcRes = await rc;
+  if (rcRes.error) throw rcRes.error;
 
   const map = new Map<string, DailyAgg>();
   for (const d of eachDateISO(new Date(from), new Date(to))) map.set(d, zeroDay(d));
@@ -85,11 +88,12 @@ async function fetchWindow(
     day.verified_sale += Number(r.verified_sale ?? 0);
     map.set(r.date, day);
   }
-  for (const r of (ccRes.data ?? []) as any[]) {
-    const date = (r.called_at as string).slice(0, 10);
-    const day = map.get(date) ?? zeroDay(date);
-    day.calls += 1;
-    map.set(date, day);
+  for (const r of (rcRes.data ?? []) as any[]) {
+    const day = map.get(r.date) ?? zeroDay(r.date);
+    // `calls` is kept as the internal field name to avoid a wide rename;
+    // semantically it now holds Records = calls + forms.
+    day.calls += Number(r.records ?? 0);
+    map.set(r.date, day);
   }
   return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
