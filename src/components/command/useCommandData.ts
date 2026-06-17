@@ -167,8 +167,7 @@ async function fetchPpcWindow(
   to: string,
 ): Promise<DailyAgg[]> {
   // Build the allowed campaign set from campaign_labels so PPC rows that
-  // belong to a different location (e.g. Winchester campaigns stored on the
-  // NoVA property) are excluded from the Ads view. If a property has no
+  // belong to a different location are excluded from the Ads view. If a property has no
   // labels, we don't filter — that keeps locations without a mapping working.
   let allowed: Set<string> | null = null;
   if (propertyIds && propertyIds.length > 0) {

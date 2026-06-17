@@ -427,7 +427,7 @@ function AddRowDialog({ open, onOpenChange, properties, onAdded }: { open: boole
           </div>
           <div className="space-y-1.5">
             <Label>Campaign label (optional)</Label>
-            <Input value={campaignLabel} onChange={(e) => setCampaignLabel(e.target.value)} placeholder="e.g. Winchester" />
+            <Input value={campaignLabel} onChange={(e) => setCampaignLabel(e.target.value)} placeholder="e.g. branded campaign" />
             <p className="text-xs text-muted-foreground">Matches campaigns whose name contains this text. Leave blank to include all.</p>
           </div>
           <div className="space-y-1.5">

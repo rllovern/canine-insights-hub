@@ -9,8 +9,6 @@ import { CARD_CHROME } from "./cardChrome";
 import {
   PROJECTED_LABEL,
   QUALITY_TARGETS,
-  WINCHESTER_BENCHMARK,
-  AD_CPGL_BENCHMARK,
   qualityTier,
   formatQualityRate,
 } from "@/lib/leadModel";
@@ -28,6 +26,7 @@ export function JourneyFunnel({
   targets = DEFAULT_COMMAND_TARGETS,
   mode = "business",
   blendedTotalLeads,
+  benchmarkLabel,
 }: {
   t?: Totals;
   prior?: Totals;
@@ -35,6 +34,7 @@ export function JourneyFunnel({
   mode?: CommandMode;
   /** For Media Efficiency Ratio in Ads mode: blended total leads in the same window. */
   blendedTotalLeads?: number;
+  benchmarkLabel?: string;
 }) {
   t = t ?? EMPTY_TOTALS;
   prior = prior ?? EMPTY_TOTALS;
@@ -51,6 +51,9 @@ export function JourneyFunnel({
   const callsConvPct = t.calls ? 100 : 0; // 100% of calls flow into the funnel
   const leadsConvPct = t.calls ? (t.totalLeads / t.calls) * 100 : 0;
   const mer = isAds && t.totalLeads && blendedTotalLeads ? blendedTotalLeads / t.totalLeads : null;
+  const benchmarkName = benchmarkLabel ?? "Current scope";
+  const cpglBenchmark = cpgl ? `${fmtCurrency(cpgl)}/good lead` : "unavailable";
+  const qualityBenchmark = t.totalLeads ? formatQualityRate(t.qualityRate) : "unavailable";
 
   return (
     <div className={cn(CARD_CHROME, "p-3 h-full flex flex-col")}>
@@ -87,7 +90,7 @@ export function JourneyFunnel({
         )}
         {isAds ? (
           <SubKpi tip={TIPS.adCpgl} label="Ad CPGL" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} invert
-            footnote={`Winchester benchmark ${fmtCurrency(AD_CPGL_BENCHMARK)}/good lead`} />
+            footnote={`${benchmarkName} benchmark ${cpglBenchmark}`} />
         ) : (
           <SubKpi tip={TIPS.cpQualified} label="Blended CPGL" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} target={targets.cpgl} targetText={fmtCurrency(targets.cpgl)} pass={cpgl > 0 && cpgl <= targets.cpgl} invert />
         )}
@@ -100,7 +103,7 @@ export function JourneyFunnel({
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
           pass={tier === "green"}
         />
-        <LeadMix bad={t.bad} good={t.good} projected={t.projected} total={t.totalLeads} />
+        <LeadMix bad={t.bad} good={t.good} projected={t.projected} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
       </div>
 
       {isAds && (
@@ -134,7 +137,21 @@ function Connector() {
 }
 
 /** Lead Mix tile — total only by default, full breakdown on hover. */
-function LeadMix({ bad, good, projected, total }: { bad: number; good: number; projected: number; total: number }) {
+function LeadMix({
+  bad,
+  good,
+  projected,
+  total,
+  benchmarkLabel,
+  benchmarkRate,
+}: {
+  bad: number;
+  good: number;
+  projected: number;
+  total: number;
+  benchmarkLabel: string;
+  benchmarkRate: string;
+}) {
   const moreGood = good > bad;
   const moreBad = bad > good;
   const numCls = moreGood ? "text-emerald-600" : moreBad ? "text-rose-600" : "text-slate-900";
@@ -155,7 +172,7 @@ function LeadMix({ bad, good, projected, total }: { bad: number; good: number; p
           <span className="text-purple-600">{good} good</span> ·{" "}
           <span className="text-amber-600">{projected} AI-projected</span>
         </div>
-        <div className="text-[10px] text-slate-400 mt-1">Winchester benchmark {(WINCHESTER_BENCHMARK * 100).toFixed(0)}%</div>
+        <div className="text-[10px] text-slate-400 mt-1">{benchmarkLabel} benchmark {benchmarkRate}</div>
       </TooltipContent>
     </Tooltip>
   );
