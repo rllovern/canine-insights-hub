@@ -11,7 +11,7 @@ function pct(num: number, den: number) {
   return `${((num / den) * 100).toFixed(1)}%`;
 }
 
-const EMPTY_TOTALS: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0 };
+const EMPTY_TOTALS: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 };
 
 export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: { t?: Totals; prior?: Totals; targets?: CommandTargets }) {
   t = t ?? EMPTY_TOTALS;
