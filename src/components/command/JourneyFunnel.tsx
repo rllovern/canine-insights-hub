@@ -43,25 +43,25 @@ export function JourneyFunnel({ t, prior }: { t?: Totals; prior?: Totals }) {
       </div>
       <p className="text-[11px] text-slate-500 mt-0.5">From ad spend to revenue</p>
 
-      <div className="mt-3 flex items-start justify-between gap-1">
+      <div className="mt-2 flex items-start justify-between gap-1">
         {stages.map((s, i) => (
           <div key={s.label} className="flex items-start gap-1 flex-1">
             <div className="flex flex-col items-center text-center flex-1">
-              <div className={cn("flex size-11 items-center justify-center rounded-full", s.iconBg)}>
-                <s.Icon className={cn("size-5", s.iconColor)} />
+              <div className={cn("flex size-9 items-center justify-center rounded-full", s.iconBg)}>
+                <s.Icon className={cn("size-4", s.iconColor)} />
               </div>
-              <div className="mt-1.5 text-[10.5px] font-medium text-slate-600 leading-tight">{s.label}</div>
-              <div className="text-sm font-bold tabular-nums text-slate-900 mt-0.5 leading-tight">{s.value}</div>
+              <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">{s.label}</div>
+              <div className="text-[13px] font-bold tabular-nums text-slate-900 mt-0.5 leading-tight">{s.value}</div>
               <div className="text-[10px] text-slate-500 tabular-nums">{s.conv}</div>
             </div>
             {i < stages.length - 1 && (
-              <ArrowRight className="size-3.5 text-slate-300 mt-4 shrink-0" />
+              <ArrowRight className="size-3 text-slate-300 mt-3 shrink-0" />
             )}
           </div>
         ))}
       </div>
 
-      <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-3">
+      <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
         <SubKpi tip={TIPS.overallConv} label="Overall Conversion Rate" value={t.calls ? `${overallConv.toFixed(1)}%` : "—"} delta={pctChange(overallConv, priorConv)} />
         <SubKpi tip={TIPS.cpQualified} label="Cost Per Qualified Call" value={cpQualified ? fmtCurrency(cpQualified) : "—"} delta={pctChange(cpQualified, priorCpQ)} invert />
         <SubKpi tip={TIPS.cpAppt} label="Cost Per Appointment" value={cpAppt ? fmtCurrency(cpAppt) : "—"} delta={pctChange(cpAppt, priorCpA)} invert />
