@@ -167,6 +167,32 @@ function Row({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{children}</div>;
 }
 
+function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }) {
+  if (colKey === "verified_sale") {
+    return <TableCell className="text-right tabular-nums"><div>—</div></TableCell>;
+  }
+  if (colKey === "quality_rate") {
+    const base = Number(row?.total_leads ?? 0);
+    const rate = Number(row?.quality_rate ?? 0);
+    const tier = qualityTier(rate, base);
+    if (tier === "low-sample") {
+      return <TableCell className="text-right tabular-nums text-muted-foreground">—</TableCell>;
+    }
+    return (
+      <TableCell className={`text-right tabular-nums font-medium ${TIER_TEXT[tier]}`}>
+        {formatQualityRate(rate)}
+      </TableCell>
+    );
+  }
+  const invert = colKey === "bad_leads" || colKey === "no_entry" || colKey === "spam";
+  return (
+    <TableCell className="text-right tabular-nums">
+      <div>{fmtNumber(row?.[colKey])}</div>
+      {prev && <Delta value={pctChange(row?.[colKey], prev?.[colKey] ?? 0)} invert={invert} />}
+    </TableCell>
+  );
+}
+
 function SourceOutcomeTable({ current, prior, cfg }: any) {
   const cur = useMemo(() => groupBySource(current), [current]);
   const pre = useMemo(() => groupBySource(prior), [prior]);
