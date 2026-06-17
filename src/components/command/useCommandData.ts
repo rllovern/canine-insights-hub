@@ -166,13 +166,32 @@ async function fetchPpcWindow(
   from: string,
   to: string,
 ): Promise<DailyAgg[]> {
+  // Build the allowed campaign set from campaign_labels so PPC rows that
+  // belong to a different location (e.g. Winchester campaigns stored on the
+  // NoVA property) are excluded from the Ads view. If a property has no
+  // labels, we don't filter — that keeps locations without a mapping working.
+  let allowed: Set<string> | null = null;
+  if (propertyIds && propertyIds.length > 0) {
+    const { data: labels, error: labelErr } = await supabase
+      .from("campaign_labels")
+      .select("campaign")
+      .in("property_id", propertyIds);
+    if (labelErr) throw labelErr;
+    if (labels && labels.length > 0) {
+      allowed = new Set((labels as any[]).map((r) => r.campaign as string));
+    }
+  }
+
   let q = supabase
     .from("daily_metrics")
-    .select("date, cost, good_leads, bad_leads, projected_sale, verified_sale, record_count")
+    .select("date, campaign, cost, good_leads, bad_leads, projected_sale, verified_sale, record_count")
     .eq("ad_source", PPC_SOURCE)
     .gte("date", from)
     .lte("date", to);
   if (propertyIds) q = q.in("property_id", propertyIds);
+  if (allowed && allowed.size > 0) {
+    q = q.in("campaign", Array.from(allowed));
+  }
   const res = await q;
   if (res.error) throw res.error;
 
