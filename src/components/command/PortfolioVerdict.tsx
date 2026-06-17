@@ -118,7 +118,7 @@ export function PortfolioVerdict({ totals, targets = DEFAULT_COMMAND_TARGETS }: 
   });
 
   if (mode !== "agency") {
-    const judged = locationVerdict(totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0 }, targets);
+    const judged = locationVerdict(totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 }, targets);
     const [textCls, dotCls] = statusClasses(judged.verdict).split(" ");
     return (
       <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
