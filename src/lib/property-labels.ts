@@ -7,7 +7,7 @@ export const CUSTOMIZABLE_METRIC_KEYS = [
 export type MetricKey = (typeof CUSTOMIZABLE_METRIC_KEYS)[number];
 
 export const DEFAULT_METRIC_LABELS: Record<MetricKey, string> = {
-  leads: "Leads",
+  leads: "Total Leads",
   good_leads: "Good Leads",
   bad_leads: "Bad Leads",
   projected_sale: "AI-Projected",

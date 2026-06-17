@@ -11,6 +11,7 @@ import { fmtCurrency, fmtNumber, fmtPct, groupByDate, pctChange, sumMetrics, fil
 import { calc } from "@/lib/data-sources";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePropertyMetricConfig, type MetricKey } from "@/lib/property-labels";
+import { rowTotalLeads } from "@/lib/leadModel";
 
 // Cost / Good Lead by-source chart always renders these 4 series so missing
 // connectors (Facebook / Direct / Organic) appear as flat $0 lines instead of
@@ -177,14 +178,18 @@ function ActionsKpis({ totals, prev, cfg }: { totals: any; prev: any; cfg: Retur
     visible.length >= 3 ? "grid grid-cols-1 sm:grid-cols-3 gap-2" :
     visible.length === 2 ? "grid grid-cols-1 sm:grid-cols-2 gap-2" :
     "grid grid-cols-1 gap-2";
+  // Canonical Lead Model: "leads" displays as Total Leads = bad + good + AI-projected.
+  // Never read the legacy `leads` column for the total — always derive via leadModel.
+  const valueFor = (k: MetricKey, src: any) =>
+    k === "leads" ? rowTotalLeads(src) : Number((src as any)[k] ?? 0);
   return (
     <div className={gridCls}>
       {visible.map((k) => (
         <KpiCard
           key={k}
           label={cfg.label(k)}
-          value={fmtNumber((totals as any)[k] ?? 0)}
-          delta={pctChange((totals as any)[k] ?? 0, (prev as any)[k] ?? 0)}
+          value={fmtNumber(valueFor(k, totals))}
+          delta={pctChange(valueFor(k, totals), valueFor(k, prev))}
         />
       ))}
     </div>
