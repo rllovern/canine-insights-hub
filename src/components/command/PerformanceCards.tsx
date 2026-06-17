@@ -4,10 +4,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import type { Totals } from "./useCommandData";
 import { TIPS } from "./tooltips";
+import { CARD_CHROME } from "./cardChrome";
 
 function CardShell({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-2xl bg-white border border-slate-200/70 shadow-sm p-2.5 h-full flex flex-col", className)}>
+    <div className={cn(CARD_CHROME, "p-2.5 h-full flex flex-col", className)}>
       {children}
     </div>
   );
