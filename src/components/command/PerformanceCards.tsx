@@ -6,6 +6,7 @@ import { fmtNumber } from "@/lib/metrics";
 import type { SpeedData } from "@/components/lead-perf/hooks";
 import type { Totals } from "./useCommandData";
 import { TIPS } from "./tooltips";
+import { PendingCard } from "./PendingCard";
 
 function CardShell({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
@@ -79,35 +80,13 @@ function Rail({
 
 /** Call Handling — placeholder values until CTM disposition data is wired. */
 export function CallHandlingCard({ totals }: { totals: Totals }) {
-  // Layout-matching placeholders. Real CTM disposition data not yet ingested.
-  const callsTotal = Math.max(totals.calls, 1);
-  const answered = Math.round(callsTotal * 0.682);
-  const answerRate = (answered / callsTotal) * 100;
-  const avgAnswerTime = 18;
-  const abandonRate = 8.7;
-
+  void totals;
   return (
-    <CardShell>
-      <Header title="Call Handling Performance" href="/calls" tip={TIPS.callHandling} />
-      <div className="mt-1.5 space-y-1.5 flex-1">
-        <Rail
-          label="Answer Rate" value={`${answerRate.toFixed(1)}%`} pct={answerRate} goal={70} tone="primary"
-          deltaText="5.6%" deltaPositive
-          goalText="Goal: 70%"
-        />
-        <Rail
-          label="Avg. Answer Time" value={`${avgAnswerTime} sec`} pct={Math.max(10, 100 - (avgAnswerTime / 60) * 100)} goal={66} tone="success"
-          deltaText="-4 sec" deltaPositive
-          goalText="Goal: < 20 sec"
-        />
-        <Rail
-          label="Abandon Rate" value={`${abandonRate.toFixed(1)}%`} pct={abandonRate * 4} goal={40} tone="danger"
-          deltaText="-1.3%" deltaPositive
-          goalText="Goal: < 10%"
-        />
-      </div>
-      <div className="mt-1 text-[9.5px] text-slate-400">— placeholder. CTM call disposition data pending.</div>
-    </CardShell>
+    <PendingCard
+      title="Call Handling Performance"
+      reason="CTM call-disposition feed is not yet ingested, so answer rate, pickup time, and abandon rate can't be shown honestly. This card will populate automatically once disposition data lands in ctm_calls."
+      href="/calls"
+    />
   );
 }
 
@@ -147,8 +126,6 @@ export function MissedCallFollowUpCard({ speed }: { speed: SpeedData | null }) {
 
 /** Call Quality (AI Score) — lead-quality buckets shown as proxy. */
 export function CallQualityCard({ buckets }: { buckets: Record<string, number> }) {
-  const total = Object.values(buckets).reduce((a, b) => a + b, 0);
-
   const order: { key: string; label: string; color: string; weight: number }[] = [
     { key: "projected_sale", label: "Excellent (4.5 - 5.0)", color: "#10b981", weight: 5 },
     { key: "good",           label: "Good (3.5 - 4.4)",      color: "#3b82f6", weight: 4 },
@@ -158,6 +135,18 @@ export function CallQualityCard({ buckets }: { buckets: Record<string, number> }
 
   const rows = order.map((o) => ({ ...o, n: buckets[o.key] ?? 0 }));
   const sumScored = rows.reduce((s, r) => s + r.n, 0);
+  const total = Object.values(buckets).reduce((a, b) => a + b, 0);
+
+  if (!sumScored) {
+    return (
+      <PendingCard
+        title="Call Quality (AI Score)"
+        reason="No calls were scored in this window. Once CTM AI scoring runs on this period's calls, the bucket distribution and weighted average will appear here."
+        href="/calls"
+      />
+    );
+  }
+
   const avg = sumScored ? rows.reduce((s, r) => s + r.weight * r.n, 0) / sumScored : 0;
 
   const c = 2 * Math.PI * 36;
@@ -200,17 +189,7 @@ export function CallQualityCard({ buckets }: { buckets: Record<string, number> }
           })}
         </div>
       </div>
-      <div className="mt-2 text-[10.5px] text-slate-500 flex items-center gap-1">
-        {sumScored ? (
-          <>
-            <ArrowUp className="size-3 text-emerald-600" />
-            <span className="font-semibold text-emerald-600">0.3</span>
-            <span>vs prior period</span>
-          </>
-        ) : (
-          <span>No call quality data in window.</span>
-        )}
-      </div>
+      <div className="mt-2 text-[10.5px] text-slate-400">{sumScored} scored calls in window.</div>
     </CardShell>
   );
 }
