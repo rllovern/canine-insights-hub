@@ -9,6 +9,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Info } from "lucide-react";
 import { TIPS } from "./tooltips";
 import { cn } from "@/lib/utils";
+import type { CommandTargets, Totals } from "./useCommandData";
+import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 
 type Row = {
   property_id: string;
@@ -22,7 +24,7 @@ type Row = {
   reason: string;
 };
 
-const CPGL_TARGET = 200; // initial agency benchmark until property_targets is wired here
+const CPGL_TARGET = 400; // fallback agency benchmark until per-location targets are loaded here
 const QUAL_RATE_TARGET = 0.45;
 
 function judge(row: Omit<Row, "verdict" | "reason">): { verdict: Row["verdict"]; reason: string } {
@@ -33,7 +35,34 @@ function judge(row: Omit<Row, "verdict" | "reason">): { verdict: Row["verdict"];
   return { verdict: "good", reason: "On target" };
 }
 
-export function PortfolioVerdict() {
+function statusClasses(verdict: "critical" | "warning" | "good") {
+  return verdict === "critical" ? "text-rose-600 bg-rose-500"
+    : verdict === "warning" ? "text-amber-600 bg-amber-500"
+    : "text-emerald-600 bg-emerald-500";
+}
+
+function locationVerdict(totals: Totals, targets: CommandTargets) {
+  const cpl = totals.calls ? totals.spend / totals.calls : 0;
+  const cpgl = totals.qualifiedCalls ? totals.spend / totals.qualifiedCalls : 0;
+  const qualRate = totals.calls ? totals.qualifiedCalls / totals.calls : 0;
+  const projectionRate = totals.qualifiedCalls ? totals.appointments / totals.qualifiedCalls : 0;
+  const pacingHealthy = targets.monthlyBudget == null || totals.spend <= targets.monthlyBudget;
+  const issues = [
+    cpl > 0 && cpl > targets.cpl ? { key: "CPL", critical: cpl > targets.cpl * 1.5, text: `CPL ${fmtCurrency(cpl)} is over the ${fmtCurrency(targets.cpl)} target` } : null,
+    cpgl > 0 && cpgl > targets.cpgl ? { key: "CPGL", critical: cpgl > targets.cpgl * 1.5, text: `CPGL ${fmtCurrency(cpgl)} is over the ${fmtCurrency(targets.cpgl)} target` } : null,
+    totals.calls > 0 && qualRate < targets.qualRate ? { key: "qual rate", critical: qualRate < targets.qualRate * 0.6, text: `Qualified call rate ${(qualRate * 100).toFixed(1)}% is below the ${(targets.qualRate * 100).toFixed(0)}% target` } : null,
+    totals.qualifiedCalls > 0 && projectionRate < targets.projectionRate ? { key: "projection rate", critical: projectionRate < targets.projectionRate * 0.6, text: `Projection rate ${(projectionRate * 100).toFixed(1)}% is below the ${(targets.projectionRate * 100).toFixed(0)}% target` } : null,
+    !pacingHealthy && targets.monthlyBudget ? { key: "pacing", critical: false, text: `Spend ${fmtCurrency(totals.spend)} is over the ${fmtCurrency(targets.monthlyBudget)} monthly pacing target` } : null,
+  ].filter(Boolean) as { key: string; critical: boolean; text: string }[];
+  const verdict = issues.some((i) => i.critical) ? "critical" : issues.length ? "warning" : "good";
+  const healthy = ["CPL", "CPGL", "qual rate", "projection rate", "pacing"].filter((k) => !issues.some((i) => i.key === k));
+  const reason = issues.length
+    ? `${issues[0].text} — ${healthy.length ? `${healthy.join(", ")} ${healthy.length === 1 ? "is" : "are"} healthy.` : "no other target is offsetting it."}`
+    : `CPL, CPGL, qual rate, projection rate, and pacing are healthy.`;
+  return { verdict, reason } as const;
+}
+
+export function PortfolioVerdict({ totals, targets = DEFAULT_COMMAND_TARGETS }: { totals?: Totals; targets?: CommandTargets }) {
   const { propertyIds, mode, label } = useScope();
   const { range } = useDateRange();
   const iso = rangeToISO(range);
@@ -89,6 +118,8 @@ export function PortfolioVerdict() {
   });
 
   if (mode !== "agency") {
+    const judged = locationVerdict(totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0 }, targets);
+    const [textCls, dotCls] = statusClasses(judged.verdict).split(" ");
     return (
       <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
         <div className="flex items-center gap-1.5">
@@ -96,8 +127,12 @@ export function PortfolioVerdict() {
           <Tooltip><TooltipTrigger asChild><button type="button"><Info className="size-3.5 text-slate-400" /></button></TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.portfolioVerdict}</TooltipContent></Tooltip>
         </div>
+        <div className="mt-3 flex items-center gap-2">
+          <span className={cn("size-2.5 rounded-full", dotCls)} />
+          <div className={cn("text-[30px] font-medium leading-none capitalize", textCls)}>{judged.verdict}</div>
+        </div>
         <p className="mt-2 text-[12px] text-slate-600 leading-snug">
-          Viewing <span className="font-semibold text-slate-900">{label}</span>. Drill into the funnel and opportunities below.
+          <span className="font-semibold text-slate-900">{label}</span>: {judged.reason}
         </p>
       </div>
     );
@@ -105,6 +140,8 @@ export function PortfolioVerdict() {
 
   const rows = q.data ?? [];
   const counts = rows.reduce((acc, r) => { acc[r.verdict]++; return acc; }, { critical: 0, warning: 0, good: 0 });
+  const portfolioStatus: "critical" | "warning" | "good" = counts.critical ? "critical" : counts.warning ? "warning" : "good";
+  const [portfolioTextCls, portfolioDotCls] = statusClasses(portfolioStatus).split(" ");
 
   return (
     <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
@@ -120,6 +157,13 @@ export function PortfolioVerdict() {
           <Pill icon={<CheckCircle2 className="size-3" />}  tone="good"     count={counts.good}     label="good" />
         </div>
       </div>
+      <div className="mt-3 flex items-center gap-2">
+        <span className={cn("size-2.5 rounded-full", portfolioDotCls)} />
+        <div className={cn("text-[30px] font-medium leading-none capitalize", portfolioTextCls)}>{portfolioStatus}</div>
+      </div>
+      <p className="mt-1 text-[12px] text-slate-600 leading-snug">
+        {counts.critical} critical · {counts.warning} warning · {counts.good} good — worst location decides the portfolio state.
+      </p>
       <div className="mt-2 flex-1 overflow-y-auto -mr-1 pr-1">
         {q.isLoading ? (
           <div className="text-[11px] text-slate-400 py-2">Computing rollup…</div>
