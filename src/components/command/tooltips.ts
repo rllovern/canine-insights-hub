@@ -20,7 +20,7 @@ export const TIPS = {
   cpAppt:
     "Ad Spend ÷ AI-projected sales (count). Cost per AI-projected sale. AI-projected is a quality signal — do not read this as cost-per-sale or ROI.",
   qualityRate:
-    "Quality = (good + AI-projected) ÷ (bad + good + AI-projected). Target: ≥55% green, 45–54% amber, <45% red. Winchester (≈50%) is shown as a benchmark reference line, not the pass/fail threshold.",
+    "Quality = (good + AI-projected) ÷ (bad + good + AI-projected). Target: ≥55% green, 45–54% amber, <45% red. The benchmark reference follows the current location or all-location scope and active mode; it is not the pass/fail threshold.",
   callHandling:
     "Answer rate, avg pickup time, abandon rate. Pending — CTM call-disposition feed is not yet ingested.",
   missedFollowUp:
@@ -34,9 +34,9 @@ export const TIPS = {
   adSpend:
     "Google PPC spend over the selected date range. Source: daily_metrics.cost where ad_source = 'Google PPC'.",
   adCpl:
-    "Ad CPL = PPC spend ÷ PPC total leads (bad + good + AI-projected) over the selected date range. No absolute pass/fail target until unit economics exist — compare locations against Winchester's efficiency instead.",
+    "Ad CPL = PPC spend ÷ PPC total leads (bad + good + AI-projected) over the selected date range. No absolute pass/fail target until unit economics exist — compare against the current location or all-location scope instead.",
   adCpgl:
-    "Ad CPGL = PPC spend ÷ PPC quality leads (good + AI-projected) over the selected date range. Winchester benchmark $338/good lead is a reference line, NOT a pass/fail threshold.",
+    "Ad CPGL = PPC spend ÷ PPC quality leads (good + AI-projected) over the selected date range. The current location or all-location scope is the reference benchmark, NOT a pass/fail threshold.",
   mediaEfficiency:
     "Media Efficiency Ratio = total (blended) leads ÷ PPC leads. The dilution factor — how much non-paid lead volume is layered on top of paid. Higher = more leverage from organic/direct/referral.",
 } as const;
