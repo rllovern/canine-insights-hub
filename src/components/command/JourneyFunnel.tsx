@@ -2,7 +2,7 @@ import { Megaphone, PhoneCall, Award, ArrowRight, ArrowUp, ArrowDown, Info, Minu
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtCurrency, fmtNumber, safeDelta } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
-import type { CommandTargets, Totals } from "./useCommandData";
+import type { CommandMode, CommandTargets, Totals } from "./useCommandData";
 import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 import { TIPS } from "./tooltips";
 import { CARD_CHROME } from "./cardChrome";
@@ -10,6 +10,7 @@ import {
   PROJECTED_LABEL,
   QUALITY_TARGETS,
   WINCHESTER_BENCHMARK,
+  AD_CPGL_BENCHMARK,
   qualityTier,
   formatQualityRate,
 } from "@/lib/leadModel";
@@ -21,9 +22,23 @@ function pct(num: number, den: number) {
 
 const EMPTY_TOTALS: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 };
 
-export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: { t?: Totals; prior?: Totals; targets?: CommandTargets }) {
+export function JourneyFunnel({
+  t,
+  prior,
+  targets = DEFAULT_COMMAND_TARGETS,
+  mode = "business",
+  blendedTotalLeads,
+}: {
+  t?: Totals;
+  prior?: Totals;
+  targets?: CommandTargets;
+  mode?: CommandMode;
+  /** For Media Efficiency Ratio in Ads mode: blended total leads in the same window. */
+  blendedTotalLeads?: number;
+}) {
   t = t ?? EMPTY_TOTALS;
   prior = prior ?? EMPTY_TOTALS;
+  const isAds = mode === "ads";
   const qualityCount = t.good + t.projected;
   const priorQualityCount = prior.good + prior.projected;
   const cpgl = qualityCount ? t.spend / qualityCount : 0;
@@ -35,30 +50,47 @@ export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: {
   const tier = qualityTier(t.qualityRate, t.totalLeads);
   const callsConvPct = t.calls ? 100 : 0; // 100% of calls flow into the funnel
   const leadsConvPct = t.calls ? (t.totalLeads / t.calls) * 100 : 0;
+  const mer = isAds && t.totalLeads && blendedTotalLeads ? blendedTotalLeads / t.totalLeads : null;
 
   return (
     <div className={cn(CARD_CHROME, "p-3 h-full flex flex-col")}>
       <div className="flex items-center gap-1.5">
-        <h3 className="text-sm font-semibold text-slate-900">Customer Journey Funnel</h3>
+        <h3 className="text-sm font-semibold text-slate-900">
+          {isAds ? "Customer Journey Funnel · Ads (Google PPC)" : "Customer Journey Funnel"}
+        </h3>
         <Tooltip>
           <TooltipTrigger asChild><button type="button"><Info className="size-3.5 text-slate-400" /></button></TooltipTrigger>
           <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.funnel}</TooltipContent>
         </Tooltip>
       </div>
-      <p className="text-[11px] text-slate-500 mt-0.5">Ad Spend → Records → Qualified (good + AI-projected)</p>
+      <p className="text-[11px] text-slate-500 mt-0.5">
+        {isAds
+          ? "PPC Spend (est. 30-day) → PPC Records → PPC Qualified (good + AI-projected)"
+          : "Ad Spend → Records → Qualified (good + AI-projected)"}
+      </p>
 
       {/* Single horizontal row: three stages on one baseline, long connector arrows. */}
       <div className="mt-3 flex items-start gap-2">
-        <Stage s={{ label: "Ad Spend",       src: "Google Ads", value: fmtCurrency(t.spend), Icon: Megaphone, sub: "100%",                                           iconBg: "bg-blue-100",   iconColor: "text-blue-600" }} />
+        <Stage s={{ label: isAds ? "PPC Spend (est.)" : "Ad Spend", src: isAds ? "daily_metrics.cost · Google PPC (MTD ÷ elapsed)" : "Google Ads", value: fmtCurrency(t.spend), Icon: Megaphone, sub: "100%", iconBg: "bg-blue-100", iconColor: "text-blue-600" }} />
         <Connector />
-        <Stage s={{ label: "Records", src: "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
+        <Stage s={{ label: isAds ? "PPC Records" : "Records", src: isAds ? "daily_metrics.record_count · Google PPC" : "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
         <Connector />
         <QualifiedStage good={t.good} projected={t.projected} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
-        <SubKpi tip={TIPS.cpl}         label="CPL (per lead)"     value={cpl  ? fmtCurrency(cpl)  : "—"} delta={safeDelta(cpl, priorCpl)}   target={targets.cpl}  targetText={fmtCurrency(targets.cpl)}  pass={cpl  > 0 && cpl  <= targets.cpl}  invert />
-        <SubKpi tip={TIPS.cpQualified} label="CPGL (good + AI-proj)" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} target={targets.cpgl} targetText={fmtCurrency(targets.cpgl)} pass={cpgl > 0 && cpgl <= targets.cpgl} invert />
+        {isAds ? (
+          <SubKpi tip={TIPS.adCpl} label="Ad CPL" value={cpl ? fmtCurrency(cpl) : "—"} delta={safeDelta(cpl, priorCpl)} invert
+            footnote="No absolute target — compare locations." />
+        ) : (
+          <SubKpi tip={TIPS.cpl} label="CPL (per lead)" value={cpl ? fmtCurrency(cpl) : "—"} delta={safeDelta(cpl, priorCpl)} target={targets.cpl} targetText={fmtCurrency(targets.cpl)} pass={cpl > 0 && cpl <= targets.cpl} invert />
+        )}
+        {isAds ? (
+          <SubKpi tip={TIPS.adCpgl} label="Ad CPGL" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} invert
+            footnote={`Winchester benchmark ${fmtCurrency(AD_CPGL_BENCHMARK)}/good lead`} />
+        ) : (
+          <SubKpi tip={TIPS.cpQualified} label="CPGL (good + AI-proj)" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} target={targets.cpgl} targetText={fmtCurrency(targets.cpgl)} pass={cpgl > 0 && cpgl <= targets.cpgl} invert />
+        )}
         <SubKpi
           tip={TIPS.qualityRate}
           label="Quality Rate"
@@ -70,6 +102,24 @@ export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: {
         />
         <LeadMix bad={t.bad} good={t.good} projected={t.projected} total={t.totalLeads} />
       </div>
+
+      {isAds && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-[10.5px] text-slate-500 border-t border-slate-100 pt-1.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">
+                Media Efficiency Ratio:{" "}
+                <span className="font-semibold text-slate-700 tabular-nums">
+                  {mer ? `${mer.toFixed(1)}x` : "—"}
+                </span>
+                <span className="text-slate-400"> (blended ÷ PPC leads)</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.mediaEfficiency}</TooltipContent>
+          </Tooltip>
+          <span className="text-slate-400">Estimates ±15% directional</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -172,6 +222,7 @@ function SubKpi({ label, value, delta, invert, tip, target, targetText, pass }: 
   delta: import("@/lib/metrics").SafeDelta;
   invert?: boolean; tip?: string;
   target?: number; targetText?: string; pass?: boolean;
+  footnote?: string;
 }) {
   const judged = target != null && value !== "—" && pass != null;
   return (
@@ -198,6 +249,9 @@ function SubKpi({ label, value, delta, invert, tip, target, targetText, pass }: 
           )}
         </TooltipContent>
       </Tooltip>
+      {arguments[0].footnote && (
+        <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{arguments[0].footnote}</div>
+      )}
     </div>
   );
 }
