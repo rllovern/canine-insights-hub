@@ -214,3 +214,38 @@ function Dot({ tone }: { tone: "critical" | "warning" | "good" }) {
   const cls = tone === "critical" ? "bg-rose-500" : tone === "warning" ? "bg-amber-500" : "bg-emerald-500";
   return <span className={cn("inline-block size-2 rounded-full shrink-0", cls)} />;
 }
+
+function ScoreGauge({ score, stroke, word, wordCls }: { score: number | null; stroke: string; word: string; wordCls: string }) {
+  const size = 120;
+  const r = 48;
+  const c = 2 * Math.PI * r;
+  const pct = score == null ? 0 : Math.max(0, Math.min(100, score)) / 100;
+  const dash = c * pct;
+  return (
+    <div className="shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={12} strokeDasharray={score == null ? "4 4" : undefined} />
+        {score != null && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={12}
+            strokeLinecap="round"
+            strokeDasharray={`${dash} ${c - dash}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        )}
+        <text x="50%" y="48%" textAnchor="middle" dominantBaseline="middle" className="fill-slate-900" style={{ fontSize: 30, fontWeight: 500 }}>
+          {score == null ? "—" : score}
+        </text>
+        <text x="50%" y="66%" textAnchor="middle" dominantBaseline="middle" className="fill-slate-400" style={{ fontSize: 10 }}>
+          /100
+        </text>
+      </svg>
+      <div className={cn("-mt-2 text-center text-[11px] font-semibold uppercase tracking-wide", wordCls)}>{word}</div>
+    </div>
+  );
+}
