@@ -17,9 +17,6 @@ import {
 } from "@/components/command/PerformanceCards";
 import { TopOpportunities } from "@/components/command/TopOpportunities";
 import { useSpeed } from "@/components/lead-perf/hooks";
-import { DateRangePicker } from "@/components/layout/DateRangePicker";
-import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Upload } from "lucide-react";
 
 export default function Command() {
   const { propertyIds, label } = useScope();
@@ -28,8 +25,7 @@ export default function Command() {
   const data = useCommandData(propertyIds, range, compareMode !== "off" ? compareRange : null);
   const speed = useSpeed({ propertyIds, from: range.from, to: range.to });
 
-  const cmpLabel = `vs ${format(new Date(data.compareRangeIso.from), "MMM d")} – ${format(new Date(data.compareRangeIso.to), "MMM d, yyyy")}`;
-  const compareCaption = `Compare to: ${format(new Date(data.compareRangeIso.from), "MMM d")} – ${format(new Date(data.compareRangeIso.to), "MMM d, yyyy")}`;
+  const cmpLabel = `vs ${format(new Date(data.compareRangeIso.from), "MMM d")} – ${format(new Date(data.compareRangeIso.to), "MMM d")}`;
 
   const series = (key: "cost" | "calls" | "good_leads" | "projected_sale" | "verified_sale") =>
     data.currentDaily.map((d) => ({ date: d.date, v: d[key] }));
@@ -37,22 +33,10 @@ export default function Command() {
   return (
     <div className="-m-4 md:-m-6 p-4 lg:p-5 bg-[hsl(220_20%_97%)] min-h-[calc(100vh-3rem)] text-slate-900">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+      <div className="flex items-end justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <h1 className="text-[22px] font-bold tracking-tight text-slate-900 leading-tight">Executive Overview</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Real-time performance across the customer journey · {label}</p>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2">
-            <DateRangePicker />
-            <Button variant="outline" size="sm" className="h-8 bg-white border-slate-200 text-slate-700 hover:bg-slate-50">
-              <Upload className="size-3.5 mr-1.5" /> Share
-            </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8 bg-white border-slate-200 text-slate-700 hover:bg-slate-50">
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </div>
-          <div className="text-[10px] text-slate-400">{compareCaption}</div>
+          <h1 className="text-[20px] font-bold tracking-tight text-slate-900 leading-tight">Executive Overview</h1>
+          <p className="text-[11px] text-slate-500 mt-0.5">Real-time performance across the customer journey · {label}</p>
         </div>
       </div>
 
