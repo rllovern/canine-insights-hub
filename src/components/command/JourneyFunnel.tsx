@@ -176,24 +176,28 @@ function SubKpi({ label, value, delta, invert, tip, target, targetText, pass }: 
   const judged = target != null && value !== "—" && pass != null;
   return (
     <div>
-      <div className="flex items-center gap-1 text-[10.5px] text-slate-500 mb-0.5">
-        <span>{label}</span>
-        {tip && (
-          <Tooltip>
-            <TooltipTrigger asChild><button type="button"><Info className="size-3 text-slate-400" /></button></TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs leading-snug">{tip}</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <div className={cn("text-base font-bold tabular-nums", judged ? (pass ? "text-emerald-600" : "text-rose-600") : "text-slate-900")}>{value}</div>
-        {judged && (
-          <span className={cn("text-[10.5px] font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
-            · target {targetText} {pass ? "✓" : "✕"}
-          </span>
-        )}
-        {value !== "—" && <DeltaBadge d={delta} invert={invert} />}
-      </div>
+      <div className="text-[10.5px] text-slate-500 mb-0.5">{label}</div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={cn("text-base font-bold tabular-nums cursor-help inline-block", judged ? (pass ? "text-emerald-600" : "text-rose-600") : "text-slate-900")}>
+            {value}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs leading-snug">
+          {tip && <div className="mb-1.5 max-w-xs">{tip}</div>}
+          {judged && (
+            <div className={cn("font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
+              Target {targetText} {pass ? "✓" : "✕"}
+            </div>
+          )}
+          {value !== "—" && (
+            <div className="mt-1 flex items-center gap-1">
+              <span className="text-slate-400">vs prior period:</span>
+              <DeltaBadge d={delta} invert={invert} />
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
