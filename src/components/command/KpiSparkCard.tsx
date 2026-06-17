@@ -114,10 +114,11 @@ export function KpiSparkCard({
                 type="monotone"
                 dataKey="v"
                 stroke="#6366f1"
-                strokeWidth={1.25}
-                fill={`url(#${gid})`}
+                strokeWidth={1.5}
+                fill="transparent"
                 isAnimationActive={false}
                 connectNulls
+                dot={false}
               />
             </AreaChart>
           </ResponsiveContainer>
