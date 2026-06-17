@@ -33,7 +33,7 @@ export function JourneyFunnel({ t, prior }: { t?: Totals; prior?: Totals }) {
   const priorCpR = prior.revenue ? prior.spend / prior.revenue : 0;
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-4 h-full flex flex-col">
+    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
       <div className="flex items-center gap-1.5">
         <h3 className="text-sm font-semibold text-slate-900">Customer Journey Funnel</h3>
         <Tooltip>
