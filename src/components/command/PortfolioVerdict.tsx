@@ -10,6 +10,7 @@ import { TIPS } from "./tooltips";
 import { cn } from "@/lib/utils";
 import type { CommandTargets, Totals } from "./useCommandData";
 import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
+import { CARD_CHROME } from "./cardChrome";
 import {
   qualityRate as canonicalQualityRate,
   qualityTier,
@@ -117,22 +118,32 @@ export function PortfolioVerdict({ totals, targets = DEFAULT_COMMAND_TARGETS }: 
   });
 
   if (mode !== "agency") {
-    const judged = locationVerdict(totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 });
-    const [textCls, dotCls] = statusClasses(judged.verdict).split(" ");
+    const t = totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 };
+    const judged = locationVerdict(t);
+    const tier = qualityTier(t.qualityRate, t.totalLeads);
+    const lowSample = tier === "low-sample";
+    const ringTone =
+      tier === "red" ? { stroke: "#f43f5e", text: "text-rose-600", word: "Critical" }
+      : tier === "amber" ? { stroke: "#f59e0b", text: "text-amber-600", word: "Warning" }
+      : { stroke: "#10b981", text: "text-emerald-600", word: "Good" };
+    const score = Math.round((t.qualityRate || 0) * 100);
     return (
-      <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
+      <div className={cn(CARD_CHROME, "p-3 h-full flex flex-col")}>
         <div className="flex items-center gap-1.5">
           <h3 className="text-sm font-semibold text-slate-900">Location Verdict</h3>
           <Tooltip><TooltipTrigger asChild><button type="button"><Info className="size-3.5 text-slate-400" /></button></TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.portfolioVerdict}</TooltipContent></Tooltip>
         </div>
-        <div className="mt-3 flex items-center gap-2">
-          <span className={cn("size-2.5 rounded-full", dotCls)} />
-          <div className={cn("text-[30px] font-medium leading-none capitalize", textCls)}>{judged.verdict}</div>
+        <div className="mt-3 flex items-center gap-4 flex-1">
+          <ScoreGauge score={lowSample ? null : score} stroke={ringTone.stroke} word={lowSample ? "Low sample" : ringTone.word} wordCls={lowSample ? "text-slate-400" : ringTone.text} />
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] font-semibold text-slate-900 truncate">{label}</div>
+            <p className="mt-1 text-[12px] text-slate-600 leading-snug">{judged.reason}</p>
+            <p className="mt-2 text-[10.5px] text-slate-400 leading-snug">
+              Target ≥{(QUALITY_TARGETS.green * 100).toFixed(0)}% · Winchester benchmark {(WINCHESTER_BENCHMARK * 100).toFixed(0)}%
+            </p>
+          </div>
         </div>
-        <p className="mt-2 text-[12px] text-slate-600 leading-snug">
-          <span className="font-semibold text-slate-900">{label}</span>: {judged.reason}
-        </p>
       </div>
     );
   }
@@ -143,7 +154,7 @@ export function PortfolioVerdict({ totals, targets = DEFAULT_COMMAND_TARGETS }: 
   const [portfolioTextCls, portfolioDotCls] = statusClasses(portfolioStatus).split(" ");
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
+    <div className={cn(CARD_CHROME, "p-3 h-full flex flex-col")}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <h3 className="text-sm font-semibold text-slate-900">Portfolio Verdict</h3>
