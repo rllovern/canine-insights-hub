@@ -94,22 +94,22 @@ export default function Command() {
       {/* Funnel + Portfolio Verdict */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[260px]">
         <div className="lg:col-span-2">
-          {data.isLoading ? <Skeleton className="h-full min-h-[240px] rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} />}
+          {data.isLoading ? <Skeleton className="h-full min-h-[240px] rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} targets={data.targets} />}
         </div>
         <div>
-          <PortfolioVerdict />
+          <PortfolioVerdict totals={data.current} targets={data.targets} />
         </div>
       </div>
 
       {/* 3 Performance cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[200px]">
         <CallHandlingCard totals={data.current} />
-        <MissedCallFollowUpCard speed={speed.data ?? null} />
-        <CallQualityCard buckets={data.buckets} />
+        <MissedCallFollowUpCard />
+        <CallQualityCard />
       </div>
 
       {/* Top Opportunities */}
-      <TopOpportunities totals={data.current} speed={speed.data ?? null} />
+      <TopOpportunities totals={data.current} speed={speed.data ?? null} targets={data.targets} />
     </div>
   );
 }
