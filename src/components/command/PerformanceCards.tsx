@@ -9,7 +9,7 @@ import { TIPS } from "./tooltips";
 
 function CardShell({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-2xl bg-white border border-slate-200/70 shadow-sm p-4 h-full flex flex-col", className)}>
+    <div className={cn("rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col", className)}>
       {children}
     </div>
   );
