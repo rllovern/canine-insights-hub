@@ -1,71 +1,61 @@
-# Executive Overview — Command page rebuild
+# Match Executive Overview design 1:1 with the mockup
 
-Replace the current `/command` page with the PerformX-style Executive Overview from the mockup, wired to real data wherever it exists. Same data scope as today (uses `useScope` + `useDateRange`).
+The current `/command` page uses the right data but keeps the existing app shell, dark cards, and dense typography. Rebuild it as a self-contained page that visually matches the PerformX mockup pixel-for-pixel.
 
-## Sections (top → bottom)
+## Visual spec to match
 
-1. **Header** — "Executive Overview / Real-time performance across the customer journey", existing date range + compare picker on the right.
+- Page background: light gray (`~#f7f8fa`), no app card chrome.
+- Cards: pure white, large border-radius (`rounded-2xl`), soft shadow, generous padding.
+- Typography: dark slate headings, light gray subtitles, larger title sizes than today.
+- Top bar inside the page:
+  - Left: "Executive Overview" (large, bold) + subtitle "Real-time performance across the customer journey".
+  - Right: date-range pill button (calendar icon + "May 12 – May 18, 2025" + chevron), "Share" button (outline + upload icon), three-dot menu. Below, small "Compare to: …" caption.
+- KPI strip: 5 evenly spaced cards. Each card:
+  - Tiny gray label.
+  - Big bold value (~28px).
+  - Inline green/red pill with up/down arrow and % delta.
+  - Subline "vs May 5 – May 11, 2025".
+  - Soft blue area sparkline filling the bottom third.
+- Customer Journey Funnel: white card, ~2/3 width. Stage row of 5 large pale-gray circles with brand-colored icons, connected by thin gray arrows. Under each: label, value, conversion %. Below funnel, a thin divider, then a 4-column sub-KPI row (Overall Conversion Rate, Cost Per Qualified Call, Cost Per Appointment, Cost Per Revenue $) with bold values + green/red delta pills.
+- Revenue Capture Score: white card, ~1/3 width, equal height to funnel. Large green progress ring with score in center + "/100". To the right: short message, then "Estimated Revenue Lost This Week" in red, delta caption below, "View Revenue Impact →" button at bottom (full width, outline).
+- Bottom row, 3 equal cards:
+  - **Call Handling Performance** — three horizontal progress rails (Answer Rate blue, Avg Answer Time green, Abandon Rate red), each with metric value on the left and goal/delta on the right.
+  - **Missed Call Follow-Up Performance** — Missed Calls big number + % caption, then three rails (Returned <5m, Returned <30m, Never Returned) with values, deltas, goals.
+  - **Call Quality (AI Score)** — multi-color donut (red/yellow/green/blue segments) with "3.6 / 5.0 Average Score" center, color-coded legend rows on the right with % values, delta caption underneath.
+- Top Opportunities to Improve: white card, full width, table with columns Opportunity / Impact (red bold $) / Why It Matters / Action (outline "View Details" button). 4 rows.
+- "View Details" link in the top-right of each card uses the brand blue.
 
-2. **5 KPI cards with sparklines** (vs prior period delta):
-   - Ad Spend = Σ `daily_metrics.cost`
-   - Calls Received = Σ CTM calls (`ctm_calls` count in window)
-   - Qualified Calls = Σ `daily_metrics.good_leads`
-   - Appointments Set = Σ `daily_metrics.projected_sale`
-   - Revenue Generated = Σ `daily_metrics.verified_sale`
-   Each card: big value, % delta vs comparable prior window, mini area sparkline of daily values.
+## Layout / shell
 
-3. **Customer Journey Funnel** (left, 2/3 width) — 5 stacked icons + values + conversion % between each stage:
-   Ad Spend → Calls → Qualified → Appointments → Revenue.
-   Below: 4 sub-KPIs — Overall Conversion Rate (revenue count / calls), Cost per Qualified Call, Cost per Appointment, Cost per Revenue $.
+- Mount this page outside the existing dashboard `Card` styling. Wrap the page in a `bg-[hsl(220_20%_97%)]` (or token equivalent) `min-h-full` container with `p-6 lg:p-8`.
+- Keep using the app sidebar/topbar — the mockup's left nav already exists via `Sidebar.tsx`. Only the page body is redesigned.
+- Spacing: `gap-5` between major rows, `p-6` inside white cards, no inner card borders.
 
-4. **Revenue Capture Score** (right, 1/3 width) — donut 0–100:
-   Score = weighted blend of answer-rate, qualified-call rate, and appointment-set rate (clamped 0–100). Show "Estimated Revenue Lost This Week" = (expected revenue at goal − actual revenue), with delta vs prior period. CTA → `/lead-performance`.
+## Component changes (no new data wiring)
 
-5. **Call Handling Performance** (1/3) — from `lead_perf_handling` + CTM:
-   - Answer Rate (CTM answered / total calls) with progress bar + goal 70%
-   - Avg Answer Time (CTM `time_to_answer` mean) + goal <20s
-   - Abandon Rate (CTM abandoned / total) + goal <10%
+Rewrite the existing files; do not change data sources or the `useCommandData` hook.
 
-6. **Missed Call Follow-Up Performance** (1/3) — from `lead_perf_speed`:
-   - Missed Calls count + % of total
-   - Returned <5m, Returned <30m, Never Returned (each a row with %, goal, delta)
-   Where the speed RPC doesn't cover a bucket, show "—" with "data not wired" hint.
+- `src/pages/Command.tsx` — new layout shell with header, date pill, share, KPI row, 2-col grid, 3-col grid, opportunities table.
+- `src/components/command/KpiSparkCard.tsx` — restyle to white card, large value, pill delta, blue area sparkline anchored to bottom.
+- `src/components/command/JourneyFunnel.tsx` — bigger stage circles (size-16), thin arrows between, divider, 4-column sub-KPI row with delta pills.
+- `src/components/command/RevenueCaptureScore.tsx` — larger ring (size-40), green stroke when >=75, right-side panel with red lost-revenue number and full-width outline CTA.
+- `src/components/command/PerformanceCards.tsx`:
+  - `CallHandlingCard` — render 3 progress rails using local (still-mocked) shape until CTM disposition lands; keep the "data not connected" note as a tooltip rather than the entire card body. Pass any partial values we do have (call count) so the layout matches the mockup even when underlying numbers are placeholders flagged with a small "—" hint.
+  - `MissedCallFollowUpCard` — match the mockup's row layout (label · % · goal · delta).
+  - `CallQualityCard` — match donut + legend layout; render the empty state inside the same skeleton (donut hidden, legend rows shown grayed out) so the card size matches the others.
+- `src/components/command/TopOpportunities.tsx` — table styling: row hover, bold red impact, outline button on the right.
 
-7. **Call Quality (AI Score)** (1/3) — donut of average score + legend (Excellent/Good/Average/Poor distribution).
-   Data source: `ctm_calls.score` if populated; otherwise render the card with "AI scoring not yet connected" empty state.
+## Tokens / styling
 
-8. **Top Opportunities to Improve** — derived from the section severities above. Each row: Opportunity, Impact ($ recoverable estimate), Why It Matters, "View Details" link to the relevant page. Generate up to 4 rows by sorting handling/speed/quality gaps vs goal.
+- Use Tailwind utility classes scoped to this page. Keep semantic tokens (`bg-card`, `text-foreground`) but override per element with light-mode-only values (`bg-white`, `text-slate-900`, etc.) to match the mockup. Document at the top of `Command.tsx` that this page intentionally locks to the light palette; dark-mode parity is a follow-up.
 
-## Data plumbing
+## Out of scope
 
-New hooks/queries in `src/pages/Command.tsx` (or new `src/components/command/*`):
-- Existing: `daily_metrics` query already returns most KPIs.
-- Add `ctm_calls` aggregate query (count, answered, abandoned, avg time_to_answer, avg score) over the date+scope.
-- Reuse `lead_perf_speed` / `lead_perf_handling` RPCs (already wired in `src/components/lead-perf/hooks.ts`).
-- Prior-period query: re-run the same selects shifted by window length to compute deltas + sparkline series.
-
-## Files
-
-- Rewrite `src/pages/Command.tsx` — new layout.
-- Add `src/components/command/`:
-  - `KpiSparkCard.tsx` (KPI + delta + sparkline using Recharts area)
-  - `JourneyFunnel.tsx` (5-stage row with conversion % between stages + cost sub-KPIs)
-  - `RevenueCaptureScore.tsx` (donut + lost-revenue panel)
-  - `CallHandlingCard.tsx`, `MissedCallFollowUpCard.tsx`, `CallQualityCard.tsx`
-  - `TopOpportunitiesTable.tsx`
-  - `useCommandData.ts` — single hook returning current+prior aggregates, sparkline series, CTM rollup.
-
-## Empty / unavailable data
-
-- CTM AI Score, Missed-Call Follow-Up buckets that don't exist yet → render the card with values dashed and a one-line "Data source not connected" note. No fake numbers.
-- Targets-driven goals pulled from `property_targets` (already loaded); fall back to sensible defaults (Answer 70%, <20s, Abandon <10%, <5m returned 60%, <30m 80%) shown as "Goal" labels.
-
-## Out of scope (this round)
-
-- Wiring AI call-quality scores or missed-call return-time pipelines (data plumbing for those is a separate task).
-- The current "Error feed" placeholder card is removed; nothing else on the site links to it.
+- No new data sources, RPC changes, or migrations.
+- Sidebar styling stays as is.
+- Real CTM Answer Rate / Abandon Rate / Avg Answer Time wiring (still placeholders behind the new layout, surfaced with a small subscript note).
 
 ## Verification
 
-- Typecheck/build is run automatically after the edit.
-- Visual check via preview at `/command` for agency scope and one property scope.
+- Typecheck/build runs automatically after edits.
+- Visual diff: open `/command` in preview at 1504-wide; cross-check KPI strip, funnel + score row, three performance cards, opportunities table against the mockup.
