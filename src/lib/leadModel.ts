@@ -32,7 +32,12 @@ export const qualityRate = (c: LeadCounts) => {
 /** Absolute, fixed quality targets. Never derived from any single location. */
 export const QUALITY_TARGETS = { green: 0.55, amber: 0.45 } as const;
 
-/** Highest-volume location (Winchester). Shown as benchmark, NOT threshold. */
+/**
+ * Legacy single-location benchmark. Kept exported for back-compat only.
+ * DO NOT introduce new usages — the Location Verdict and any new benchmarks
+ * must derive a portfolio average for the active scope + mode (PPC vs
+ * blended), never pin to one location and never cross scopes.
+ */
 export const WINCHESTER_BENCHMARK = 0.50;
 
 /**
@@ -42,8 +47,19 @@ export const WINCHESTER_BENCHMARK = 0.50;
  */
 export const AD_CPGL_BENCHMARK = 338;
 
-/** Suppress noisy rates on small samples — fall back to absolute counts. */
-export const LOW_SAMPLE_BASE = 25;
+/**
+ * Small-sample floor. Below this we suppress the rate entirely (genuinely
+ * coin-flip territory). Calibrated for PPC-level lead volume, where even the
+ * highest-spend location only produces ~12 quality leads per 30 days.
+ */
+export const LOW_SAMPLE_BASE = 8;
+
+/**
+ * Above the floor but still thin — render the rate with a "small sample"
+ * caveat tag. Provisional, informational only: never drives pass/fail color
+ * or opportunities (callers should check this independently of `qualityTier`).
+ */
+export const LOW_SAMPLE_CAVEAT = 15;
 
 export type QualityTier = "green" | "amber" | "red" | "low-sample";
 
