@@ -47,16 +47,6 @@ export const DEFAULT_COMMAND_TARGETS: CommandTargets = {
   monthlyBudget: null,
 };
 
-/** PPC slice for the active window — same shape as Totals, plus est-spend meta. */
-export type AdsTotals = Totals & {
-  spendIsEstimated: boolean;
-  /** MTD PPC spend before extrapolation. */
-  spendMtd: number;
-  /** Fraction of the current month elapsed at query time. */
-  elapsedFraction: number;
-  spendMethod: string;
-};
-
 const PPC_SOURCE = "Google PPC";
 
 function zeroDay(date: string): DailyAgg {
@@ -201,40 +191,6 @@ async function fetchPpcWindow(
   return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** Month-to-date PPC spend for run-rate extrapolation. */
-async function fetchPpcMtdSpend(propertyIds: string[] | null): Promise<{ mtd: number; elapsedFraction: number }> {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysElapsed = now.getDate(); // inclusive of today
-  const elapsedFraction = Math.min(1, Math.max(daysElapsed / daysInMonth, 1 / daysInMonth));
-  const fromIso = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, "0")}-01`;
-  const toIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  let q = supabase
-    .from("daily_metrics")
-    .select("cost")
-    .eq("ad_source", PPC_SOURCE)
-    .gte("date", fromIso)
-    .lte("date", toIso);
-  if (propertyIds) q = q.in("property_id", propertyIds);
-  const res = await q;
-  if (res.error) throw res.error;
-  const mtd = (res.data ?? []).reduce((a, r: any) => a + Number(r.cost ?? 0), 0);
-  return { mtd, elapsedFraction };
-}
-
-function adsTotalsOf(rows: DailyAgg[], mtd: number, elapsedFraction: number): AdsTotals {
-  const base = totalsOf(rows);
-  const estSpend = elapsedFraction > 0 ? mtd / elapsedFraction : 0;
-  return {
-    ...base,
-    spend: estSpend,
-    spendMtd: mtd,
-    elapsedFraction,
-    spendIsEstimated: true,
-    spendMethod: `Est. 30-day spend = MTD PPC spend ($${mtd.toLocaleString(undefined, { maximumFractionDigits: 0 })}) ÷ ${(elapsedFraction * 100).toFixed(0)}% of month elapsed. Directional ±15%.`,
-  };
-}
 
 export function useCommandData(
   propertyIds: string[] | null,
@@ -269,10 +225,6 @@ export function useCommandData(
   const ppcPrior = useQuery({
     queryKey: ["command-ppc-window", key, cmpIso.from, cmpIso.to],
     queryFn: () => fetchPpcWindow(propertyIds, cmpIso.from, cmpIso.to),
-  });
-  const ppcMtd = useQuery({
-    queryKey: ["command-ppc-mtd", key, new Date().toISOString().slice(0, 10)],
-    queryFn: () => fetchPpcMtdSpend(propertyIds),
   });
 
   // CTM call-score distribution for AI Quality card (we have buckets but they
@@ -311,8 +263,8 @@ export function useCommandData(
     // Ads-mode parallel slice.
     adsCurrentDaily: ppcCurrent.data ?? [],
     adsPriorDaily: ppcPrior.data ?? [],
-    adsCurrent: adsTotalsOf(ppcCurrent.data ?? [], ppcMtd.data?.mtd ?? 0, ppcMtd.data?.elapsedFraction ?? 1),
-    adsPrior: adsTotalsOf(ppcPrior.data ?? [], ppcMtd.data?.mtd ?? 0, ppcMtd.data?.elapsedFraction ?? 1),
-    adsLoading: ppcCurrent.isLoading || ppcPrior.isLoading || ppcMtd.isLoading,
+    adsCurrent: totalsOf(ppcCurrent.data ?? []),
+    adsPrior: totalsOf(ppcPrior.data ?? []),
+    adsLoading: ppcCurrent.isLoading || ppcPrior.isLoading,
   };
 }

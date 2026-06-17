@@ -65,13 +65,13 @@ export function JourneyFunnel({
       </div>
       <p className="text-[11px] text-slate-500 mt-0.5">
         {isAds
-          ? "PPC Spend (est. 30-day) → PPC Records → PPC Qualified (good + AI-projected)"
+          ? "PPC Spend → PPC Records → PPC Qualified (good + AI-projected)"
           : "Ad Spend → Records → Qualified (good + AI-projected)"}
       </p>
 
       {/* Single horizontal row: three stages on one baseline, long connector arrows. */}
       <div className="mt-3 flex items-start gap-2">
-        <Stage s={{ label: isAds ? "PPC Spend (est.)" : "Ad Spend", src: isAds ? "daily_metrics.cost · Google PPC (MTD ÷ elapsed)" : "Google Ads", value: fmtCurrency(t.spend), Icon: Megaphone, sub: "100%", iconBg: "bg-blue-100", iconColor: "text-blue-600" }} />
+        <Stage s={{ label: isAds ? "PPC Spend" : "Ad Spend", src: isAds ? "daily_metrics.cost · Google PPC" : "Google Ads", value: fmtCurrency(t.spend), Icon: Megaphone, sub: "100%", iconBg: "bg-blue-100", iconColor: "text-blue-600" }} />
         <Connector />
         <Stage s={{ label: isAds ? "PPC Records" : "Records", src: isAds ? "daily_metrics.record_count · Google PPC" : "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
         <Connector />
@@ -117,7 +117,6 @@ export function JourneyFunnel({
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.mediaEfficiency}</TooltipContent>
           </Tooltip>
-          <span className="text-slate-400">Estimates ±15% directional</span>
         </div>
       )}
     </div>

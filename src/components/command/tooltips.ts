@@ -31,12 +31,12 @@ export const TIPS = {
     "Auto-detected gaps ranked by severity across CPL/CPGL/SLA efficiency. Dollar impact stays pending until the cost-impact formula is anchored to stable verified source counts and unit costs.",
   portfolioVerdict:
     "One-glance state of the business per location, judged on the canonical quality rate = (good + AI-projected) ÷ total leads. Target ≥55% green, 45–54% amber, <45% red. Locations with fewer than 25 leads in window show as low-sample, not red.",
-  adSpendEst:
-    "Estimated 30-day Google PPC spend. Method: month-to-date PPC spend ÷ MTD elapsed fraction (days elapsed / days in month). Directional ±15%; refreshed automatically as the month progresses. Source: daily_metrics.cost where ad_source = 'Google PPC'.",
+  adSpend:
+    "Google PPC spend over the selected date range. Source: daily_metrics.cost where ad_source = 'Google PPC'.",
   adCpl:
-    "Ad CPL = est. 30-day PPC spend ÷ PPC total leads (bad + good + AI-projected). PPC-only slice. No absolute pass/fail target until unit economics exist — compare locations against Winchester's efficiency instead.",
+    "Ad CPL = PPC spend ÷ PPC total leads (bad + good + AI-projected) over the selected date range. No absolute pass/fail target until unit economics exist — compare locations against Winchester's efficiency instead.",
   adCpgl:
-    "Ad CPGL = est. 30-day PPC spend ÷ PPC quality leads (good + AI-projected). PPC-only slice. Winchester benchmark $338/good lead is a reference line, NOT a pass/fail threshold.",
+    "Ad CPGL = PPC spend ÷ PPC quality leads (good + AI-projected) over the selected date range. Winchester benchmark $338/good lead is a reference line, NOT a pass/fail threshold.",
   mediaEfficiency:
     "Media Efficiency Ratio = total (blended) leads ÷ PPC leads. The dilution factor — how much non-paid lead volume is layered on top of paid. Higher = more leverage from organic/direct/referral.",
 } as const;
