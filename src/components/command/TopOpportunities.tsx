@@ -2,72 +2,71 @@ import { Link } from "react-router-dom";
 import { Info, AlertOctagon, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { fmtCurrency } from "@/lib/metrics";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { SpeedData } from "@/components/lead-perf/hooks";
-import type { Totals } from "./useCommandData";
+import type { CommandTargets, Totals } from "./useCommandData";
+import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 import { TIPS } from "./tooltips";
 
-type Op = { label: string; impact: number; why: string; href: string };
+type Op = { label: string; severity: "critical" | "warning"; why: string; href: string; formula: string };
 type Flag = { label: string; severity: "critical" | "warning"; why: string; href: string };
 
-export function TopOpportunities({ totals, speed }: { totals: Totals; speed: SpeedData | null }) {
+export function TopOpportunities({ totals, speed, targets = DEFAULT_COMMAND_TARGETS }: { totals: Totals; speed: SpeedData | null; targets?: CommandTargets }) {
   const ops: Op[] = [];
-  // Cost-per-projected as the impact unit (cost is attributable; revenue is not).
-  const costPerProjected = totals.appointments ? totals.spend / totals.appointments : 0;
-  const impactUnit = costPerProjected || 50; // fallback: cost-savings per recovered projected sale
+  // Cost-impact formula is intentionally not rendered as dollars yet.
+  // Anchoring rule: impact may render only after the unit cost, source counts,
+  // target rate, and source freshness are all attributable and stable. The prior
+  // formula mixed live period spend with fallback conversion constants, which is
+  // why opportunity dollars could swing by ~200x between builds.
 
   // Qualified-call gap
   const qualRate = totals.calls ? totals.qualifiedCalls / totals.calls : 0;
-  if (totals.calls && qualRate < 0.5) {
-    const additionalQual = Math.round(totals.calls * 0.5 - totals.qualifiedCalls);
-    const apptConv = totals.qualifiedCalls ? totals.appointments / totals.qualifiedCalls : 0.3;
-    const impact = Math.max(0, additionalQual * apptConv * impactUnit);
+  if (totals.calls && qualRate < targets.qualRate) {
+    const additionalQual = Math.round(totals.calls * targets.qualRate - totals.qualifiedCalls);
     if (additionalQual > 0) ops.push({
       label: "Improve Call Qualification",
-      impact,
-      why: `${(qualRate * 100).toFixed(0)}% of calls are qualified. Reaching 50% recovers ~${additionalQual} qualified calls.`,
+      severity: qualRate < targets.qualRate * 0.6 ? "critical" : "warning",
+      why: `${(qualRate * 100).toFixed(0)}% of calls are qualified. Target ${(targets.qualRate * 100).toFixed(0)}% implies ~${additionalQual} additional qualified calls.`,
       href: "/calls",
+      formula: "Pending dollar impact: additional qualified calls × verified projection rate × anchored cost-per-projected sale.",
     });
   }
   // Speed-to-lead
   if (speed && speed.total_leads) {
     if (speed.pct_under_5m < 60) {
-      const lift = (60 - speed.pct_under_5m) / 100;
-      const impact = Math.max(0, lift * speed.total_leads * 0.1 * impactUnit);
       ops.push({
         label: "Speed to Lead",
-        impact,
+        severity: speed.pct_under_5m < 30 ? "critical" : "warning",
         why: `Only ${speed.pct_under_5m.toFixed(1)}% of leads get a response within 5 min. Industry target is 60%+.`,
         href: "/lead-performance",
+        formula: "Pending dollar impact: leads outside SLA × verified SLA lift × anchored cost-per-qualified lead.",
       });
     }
     if (speed.pct_never_responded > 10) {
-      const reachable = Math.round(speed.never_responded * 0.5);
-      const impact = Math.max(0, reachable * 0.08 * impactUnit);
       ops.push({
         label: "Recover Never-Responded Leads",
-        impact,
+        severity: speed.pct_never_responded > 25 ? "critical" : "warning",
         why: `${speed.pct_never_responded.toFixed(1)}% (${speed.never_responded}) of leads never got a human response.`,
         href: "/lead-performance",
+        formula: "Pending dollar impact: never-responded leads × verified recovery rate × anchored cost-per-qualified lead.",
       });
     }
   }
   // Appointment conversion
   const apptRate = totals.qualifiedCalls ? totals.appointments / totals.qualifiedCalls : 0;
-  if (totals.qualifiedCalls && apptRate < 0.4) {
-    const lift = 0.4 - apptRate;
-    const impact = Math.max(0, totals.qualifiedCalls * lift * impactUnit);
+  if (totals.qualifiedCalls && apptRate < targets.projectionRate) {
     ops.push({
       label: "Improve Projection Rate",
-      impact,
-      why: `${(apptRate * 100).toFixed(0)}% of qualified calls become projected sales. Lifting to 40% recovers cost-per-projected.`,
+      severity: apptRate < targets.projectionRate * 0.6 ? "critical" : "warning",
+      why: `${(apptRate * 100).toFixed(0)}% of qualified calls become projected sales. Target is ${(targets.projectionRate * 100).toFixed(0)}%.`,
       href: "/lead-performance",
+      formula: "Pending dollar impact: projected-sale gap × anchored cost-per-projected sale.",
     });
   }
 
-  ops.sort((a, b) => b.impact - a.impact);
+  const severityOrder = { critical: 0, warning: 1 } as const;
+  ops.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity] || a.label.localeCompare(b.label));
   const top = ops.slice(0, 3);
 
   // Lane A — Data integrity (stale syncs in the last 24h)
@@ -153,7 +152,12 @@ export function TopOpportunities({ totals, speed }: { totals: Totals; speed: Spe
               {top.slice(0, 3).map((o) => (
                 <tr key={o.label} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
                   <td className="py-1.5 pr-3 font-medium text-slate-900">{o.label}</td>
-                  <td className="py-1.5 pr-3 font-bold text-rose-500 tabular-nums">{fmtCurrency(o.impact)}</td>
+                  <td className="py-1.5 pr-3 font-bold text-amber-600 tabular-nums">
+                    <Tooltip>
+                      <TooltipTrigger asChild><span className="cursor-help">Pending</span></TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-xs leading-snug">{o.formula}</TooltipContent>
+                    </Tooltip>
+                  </td>
                   <td className="py-1.5 pr-3 text-slate-600">{o.why}</td>
                   <td className="py-1.5 pr-3 text-right">
                     <Button asChild size="sm" variant="outline" className="h-7 px-2.5 text-[11px] bg-white border-slate-200 text-slate-700 hover:bg-slate-50">
