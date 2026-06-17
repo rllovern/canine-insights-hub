@@ -43,7 +43,7 @@ export default function Command() {
       {/* 5 KPI cards */}
       {data.isLoading ? (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2">
@@ -55,6 +55,7 @@ export default function Command() {
             compareLabel={cmpLabel}
             tip={TIPS.spend}
             invertDelta
+            formatValue={fmtCurrency}
           />
           <KpiSparkCard
             label="Calls Received"
@@ -63,6 +64,7 @@ export default function Command() {
             series={series("calls")}
             compareLabel={cmpLabel}
             tip={TIPS.calls}
+            formatValue={fmtNumber}
           />
           <KpiSparkCard
             label="Qualified Calls"
@@ -71,6 +73,7 @@ export default function Command() {
             series={series("good_leads")}
             compareLabel={cmpLabel}
             tip={TIPS.qualifiedCalls}
+            formatValue={fmtNumber}
           />
           <KpiSparkCard
             label="Appointments Set"
@@ -79,6 +82,7 @@ export default function Command() {
             series={series("projected_sale")}
             compareLabel={cmpLabel}
             tip={TIPS.appointments}
+            formatValue={fmtNumber}
           />
           <KpiSparkCard
             label="Revenue Generated"
@@ -87,22 +91,23 @@ export default function Command() {
             series={series("verified_sale")}
             compareLabel={cmpLabel}
             tip={TIPS.revenue}
+            formatValue={fmtCurrency}
           />
         </div>
       )}
 
       {/* Funnel + Revenue Capture */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[260px]">
         <div className="lg:col-span-2">
-          {data.isLoading ? <Skeleton className="h-40 rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} />}
+          {data.isLoading ? <Skeleton className="h-full min-h-[240px] rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} />}
         </div>
         <div>
-          {data.isLoading ? <Skeleton className="h-40 rounded-2xl" /> : <RevenueCaptureScore current={data.current} prior={data.prior} />}
+          {data.isLoading ? <Skeleton className="h-full min-h-[240px] rounded-2xl" /> : <RevenueCaptureScore current={data.current} prior={data.prior} />}
         </div>
       </div>
 
       {/* 3 Performance cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[200px]">
         <CallHandlingCard totals={data.current} />
         <MissedCallFollowUpCard speed={speed.data ?? null} />
         <CallQualityCard buckets={data.buckets} />
