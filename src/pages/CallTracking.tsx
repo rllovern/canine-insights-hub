@@ -17,6 +17,14 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { usePropertyMetricConfig } from "@/lib/property-labels";
 import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
+import {
+  rowTotalLeads,
+  rowQualityRate,
+  qualityTier,
+  formatQualityRate,
+  TIER_TEXT,
+  PROJECTED_LABEL,
+} from "@/lib/leadModel";
 
 export default function CallTracking() {
   const { current, prior, isLoading, range, compareMode, compareRange } = useDashboard();
@@ -165,8 +173,13 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
   const [sortKey, setSortKey] = useState<string>("good_leads");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  // total_leads = good + bad + projected_sale. Locked Step 2 AC-1.
-  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) + (r.projected_sale ?? 0) }));
+  // Canonical totals/quality — every value flows through leadModel.ts.
+  // No inline arithmetic on good/bad/projected lives in this file.
+  const withTotals = (rows: any[]) => rows.map((r: any) => ({
+    ...r,
+    total_leads: rowTotalLeads(r),
+    quality_rate: rowQualityRate(r),
+  }));
   const curT = withTotals(cur);
   const preT = withTotals(pre);
   const preMapT = new Map(preT.map((r: any) => [r.ad_source, r]));
@@ -181,14 +194,19 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
     { key: "no_entry", label: "No Entry" },
     ...(cfg?.isHidden("spam") ? [] : [{ key: "spam", label: cfg?.label("spam") ?? "Spam" }]),
     { key: "total_leads", label: "Total Leads" },
+    { key: "quality_rate", label: "Quality" },
     ...(cfg?.isHidden("bad_leads") ? [] : [{ key: "bad_leads", label: cfg?.label("bad_leads") ?? "Bad Leads" }]),
     ...(cfg?.isHidden("good_leads") ? [] : [{ key: "good_leads", label: cfg?.label("good_leads") ?? "Good Leads" }]),
-    ...(cfg?.isHidden("projected_sale") ? [] : [{ key: "projected_sale", label: cfg?.label("projected_sale") ?? "Projected Sale" }]),
+    ...(cfg?.isHidden("projected_sale") ? [] : [{ key: "projected_sale", label: PROJECTED_LABEL }]),
     ...(cfg?.isHidden("verified_sale") ? [] : [{ key: "verified_sale", label: cfg?.label("verified_sale") ?? "Verified Sale" }]),
   ];
 
-  const totals = curT.reduce((acc: any, r: any) => { for (const c of cols) acc[c.key] = (acc[c.key] || 0) + (r[c.key] ?? 0); return acc; }, {} as any);
-  const ptotals = preT.reduce((acc: any, r: any) => { for (const c of cols) acc[c.key] = (acc[c.key] || 0) + (r[c.key] ?? 0); return acc; }, {} as any);
+  // Sum count cols normally; quality is ratio-of-sums via leadModel.ts.
+  const sumCols = cols.filter((c) => c.key !== "quality_rate");
+  const totals: any = curT.reduce((acc: any, r: any) => { for (const c of sumCols) acc[c.key] = (acc[c.key] || 0) + (r[c.key] ?? 0); return acc; }, {});
+  const ptotals: any = preT.reduce((acc: any, r: any) => { for (const c of sumCols) acc[c.key] = (acc[c.key] || 0) + (r[c.key] ?? 0); return acc; }, {});
+  totals.quality_rate = rowQualityRate(totals);
+  ptotals.quality_rate = rowQualityRate(ptotals);
 
   const sortBtn = (key: string, label: string) => (
     <button onClick={() => { if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortKey(key); setSortDir("desc"); } }}
@@ -212,23 +230,13 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
             return (
               <TableRow key={r.ad_source}>
                 <TableCell className="font-medium">{r.ad_source}</TableCell>
-                {cols.map((c) => (
-                  <TableCell key={c.key} className="text-right tabular-nums">
-                    <div>{c.key === "verified_sale" ? "—" : fmtNumber(r[c.key])}</div>
-                    {p && c.key !== "verified_sale" && <Delta value={pctChange(r[c.key], p[c.key] ?? 0)} invert={c.key === "bad_leads" || c.key === "no_entry" || c.key === "spam"} />}
-                  </TableCell>
-                ))}
+                {cols.map((c) => <CellOut key={c.key} colKey={c.key} row={r} prev={p} />)}
               </TableRow>
             );
           })}
           <TableRow className="bg-muted/30 font-semibold">
             <TableCell>Grand Total</TableCell>
-            {cols.map((c) => (
-              <TableCell key={c.key} className="text-right tabular-nums">
-                <div>{c.key === "verified_sale" ? "—" : fmtNumber(totals[c.key])}</div>
-                {c.key !== "verified_sale" && <Delta value={pctChange(totals[c.key], ptotals[c.key] ?? 0)} invert={c.key === "bad_leads" || c.key === "no_entry" || c.key === "spam"} />}
-              </TableCell>
-            ))}
+            {cols.map((c) => <CellOut key={c.key} colKey={c.key} row={totals} prev={ptotals} />)}
           </TableRow>
         </TableBody>
       </Table>
@@ -237,8 +245,12 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
 }
 
 function CampaignTable({ current, prior, cfg }: any) {
-  // total_leads = good + bad + projected_sale. Locked Step 2 AC-1.
-  const withTotals = (rows: any[]) => rows.map((r: any) => ({ ...r, total_leads: (r.good_leads ?? 0) + (r.bad_leads ?? 0) + (r.projected_sale ?? 0) }));
+  // Canonical totals/quality from leadModel.ts. No local arithmetic.
+  const withTotals = (rows: any[]) => rows.map((r: any) => ({
+    ...r,
+    total_leads: rowTotalLeads(r),
+    quality_rate: rowQualityRate(r),
+  }));
   const cur = useMemo(() => withTotals(groupByCampaign(current)), [current]);
   const pre = useMemo(() => withTotals(groupByCampaign(prior)), [prior]);
   const preMap = new Map(pre.map((r: any) => [`${r.ad_source}::${r.campaign}`, r]));
@@ -249,7 +261,7 @@ function CampaignTable({ current, prior, cfg }: any) {
   const slice = sorted.slice(page * PAGE, page * PAGE + PAGE);
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE));
 
-  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "projected_sale", "verified_sale"].filter((c) => {
+  const cols = ["record_count", "no_entry", "spam", "total_leads", "quality_rate", "bad_leads", "good_leads", "projected_sale", "verified_sale"].filter((c) => {
     if (c === "spam" && cfg?.isHidden("spam")) return false;
     if (c === "bad_leads" && cfg?.isHidden("bad_leads")) return false;
     if (c === "good_leads" && cfg?.isHidden("good_leads")) return false;
@@ -260,9 +272,10 @@ function CampaignTable({ current, prior, cfg }: any) {
   const labels: Record<string, string> = {
     record_count: "Records", no_entry: "No Entry",
     spam: cfg?.label("spam") ?? "Spam", total_leads: "Total Leads",
+    quality_rate: "Quality",
     bad_leads: cfg?.label("bad_leads") ?? "Bad Leads",
     good_leads: cfg?.label("good_leads") ?? "Good Leads",
-    projected_sale: cfg?.label("projected_sale") ?? "Projected Sale",
+    projected_sale: PROJECTED_LABEL,
     verified_sale: cfg?.label("verified_sale") ?? "Verified Sale",
   };
 
@@ -289,12 +302,7 @@ function CampaignTable({ current, prior, cfg }: any) {
               <TableRow key={`${r.ad_source}-${r.campaign}`}>
                 <TableCell className="text-xs text-muted-foreground">{r.ad_source}</TableCell>
                 <TableCell className="font-medium">{r.campaign}</TableCell>
-                {cols.map((c) => (
-                  <TableCell key={c} className="text-right tabular-nums">
-                    <div>{c === "verified_sale" ? "—" : fmtNumber(r[c])}</div>
-                    {p && c !== "verified_sale" && <Delta value={pctChange(r[c], p[c] ?? 0)} invert={c === "bad_leads" || c === "no_entry" || c === "spam"} />}
-                  </TableCell>
-                ))}
+                {cols.map((c) => <CellOut key={c} colKey={c} row={r} prev={p} />)}
               </TableRow>
             );
           })}
