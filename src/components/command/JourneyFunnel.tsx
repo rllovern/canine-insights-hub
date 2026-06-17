@@ -145,7 +145,7 @@ function QualifiedStage({ good, projected, bad, qualityRatePct, hasBase, leadsCo
   );
 }
 
-function Stage({ s }: { s: { label: string; src: string; value: string; Icon: any; sub: string; iconBg: string; iconColor: string; pending: boolean } }) {
+function Stage({ s }: { s: { label: string; src: string; value: string; Icon: any; sub: string; iconBg: string; iconColor: string; pending?: boolean } }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
