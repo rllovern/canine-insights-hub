@@ -140,7 +140,7 @@ export default function Command() {
           )}
         </div>
         <div>
-          <PortfolioVerdict totals={data.current} targets={data.targets} />
+          <PortfolioVerdict totals={active} targets={data.targets} />
         </div>
       </div>
 
