@@ -127,7 +127,7 @@ function QualifiedStage({ good, projected, bad, qualityRatePct, hasBase, leadsCo
           <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Qualified Leads</div>
           <div className={cn("text-[13px] font-bold tabular-nums mt-0.5 leading-tight", numCls)}>{fmtNumber(total)}</div>
           <div className="text-[10px] text-slate-500 tabular-nums mt-0.5">
-            {hasBase ? `${qualityRatePct.toFixed(0)}% quality` : `${leadsConvPct.toFixed(0)}% of calls`}
+            {hasBase ? `${qualityRatePct.toFixed(0)}% quality` : `${leadsConvPct.toFixed(0)}% of records`}
           </div>
         </div>
       </TooltipTrigger>
