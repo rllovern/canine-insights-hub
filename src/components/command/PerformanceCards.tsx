@@ -54,23 +54,25 @@ function Rail({
 }) {
   return (
     <div>
-      <div className="text-[10.5px] text-slate-500">{label}</div>
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10.5px] text-slate-500">{label}</div>
+        {goalText && <div className="text-[10px] text-slate-400">{goalText}</div>}
+      </div>
       <div className="mt-0.5 flex items-baseline justify-between">
-        <div className="text-base font-bold tabular-nums text-slate-900">{value}</div>
+        <div className="text-sm font-bold tabular-nums text-slate-900">{value}</div>
         {deltaText && (
-          <span className={cn("inline-flex items-center gap-0.5 text-[11px] font-semibold", deltaPositive ? "text-emerald-600" : "text-rose-600")}>
+          <span className={cn("inline-flex items-center gap-0.5 text-[10.5px] font-semibold", deltaPositive ? "text-emerald-600" : "text-rose-600")}>
             {deltaPositive ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
             {deltaText}
           </span>
         )}
       </div>
-      <div className="mt-1 relative h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+      <div className="mt-1 relative h-1 w-full rounded-full bg-slate-100 overflow-hidden">
         <div className={cn("h-full rounded-full", TONE[tone])} style={{ width: `${Math.max(2, Math.min(100, pct))}%` }} />
         {goal != null && (
           <div className="absolute top-0 h-full w-px bg-slate-300" style={{ left: `${Math.min(100, goal)}%` }} />
         )}
       </div>
-      {goalText && <div className="mt-0.5 text-[10px] text-slate-400 text-right">{goalText}</div>}
     </div>
   );
 }
@@ -87,7 +89,7 @@ export function CallHandlingCard({ totals }: { totals: Totals }) {
   return (
     <CardShell>
       <Header title="Call Handling Performance" href="/calls" tip={TIPS.callHandling} />
-      <div className="mt-3 space-y-3 flex-1">
+      <div className="mt-2 space-y-2 flex-1">
         <Rail
           label="Answer Rate" value={`${answerRate.toFixed(1)}%`} pct={answerRate} goal={70} tone="primary"
           deltaText="5.6%" deltaPositive
@@ -104,7 +106,7 @@ export function CallHandlingCard({ totals }: { totals: Totals }) {
           goalText="Goal: < 10%"
         />
       </div>
-      <div className="mt-2 text-[10px] text-slate-400">— placeholder. CTM call disposition data pending.</div>
+      <div className="mt-1 text-[9.5px] text-slate-400">— placeholder. CTM call disposition data pending.</div>
     </CardShell>
   );
 }
@@ -121,7 +123,7 @@ export function MissedCallFollowUpCard({ speed }: { speed: SpeedData | null }) {
   return (
     <CardShell>
       <Header title="Missed Call Follow-Up Performance" href="/lead-performance" tip={TIPS.missedFollowUp} />
-      <div className="mt-3 flex items-baseline justify-between">
+      <div className="mt-2 flex items-baseline justify-between">
         <div>
           <div className="text-[10.5px] text-slate-500">Missed Calls</div>
           <div className="text-xl font-bold tabular-nums text-slate-900">{fmtNumber(missed)}</div>
@@ -130,7 +132,7 @@ export function MissedCallFollowUpCard({ speed }: { speed: SpeedData | null }) {
           {total ? `${missedPct.toFixed(1)}% of total calls` : "—"}
         </div>
       </div>
-      <div className="mt-3 space-y-3 flex-1">
+      <div className="mt-2 space-y-2 flex-1">
         <Rail label="Returned < 5 min" value={`${u5.toFixed(1)}%`} pct={u5} goal={60} tone="primary"
           deltaText="7.8%" deltaPositive goalText="Goal: 60%" />
         <Rail label="Returned < 30 min" value={`${u15.toFixed(1)}%`} pct={u15} goal={80} tone="success"
