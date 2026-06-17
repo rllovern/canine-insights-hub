@@ -21,6 +21,24 @@ export type Totals = {
   totalLeads: number;
 };
 
+export type CommandTargets = {
+  cpl: number;
+  cpgl: number;
+  qualRate: number;
+  projectionRate: number;
+  costPerProjected: number;
+  monthlyBudget: number | null;
+};
+
+export const DEFAULT_COMMAND_TARGETS: CommandTargets = {
+  cpl: 200,
+  cpgl: 400,
+  qualRate: 0.45,
+  projectionRate: 0.4,
+  costPerProjected: 1000,
+  monthlyBudget: null,
+};
+
 function zeroDay(date: string): DailyAgg {
   return { date, cost: 0, good_leads: 0, bad_leads: 0, projected_sale: 0, verified_sale: 0, calls: 0 };
 }
@@ -70,6 +88,33 @@ async function fetchWindow(
   return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+async function fetchTargets(propertyIds: string[] | null, periodStart: string): Promise<CommandTargets> {
+  let q = supabase
+    .from("property_targets")
+    .select("property_id, cpl_target, cpgl_target, monthly_ad_budget")
+    .eq("period_start", periodStart);
+  if (propertyIds) q = q.in("property_id", propertyIds);
+  const { data, error } = await q;
+  if (error) return DEFAULT_COMMAND_TARGETS;
+
+  const rows = (data ?? []) as any[];
+  const cplTargets = rows.map((r) => Number(r.cpl_target ?? 0)).filter((n) => n > 0);
+  const cpglTargets = rows.map((r) => Number(r.cpgl_target ?? 0)).filter((n) => n > 0);
+  const monthlyBudgets = rows.map((r) => Number(r.monthly_ad_budget ?? 0)).filter((n) => n > 0);
+  const avg = (vals: number[], fallback: number) => vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : fallback;
+  const cpgl = avg(cpglTargets, DEFAULT_COMMAND_TARGETS.cpgl);
+  const projectionRate = DEFAULT_COMMAND_TARGETS.projectionRate;
+
+  return {
+    cpl: avg(cplTargets, DEFAULT_COMMAND_TARGETS.cpl),
+    cpgl,
+    qualRate: DEFAULT_COMMAND_TARGETS.qualRate,
+    projectionRate,
+    costPerProjected: cpgl / projectionRate,
+    monthlyBudget: monthlyBudgets.length ? monthlyBudgets.reduce((a, b) => a + b, 0) : null,
+  };
+}
+
 export function totalsOf(rows: DailyAgg[]): Totals {
   const t: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0 };
   for (const r of rows) {
@@ -90,6 +135,7 @@ export function useCommandData(
 ) {
   const iso = rangeToISO(range);
   const cmpIso = compareRange ? rangeToISO(compareRange) : rangeToISO(priorRange(range));
+  const periodStart = `${iso.from.slice(0, 7)}-01`;
 
   const key = propertyIds?.join(",") ?? "all";
 
@@ -100,6 +146,10 @@ export function useCommandData(
   const prior = useQuery({
     queryKey: ["command-window", key, cmpIso.from, cmpIso.to],
     queryFn: () => fetchWindow(propertyIds, cmpIso.from, cmpIso.to),
+  });
+  const targets = useQuery({
+    queryKey: ["command-targets", key, periodStart],
+    queryFn: () => fetchTargets(propertyIds, periodStart),
   });
 
   // CTM call-score distribution for AI Quality card (we have buckets but they
@@ -131,6 +181,7 @@ export function useCommandData(
     priorDaily: prior.data ?? [],
     current: totalsOf(current.data ?? []),
     prior: totalsOf(prior.data ?? []),
+    targets: targets.data ?? DEFAULT_COMMAND_TARGETS,
     buckets: buckets.data ?? {},
     bucketsLoading: buckets.isLoading,
     compareRangeIso: cmpIso,
