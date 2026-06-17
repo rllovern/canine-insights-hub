@@ -1,16 +1,16 @@
-import { Megaphone, PhoneCall, Award, Sparkles, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Info, Minus } from "lucide-react";
+import { Megaphone, PhoneCall, Award, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Info, Minus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtCurrency, fmtNumber, safeDelta } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 import type { CommandTargets, Totals } from "./useCommandData";
 import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 import { TIPS } from "./tooltips";
+import { CARD_CHROME } from "./cardChrome";
 import {
   PROJECTED_LABEL,
   QUALITY_TARGETS,
   WINCHESTER_BENCHMARK,
   qualityTier,
-  TIER_TEXT,
   formatQualityRate,
 } from "@/lib/leadModel";
 
@@ -24,17 +24,6 @@ const EMPTY_TOTALS: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointmen
 export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: { t?: Totals; prior?: Totals; targets?: CommandTargets }) {
   t = t ?? EMPTY_TOTALS;
   prior = prior ?? EMPTY_TOTALS;
-  // Linear stages.
-  const linearStages = [
-    { label: "Ad Spend",       src: "Google Ads", value: fmtCurrency(t.spend),  Icon: Megaphone, sub: "100%",                          iconBg: "bg-blue-100",   iconColor: "text-blue-600",   pending: false },
-    { label: "Calls Received", src: "CTM",        value: fmtNumber(t.calls),    Icon: PhoneCall, sub: t.totalLeads ? `${t.totalLeads} leads` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600", pending: false },
-  ];
-
-  // Parallel quality tiers — good and AI-projected are siblings, not a sequence.
-  const goodShare = t.totalLeads ? (t.good / t.totalLeads) * 100 : 0;
-  const projShare = t.totalLeads ? (t.projected / t.totalLeads) * 100 : 0;
-
-  // CPGL uses the canonical quality numerator (good + projected).
   const qualityCount = t.good + t.projected;
   const priorQualityCount = prior.good + prior.projected;
   const cpgl = qualityCount ? t.spend / qualityCount : 0;
@@ -44,9 +33,11 @@ export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: {
   const qualityRatePct = t.qualityRate * 100;
   const priorQualityRatePct = prior.qualityRate * 100;
   const tier = qualityTier(t.qualityRate, t.totalLeads);
+  const callsConvPct = t.calls ? 100 : 0; // 100% of calls flow into the funnel
+  const leadsConvPct = t.calls ? (t.totalLeads / t.calls) * 100 : 0;
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
+    <div className={cn(CARD_CHROME, "p-3 h-full flex flex-col")}>
       <div className="flex items-center gap-1.5">
         <h3 className="text-sm font-semibold text-slate-900">Customer Journey Funnel</h3>
         <Tooltip>
@@ -54,24 +45,17 @@ export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: {
           <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.funnel}</TooltipContent>
         </Tooltip>
       </div>
-      <p className="text-[11px] text-slate-500 mt-0.5">Ad Spend → Calls → parallel quality tiers (Good · AI-projected) → Verified (pending)</p>
+      <p className="text-[11px] text-slate-500 mt-0.5">Ad Spend → Calls → Qualified (good + AI-projected) → Verified (pending)</p>
 
-      <div className="mt-2 flex items-start gap-1">
-        {linearStages.map((s) => (
-          <div key={s.label} className="flex items-start gap-1">
-            <Stage s={s} />
-            <ArrowRight className="size-3 text-slate-300 mt-3 shrink-0" />
-          </div>
-        ))}
-
-        {/* Parallel quality tiers — sibling branches, NOT a sub-stage of each other. */}
-        <div className="flex flex-col gap-1 flex-1">
-          <Stage s={{ label: "Good leads",      src: "CTM scored",     value: fmtNumber(t.good),      Icon: Award,    sub: `${goodShare.toFixed(0)}% of leads`,  iconBg: "bg-purple-100", iconColor: "text-purple-600", pending: false }} />
-          <Stage s={{ label: PROJECTED_LABEL,   src: "CTM transcript", value: fmtNumber(t.projected), Icon: Sparkles, sub: `${projShare.toFixed(0)}% of leads`,  iconBg: "bg-amber-100",  iconColor: "text-amber-600",  pending: false }} />
-        </div>
-
-        <ArrowRight className="size-3 text-slate-300 mt-3 shrink-0" />
-        <Stage s={{ label: "Verified Sale", src: "GHL Won (pending)", value: "—", Icon: CheckCircle2, sub: "not piped", iconBg: "bg-slate-100", iconColor: "text-slate-400", pending: true }} />
+      {/* Single horizontal row: all four stages on one baseline. */}
+      <div className="mt-3 flex items-start gap-1">
+        <Stage s={{ label: "Ad Spend",       src: "Google Ads", value: fmtCurrency(t.spend), Icon: Megaphone, sub: "100%",                                           iconBg: "bg-blue-100",   iconColor: "text-blue-600",   pending: false }} />
+        <ArrowRight className="size-3 text-slate-300 mt-5 shrink-0" />
+        <Stage s={{ label: "Calls Received", src: "CTM",        value: fmtNumber(t.calls),   Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—",     iconBg: "bg-indigo-100", iconColor: "text-indigo-600", pending: false }} />
+        <ArrowRight className="size-3 text-slate-300 mt-5 shrink-0" />
+        <QualifiedStage good={t.good} projected={t.projected} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
+        <ArrowRight className="size-3 text-slate-300 mt-5 shrink-0" />
+        <Stage s={{ label: "Verified Sale", src: "GHL Won (pending)", value: "—", Icon: CheckCircle2, sub: "pending", iconBg: "bg-slate-100", iconColor: "text-slate-400", pending: true }} />
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
@@ -96,6 +80,36 @@ export function JourneyFunnel({ t, prior, targets = DEFAULT_COMMAND_TARGETS }: {
         </div>
       </div>
     </div>
+  );
+}
+
+function QualifiedStage({ good, projected, qualityRatePct, hasBase, leadsConvPct }: { good: number; projected: number; qualityRatePct: number; hasBase: boolean; leadsConvPct: number }) {
+  const total = good + projected;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex flex-col items-center text-center flex-1 rounded-md p-0.5">
+          <div className="flex size-9 items-center justify-center rounded-full bg-emerald-100">
+            <Award className="size-4 text-emerald-600" />
+          </div>
+          <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Qualified Leads</div>
+          <div className="text-[13px] font-bold tabular-nums mt-0.5 leading-tight text-slate-900">{fmtNumber(total)}</div>
+          <div className="text-[10px] tabular-nums leading-tight">
+            <span className="text-purple-600 font-medium">{good} good</span>
+            <span className="text-slate-400"> · </span>
+            <span className="text-amber-600 font-medium">{projected} AI-projected</span>
+          </div>
+          <div className="text-[10px] text-slate-500 tabular-nums mt-0.5">
+            {hasBase ? `${qualityRatePct.toFixed(0)}% quality` : `${leadsConvPct.toFixed(0)}% of calls`}
+          </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-xs leading-snug">
+        <div className="font-semibold">Qualified leads (good + AI-projected)</div>
+        <div className="text-slate-400 text-[10px] mt-0.5">Source: CTM scored + CTM transcript projection</div>
+        <div className="mt-1">Good and AI-projected are parallel quality outcomes, not a sequence. Both count toward quality rate.</div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
