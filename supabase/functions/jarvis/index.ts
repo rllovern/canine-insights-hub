@@ -1176,15 +1176,16 @@ function buildTools(ctx: Ctx) {
         const id = resolveProperty(ctx, i.property_id, "get_google_ads_change_impact");
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
-        const { data, error } = await ctx.supabase.from("daily_metrics")
-          .select("date,ad_source,campaign,cost,clicks,leads")
+        // Canonical Lead Model: use v_lead_counts_daily.total_leads, not legacy leads col.
+        const { data, error } = await ctx.supabase.from("v_lead_counts_daily")
+          .select("date,ad_source,campaign,cost,clicks,total_leads")
           .eq("property_id", id).gte("date", from).lte("date", to).order("date");
         if (error) throw new Error(error.message);
         const rows = data ?? [];
         const byDate = new Map<string, { date: string; cost: number; leads: number; clicks: number }>();
         for (const r of rows) {
           const d = byDate.get(r.date) ?? { date: r.date, cost: 0, leads: 0, clicks: 0 };
-          d.cost += Number(r.cost ?? 0); d.leads += Number(r.leads ?? 0); d.clicks += Number(r.clicks ?? 0);
+          d.cost += Number(r.cost ?? 0); d.leads += Number(r.total_leads ?? 0); d.clicks += Number(r.clicks ?? 0);
           byDate.set(r.date, d);
         }
         const daily = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
@@ -1220,7 +1221,7 @@ function buildTools(ctx: Ctx) {
             : severity === "warning"
             ? "Moderate volatility — partial review possible; avoid stacked changes."
             : "Account looks stable — safe to review optimizations.",
-          sources_used: ["daily_metrics"],
+          sources_used: ["v_lead_counts_daily"],
           caveats: [
             "Stabilization estimate is an internal volatility heuristic, not official Google Ads learning-phase status.",
             rows.length === 0 ? "No daily_metrics rows in window." : null,
