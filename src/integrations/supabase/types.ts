@@ -1875,7 +1875,94 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_lead_counts_daily: {
+        Row: {
+          ad_source: string | null
+          bad_leads: number | null
+          campaign: string | null
+          cost: number | null
+          date: string | null
+          good_leads: number | null
+          no_entry: number | null
+          projected_sales: number | null
+          property_id: string | null
+          quality_numerator: number | null
+          quality_rate: number | null
+          records: number | null
+          spam: number | null
+          total_leads: number | null
+          verified_sales: number | null
+        }
+        Insert: {
+          ad_source?: string | null
+          bad_leads?: number | null
+          campaign?: string | null
+          cost?: number | null
+          date?: string | null
+          good_leads?: number | null
+          no_entry?: number | null
+          projected_sales?: number | null
+          property_id?: string | null
+          quality_numerator?: never
+          quality_rate?: never
+          records?: number | null
+          spam?: number | null
+          total_leads?: never
+          verified_sales?: number | null
+        }
+        Update: {
+          ad_source?: string | null
+          bad_leads?: number | null
+          campaign?: string | null
+          cost?: number | null
+          date?: string | null
+          good_leads?: number | null
+          no_entry?: number | null
+          projected_sales?: number | null
+          property_id?: string | null
+          quality_numerator?: never
+          quality_rate?: never
+          records?: number | null
+          spam?: number | null
+          total_leads?: never
+          verified_sales?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_metrics_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_lead_counts_property_daily: {
+        Row: {
+          bad_leads: number | null
+          cost: number | null
+          date: string | null
+          good_leads: number | null
+          no_entry: number | null
+          projected_sales: number | null
+          property_id: string | null
+          quality_numerator: number | null
+          quality_rate: number | null
+          records: number | null
+          spam: number | null
+          total_leads: number | null
+          verified_sales: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_metrics_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       ai_assistant_context: {
@@ -2112,6 +2199,42 @@ export type Database = {
       lead_perf_speed: {
         Args: { _from: string; _property_ids: string[]; _to: string }
         Returns: Json
+      }
+      lead_quality_rollup: {
+        Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: {
+          bad: number
+          cpgl: number
+          cpl: number
+          good: number
+          no_entry: number
+          projected: number
+          quality_num: number
+          quality_rate: number
+          records: number
+          spam: number
+          spend: number
+          total: number
+          verified: number
+        }[]
+      }
+      lead_quality_rollup_by_report_token: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: {
+          bad: number
+          cpgl: number
+          cpl: number
+          good: number
+          no_entry: number
+          projected: number
+          quality_num: number
+          quality_rate: number
+          records: number
+          spam: number
+          spend: number
+          total: number
+          verified: number
+        }[]
       }
       normalize_tag: { Args: { _t: string }; Returns: string }
       public_ai_assistant_context: {
