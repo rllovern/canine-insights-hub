@@ -35,6 +35,13 @@ export const QUALITY_TARGETS = { green: 0.55, amber: 0.45 } as const;
 /** Highest-volume location (Winchester). Shown as benchmark, NOT threshold. */
 export const WINCHESTER_BENCHMARK = 0.50;
 
+/**
+ * Winchester's ads-only cost per quality lead (good + AI-projected).
+ * Reference line in Ads mode — NOT a pass/fail threshold. Unit economics
+ * don't exist yet, so we never color CPL/CPGL pass/fail in Ads mode.
+ */
+export const AD_CPGL_BENCHMARK = 338;
+
 /** Suppress noisy rates on small samples — fall back to absolute counts. */
 export const LOW_SAMPLE_BASE = 25;
 

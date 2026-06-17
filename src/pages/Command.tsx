@@ -1,11 +1,12 @@
 // NOTE: This page intentionally locks to a light palette to match the
 // approved PerformX Executive Overview spec. Dark-mode parity is a follow-up.
 import { format } from "date-fns";
+import { useSearchParams } from "react-router-dom";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fmtCurrency, fmtNumber } from "@/lib/metrics";
-import { useCommandData } from "@/components/command/useCommandData";
+import { useCommandData, type CommandMode } from "@/components/command/useCommandData";
 import { KpiSparkCard } from "@/components/command/KpiSparkCard";
 import { TIPS } from "@/components/command/tooltips";
 import { JourneyFunnel } from "@/components/command/JourneyFunnel";
@@ -17,18 +18,33 @@ import {
 } from "@/components/command/PerformanceCards";
 import { TopOpportunities } from "@/components/command/TopOpportunities";
 import { useSpeed } from "@/components/lead-perf/hooks";
+import { cn } from "@/lib/utils";
 
 export default function Command() {
   const { propertyIds, label } = useScope();
   const { range, compareRange, compareMode } = useDateRange();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const mode: CommandMode = searchParams.get("mode") === "ads" ? "ads" : "business";
+  const setMode = (m: CommandMode) => {
+    const next = new URLSearchParams(searchParams);
+    if (m === "ads") next.set("mode", "ads"); else next.delete("mode");
+    setSearchParams(next, { replace: true });
+  };
+  const isAds = mode === "ads";
 
   const data = useCommandData(propertyIds, range, compareMode !== "off" ? compareRange : null);
   const speed = useSpeed({ propertyIds, from: range.from, to: range.to });
 
   const cmpLabel = `vs ${format(new Date(data.compareRangeIso.from), "MMM d")} – ${format(new Date(data.compareRangeIso.to), "MMM d")}`;
 
+  // Active slice for the KPI tiles + funnel (Business = blended, Ads = PPC-only).
+  const active = isAds ? data.adsCurrent : data.current;
+  const activePrior = isAds ? data.adsPrior : data.prior;
+  const activeDaily = isAds ? data.adsCurrentDaily : data.currentDaily;
+  const loading = isAds ? data.adsLoading : data.isLoading;
+
   const series = (key: "cost" | "calls" | "good_leads" | "projected_sale" | "verified_sale") =>
-    data.currentDaily.map((d) => ({ date: d.date, v: d[key] }));
+    activeDaily.map((d) => ({ date: d.date, v: d[key] }));
 
   return (
       <div className="-m-4 md:-m-6 p-3 lg:p-4 bg-[hsl(220_20%_97%)] min-h-[calc(100vh-3rem)] text-slate-900">
@@ -36,57 +52,78 @@ export default function Command() {
       <div className="flex items-end justify-between gap-3 mb-2">
         <div className="min-w-0">
           <h1 className="text-[20px] font-bold tracking-tight text-slate-900 leading-tight">Executive Overview</h1>
-          <p className="text-[11px] text-slate-500 mt-0.5">Real-time performance across the customer journey · {label}</p>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Real-time performance across the customer journey · {label}
+            {isAds && <span className="ml-1 text-amber-700">· Ads view (Google PPC only, est.)</span>}
+          </p>
+        </div>
+        <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-[11px] shadow-sm shrink-0">
+          <button
+            type="button"
+            onClick={() => setMode("business")}
+            className={cn("px-2.5 py-1 rounded-md font-semibold transition-colors", !isAds ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900")}
+          >
+            Business
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("ads")}
+            className={cn("px-2.5 py-1 rounded-md font-semibold transition-colors", isAds ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900")}
+          >
+            Ads
+          </button>
         </div>
       </div>
 
       {/* 5 KPI cards */}
-      {data.isLoading ? (
+      {loading ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
           <KpiSparkCard
-            label="Ad Spend"
-            value={fmtCurrency(data.current.spend)}
-            current={data.current.spend} prior={data.prior.spend}
+            label={isAds ? "Ad Spend (Google PPC, est. 30-day)" : "Ad Spend"}
+            value={fmtCurrency(active.spend)}
+            current={active.spend} prior={activePrior.spend}
             series={series("cost")}
             compareLabel={cmpLabel}
-            tip={TIPS.spend}
+            tip={isAds ? TIPS.adSpendEst : TIPS.spend}
             invertDelta
             formatValue={fmtCurrency}
-            sourceTable="daily_metrics.cost"
+            sourceTable={isAds ? "daily_metrics.cost where ad_source = 'Google PPC'" : "daily_metrics.cost"}
+            estimated={isAds}
+            methodNote={isAds ? data.adsCurrent.spendMethod : undefined}
           />
           <KpiSparkCard
-            label="Records"
-            value={fmtNumber(data.current.calls)}
-            current={data.current.calls} prior={data.prior.calls}
+            label={isAds ? "PPC Records" : "Records"}
+            value={fmtNumber(active.calls)}
+            current={active.calls} prior={activePrior.calls}
             series={series("calls")}
             compareLabel={cmpLabel}
             tip={TIPS.calls}
             formatValue={fmtNumber}
-            sourceTable="v_lead_counts_daily.records (calls + forms)"
+            sourceTable={isAds ? "daily_metrics.record_count where ad_source = 'Google PPC'" : "v_lead_counts_daily.records (calls + forms)"}
           />
           <KpiSparkCard
-            label="Qualified Calls"
-            value={fmtNumber(data.current.qualifiedCalls)}
-            current={data.current.qualifiedCalls} prior={data.prior.qualifiedCalls}
+            label={isAds ? "PPC Qualified" : "Qualified Calls"}
+            value={fmtNumber(active.qualifiedCalls)}
+            current={active.qualifiedCalls} prior={activePrior.qualifiedCalls}
             series={series("good_leads")}
             compareLabel={cmpLabel}
             tip={TIPS.qualifiedCalls}
             formatValue={fmtNumber}
-            sourceTable="daily_metrics.good_leads"
+            sourceTable={isAds ? "daily_metrics.good_leads where ad_source = 'Google PPC'" : "daily_metrics.good_leads"}
           />
           <KpiSparkCard
-            label="AI-Projected Sale (count)"
-            value={fmtNumber(data.current.appointments)}
-            current={data.current.appointments} prior={data.prior.appointments}
+            label={isAds ? "PPC AI-Projected" : "AI-Projected Sale (count)"}
+            value={fmtNumber(active.appointments)}
+            current={active.appointments} prior={activePrior.appointments}
             series={series("projected_sale")}
             compareLabel={cmpLabel}
             tip={TIPS.appointments}
             formatValue={fmtNumber}
-            sourceTable="daily_metrics.projected_sale"
+            sourceTable={isAds ? "daily_metrics.projected_sale where ad_source = 'Google PPC'" : "daily_metrics.projected_sale"}
           />
         </div>
       )}
@@ -94,7 +131,15 @@ export default function Command() {
       {/* Funnel + Portfolio Verdict */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[260px]">
         <div className="lg:col-span-2">
-          {data.isLoading ? <Skeleton className="h-full min-h-[240px] rounded-2xl" /> : <JourneyFunnel t={data.current} prior={data.prior} targets={data.targets} />}
+          {loading ? <Skeleton className="h-full min-h-[240px] rounded-2xl" /> : (
+            <JourneyFunnel
+              t={active}
+              prior={activePrior}
+              targets={data.targets}
+              mode={mode}
+              blendedTotalLeads={data.current.totalLeads}
+            />
+          )}
         </div>
         <div>
           <PortfolioVerdict totals={data.current} targets={data.targets} />

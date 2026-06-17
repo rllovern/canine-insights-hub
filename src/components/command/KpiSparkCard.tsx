@@ -18,6 +18,8 @@ export function KpiSparkCard({
   tip,
   formatValue,
   sourceTable,
+  estimated,
+  methodNote,
 }: {
   label: string;
   value: ReactNode;
@@ -30,6 +32,10 @@ export function KpiSparkCard({
   formatValue?: (n: number) => string;
   /** e.g. "daily_metrics.cost" — surfaced in the info tooltip so every tile declares its attribution. */
   sourceTable?: string;
+  /** When true, render a small "est." chip next to the label. */
+  estimated?: boolean;
+  /** Method-of-calculation note appended to the tooltip when estimated. */
+  methodNote?: string;
 }) {
   const d = safeDelta(current, prior);
   const hasData = series.some((p) => p.v > 0);
@@ -61,15 +67,20 @@ export function KpiSparkCard({
     );
   }
 
-  const tipContent = tip
-    ? (sourceTable ? `${tip}\n\nSource: ${sourceTable}` : tip)
-    : (sourceTable ? `Source: ${sourceTable}` : undefined);
+  const parts: string[] = [];
+  if (tip) parts.push(tip);
+  if (methodNote) parts.push(`Method: ${methodNote}`);
+  if (sourceTable) parts.push(`Source: ${sourceTable}`);
+  const tipContent = parts.length ? parts.join("\n\n") : undefined;
 
   return (
     <div className={cn(CARD_CHROME, "hover:shadow-md transition-shadow overflow-hidden flex flex-col min-h-[112px]")}>
       <div className="px-4 pt-3 pb-1">
         <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
           <span className="truncate">{label}</span>
+          {estimated && (
+            <span className="inline-flex items-center rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">est.</span>
+          )}
           {tipContent && (
             <Tooltip>
               <TooltipTrigger asChild><button type="button" className="inline-flex"><Info className="size-3 text-slate-400" /></button></TooltipTrigger>
