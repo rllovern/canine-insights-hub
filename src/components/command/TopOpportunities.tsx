@@ -92,10 +92,10 @@ export function TopOpportunities({ totals, speed }: { totals: Totals; speed: Spe
             <tbody>
               {top.slice(0, 3).map((o) => (
                 <tr key={o.label} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
-                  <td className="py-2 pr-3 font-medium text-slate-900">{o.label}</td>
-                  <td className="py-2 pr-3 font-bold text-rose-500 tabular-nums">{fmtCurrency(o.impact)}</td>
-                  <td className="py-2 pr-3 text-slate-600">{o.why}</td>
-                  <td className="py-2 pr-3 text-right">
+                  <td className="py-1.5 pr-3 font-medium text-slate-900">{o.label}</td>
+                  <td className="py-1.5 pr-3 font-bold text-rose-500 tabular-nums">{fmtCurrency(o.impact)}</td>
+                  <td className="py-1.5 pr-3 text-slate-600">{o.why}</td>
+                  <td className="py-1.5 pr-3 text-right">
                     <Button asChild size="sm" variant="outline" className="h-7 px-2.5 text-[11px] bg-white border-slate-200 text-slate-700 hover:bg-slate-50">
                       <Link to={o.href}>View Details</Link>
                     </Button>
