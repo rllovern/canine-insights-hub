@@ -83,13 +83,13 @@ export function JourneyFunnel({
           <SubKpi tip={TIPS.adCpl} label="Ad CPL" value={cpl ? fmtCurrency(cpl) : "—"} delta={safeDelta(cpl, priorCpl)} invert
             footnote="No absolute target — compare locations." />
         ) : (
-          <SubKpi tip={TIPS.cpl} label="CPL (per lead)" value={cpl ? fmtCurrency(cpl) : "—"} delta={safeDelta(cpl, priorCpl)} target={targets.cpl} targetText={fmtCurrency(targets.cpl)} pass={cpl > 0 && cpl <= targets.cpl} invert />
+          <SubKpi tip={TIPS.cpl} label="Blended CPL" value={cpl ? fmtCurrency(cpl) : "—"} delta={safeDelta(cpl, priorCpl)} target={targets.cpl} targetText={fmtCurrency(targets.cpl)} pass={cpl > 0 && cpl <= targets.cpl} invert />
         )}
         {isAds ? (
           <SubKpi tip={TIPS.adCpgl} label="Ad CPGL" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} invert
             footnote={`Winchester benchmark ${fmtCurrency(AD_CPGL_BENCHMARK)}/good lead`} />
         ) : (
-          <SubKpi tip={TIPS.cpQualified} label="CPGL (good + AI-proj)" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} target={targets.cpgl} targetText={fmtCurrency(targets.cpgl)} pass={cpgl > 0 && cpgl <= targets.cpgl} invert />
+          <SubKpi tip={TIPS.cpQualified} label="Blended CPGL" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} target={targets.cpgl} targetText={fmtCurrency(targets.cpgl)} pass={cpgl > 0 && cpgl <= targets.cpgl} invert />
         )}
         <SubKpi
           tip={TIPS.qualityRate}
