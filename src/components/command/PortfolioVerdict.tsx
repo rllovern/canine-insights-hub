@@ -43,25 +43,24 @@ function statusClasses(verdict: "critical" | "warning" | "good") {
     : "text-emerald-600 bg-emerald-500";
 }
 
-function locationVerdict(totals: Totals, targets: CommandTargets) {
-  const cpl = totals.calls ? totals.spend / totals.calls : 0;
-  const cpgl = totals.qualifiedCalls ? totals.spend / totals.qualifiedCalls : 0;
-  const qualRate = totals.calls ? totals.qualifiedCalls / totals.calls : 0;
-  const projectionRate = totals.qualifiedCalls ? totals.appointments / totals.qualifiedCalls : 0;
-  const pacingHealthy = targets.monthlyBudget == null || totals.spend <= targets.monthlyBudget;
-  const issues = [
-    cpl > 0 && cpl > targets.cpl ? { key: "CPL", critical: cpl > targets.cpl * 1.5, text: `CPL ${fmtCurrency(cpl)} is over the ${fmtCurrency(targets.cpl)} target` } : null,
-    cpgl > 0 && cpgl > targets.cpgl ? { key: "CPGL", critical: cpgl > targets.cpgl * 1.5, text: `CPGL ${fmtCurrency(cpgl)} is over the ${fmtCurrency(targets.cpgl)} target` } : null,
-    totals.calls > 0 && qualRate < targets.qualRate ? { key: "qual rate", critical: qualRate < targets.qualRate * 0.6, text: `Qualified call rate ${(qualRate * 100).toFixed(1)}% is below the ${(targets.qualRate * 100).toFixed(0)}% target` } : null,
-    totals.qualifiedCalls > 0 && projectionRate < targets.projectionRate ? { key: "projection rate", critical: projectionRate < targets.projectionRate * 0.6, text: `Projection rate ${(projectionRate * 100).toFixed(1)}% is below the ${(targets.projectionRate * 100).toFixed(0)}% target` } : null,
-    !pacingHealthy && targets.monthlyBudget ? { key: "pacing", critical: false, text: `Spend ${fmtCurrency(totals.spend)} is over the ${fmtCurrency(targets.monthlyBudget)} monthly pacing target` } : null,
-  ].filter(Boolean) as { key: string; critical: boolean; text: string }[];
-  const verdict = issues.some((i) => i.critical) ? "critical" : issues.length ? "warning" : "good";
-  const healthy = ["CPL", "CPGL", "qual rate", "projection rate", "pacing"].filter((k) => !issues.some((i) => i.key === k));
-  const reason = issues.length
-    ? `${issues[0].text} — ${healthy.length ? `${healthy.join(", ")} ${healthy.length === 1 ? "is" : "are"} healthy.` : "no other target is offsetting it."}`
-    : `CPL, CPGL, qual rate, projection rate, and pacing are healthy.`;
-  return { verdict, reason } as const;
+function locationVerdict(totals: Totals) {
+  const tier = qualityTier(totals.qualityRate, totals.totalLeads);
+  const verdict: "critical" | "warning" | "good" =
+    tier === "red" ? "critical" : tier === "amber" ? "warning" : "good";
+  if (tier === "low-sample") {
+    return {
+      verdict: "good" as const,
+      reason: `Low sample (${totals.totalLeads} leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ leads.`,
+    };
+  }
+  const rateText = formatQualityRate(totals.qualityRate);
+  const targetText = `${(QUALITY_TARGETS.green * 100).toFixed(0)}% green / ${(QUALITY_TARGETS.amber * 100).toFixed(0)}% amber`;
+  const mix = `${totals.bad} bad · ${totals.good} good · ${totals.projected} ${PROJECTED_LABEL}`;
+  const reason =
+    verdict === "good"
+      ? `Quality ${rateText} meets the ${(QUALITY_TARGETS.green * 100).toFixed(0)}% target. Mix: ${mix}.`
+      : `Quality ${rateText} is below the ${targetText} target. Mix: ${mix}.`;
+  return { verdict, reason };
 }
 
 export function PortfolioVerdict({ totals, targets = DEFAULT_COMMAND_TARGETS }: { totals?: Totals; targets?: CommandTargets }) {
@@ -73,54 +72,52 @@ export function PortfolioVerdict({ totals, targets = DEFAULT_COMMAND_TARGETS }: 
     queryKey: ["portfolio-verdict", propertyIds?.join(",") ?? "all", iso.from, iso.to],
     enabled: mode === "agency",
     queryFn: async (): Promise<Row[]> => {
-      let dm = supabase
-        .from("daily_metrics")
-        .select("property_id, cost, good_leads, properties:properties!inner(name, is_active)")
+      // Canonical lead model from the shared SQL view — no local recomputation.
+      let q = supabase
+        .from("v_lead_counts_property_daily")
+        .select("property_id, bad_leads, good_leads, projected_sales, total_leads, properties:properties!inner(name, is_active)")
         .gte("date", iso.from)
         .lte("date", iso.to);
-      if (propertyIds) dm = dm.in("property_id", propertyIds);
-      const { data, error } = await dm;
+      if (propertyIds) q = q.in("property_id", propertyIds);
+      const { data, error } = await q;
       if (error) throw error;
 
-      const agg = new Map<string, { name: string; spend: number; good_leads: number; calls: number }>();
+      const agg = new Map<string, { name: string; bad: number; good: number; projected: number }>();
       for (const r of (data ?? []) as any[]) {
         const id = r.property_id as string;
-        const cur = agg.get(id) ?? { name: r.properties?.name ?? id, spend: 0, good_leads: 0, calls: 0 };
-        cur.spend += Number(r.cost ?? 0);
-        cur.good_leads += Number(r.good_leads ?? 0);
+        const cur = agg.get(id) ?? { name: r.properties?.name ?? id, bad: 0, good: 0, projected: 0 };
+        cur.bad += Number(r.bad_leads ?? 0);
+        cur.good += Number(r.good_leads ?? 0);
+        cur.projected += Number(r.projected_sales ?? 0);
         agg.set(id, cur);
-      }
-
-      // Calls per property (CTM)
-      let cc = supabase.from("ctm_calls").select("property_id")
-        .gte("called_at", `${iso.from}T00:00:00.000Z`)
-        .lte("called_at", `${iso.to}T23:59:59.999Z`);
-      if (propertyIds) cc = cc.in("property_id", propertyIds);
-      const ccRes = await cc;
-      if (!ccRes.error) {
-        for (const c of (ccRes.data ?? []) as any[]) {
-          const cur = agg.get(c.property_id);
-          if (cur) cur.calls += 1;
-        }
       }
 
       const rows: Row[] = [];
       for (const [property_id, v] of agg.entries()) {
-        if (!v.spend && !v.good_leads && !v.calls) continue;
-        const cpgl = v.good_leads ? v.spend / v.good_leads : Infinity;
-        const qualRate = v.calls ? v.good_leads / v.calls : 0;
-        const base = { property_id, name: v.name, spend: v.spend, good_leads: v.good_leads, calls: v.calls, cpgl, qualRate };
-        const { verdict, reason } = judge(base);
-        rows.push({ ...base, verdict, reason });
+        const total = canonicalTotalLeads(v);
+        if (total === 0) continue;
+        const rate = canonicalQualityRate(v);
+        const tier = qualityTier(rate, total);
+        const verdict = tierToVerdict(tier);
+        const reason =
+          tier === "low-sample"
+            ? `Low sample · ${total} leads (need ${LOW_SAMPLE_BASE}+)`
+            : `Quality ${formatQualityRate(rate)} · ${v.bad} bad / ${v.good} good / ${v.projected} AI-proj`;
+        rows.push({ property_id, name: v.name, total, bad: v.bad, good: v.good, projected: v.projected, rate, tier, verdict, reason });
       }
       const order = { critical: 0, warning: 1, good: 2 } as const;
-      rows.sort((a, b) => order[a.verdict] - order[b.verdict] || b.cpgl - a.cpgl);
+      // Worst quality first; low-sample sinks to the bottom.
+      rows.sort((a, b) => {
+        if (a.tier === "low-sample" && b.tier !== "low-sample") return 1;
+        if (b.tier === "low-sample" && a.tier !== "low-sample") return -1;
+        return order[a.verdict] - order[b.verdict] || a.rate - b.rate;
+      });
       return rows;
     },
   });
 
   if (mode !== "agency") {
-    const judged = locationVerdict(totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 }, targets);
+    const judged = locationVerdict(totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 });
     const [textCls, dotCls] = statusClasses(judged.verdict).split(" ");
     return (
       <div className="rounded-2xl bg-white border border-slate-200/70 shadow-sm p-3 h-full flex flex-col">
@@ -164,7 +161,7 @@ export function PortfolioVerdict({ totals, targets = DEFAULT_COMMAND_TARGETS }: 
         <div className={cn("text-[30px] font-medium leading-none capitalize", portfolioTextCls)}>{portfolioStatus}</div>
       </div>
       <p className="mt-1 text-[12px] text-slate-600 leading-snug">
-        {counts.critical} critical · {counts.warning} warning · {counts.good} good — worst location decides the portfolio state.
+        {counts.critical} critical · {counts.warning} warning · {counts.good} good — judged on quality rate (target ≥{(QUALITY_TARGETS.green * 100).toFixed(0)}% green · ≥{(QUALITY_TARGETS.amber * 100).toFixed(0)}% amber · Winchester benchmark {(WINCHESTER_BENCHMARK * 100).toFixed(0)}%).
       </p>
       <div className="mt-2 flex-1 overflow-y-auto -mr-1 pr-1">
         {q.isLoading ? (
