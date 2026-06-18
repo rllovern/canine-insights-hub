@@ -57,8 +57,13 @@ function useRpc<T>(fn: string, { propertyIds, from, to }: Args) {
     let cancelled = false;
     setLoading(true);
     (async () => {
+      // Guard against a picker producing a midnight-local `to`, which would
+      // exclude every lead created on the chosen end date. Always send the
+      // last instant of the selected end-of-day in the user's local TZ.
+      const toEod = new Date(to);
+      toEod.setHours(23, 59, 59, 999);
       const { data: d } = await (supabase.rpc as any)(fn, {
-        _property_ids: propertyIds, _from: from.toISOString(), _to: to.toISOString(),
+        _property_ids: propertyIds, _from: from.toISOString(), _to: toEod.toISOString(),
       });
       if (!cancelled) {
         setData((d ?? null) as T | null);

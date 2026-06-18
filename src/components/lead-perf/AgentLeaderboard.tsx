@@ -36,8 +36,10 @@ export function AgentLeaderboard({
   useEffect(() => {
     setLoading(true);
     (async () => {
+      const toEod = new Date(to);
+      toEod.setHours(23, 59, 59, 999);
       const { data } = await supabase.rpc("lead_perf_agents", {
-        _property_ids: propertyIds, _from: from.toISOString(), _to: to.toISOString(),
+        _property_ids: propertyIds, _from: from.toISOString(), _to: toEod.toISOString(),
       });
       setRows(((data ?? []) as unknown) as AgentRow[]);
       setLoading(false);
