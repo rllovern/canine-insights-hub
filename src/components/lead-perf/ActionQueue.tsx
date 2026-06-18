@@ -94,11 +94,13 @@ export function ActionQueue({
     if (cache[active] !== undefined) return;
     setLoadingTab(active);
     (async () => {
+      const toEod = new Date(to);
+      toEod.setHours(23, 59, 59, 999);
       const { data } = await supabase.rpc("lead_perf_drill", {
         _issue_type: active,
         _property_ids: propertyIds,
         _from: from.toISOString(),
-        _to: to.toISOString(),
+        _to: toEod.toISOString(),
         _limit: 200,
       });
       const rows = (data ?? []) as unknown as Row[];
