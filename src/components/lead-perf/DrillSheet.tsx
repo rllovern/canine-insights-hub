@@ -52,11 +52,13 @@ export function DrillSheet({
     setLoading(true);
     setError(null);
     (async () => {
+      const toEod = new Date(to);
+      toEod.setHours(23, 59, 59, 999);
       const { data, error } = await supabase.rpc("lead_perf_drill", {
         _issue_type: issue,
         _property_ids: propertyIds,
         _from: from.toISOString(),
-        _to: to.toISOString(),
+        _to: toEod.toISOString(),
         _limit: 500,
       });
       if (error) setError(error.message);
