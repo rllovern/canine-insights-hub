@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNum, formatPct1 } from "@/lib/leadPerf";
 import { PipelineData } from "./hooks";
 
@@ -77,7 +78,24 @@ export function PipelineConversion({
               const pctOfNew = total > 0 && r.key !== "new" ? (count / total) * 100 : null;
               return (
                 <TableRow key={r.key}>
-                  <TableCell className="font-medium">{r.label}</TableCell>
+                  <TableCell className="font-medium">
+                    {r.key === "new" ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 cursor-help">
+                            {r.label}
+                            <Info className="size-3 text-muted-foreground/70" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          Contacts created in GoHighLevel during the selected window
+                          (one row per contact, by <code>ghl_created_at</code>). Opportunity
+                          not required. Suppression tags (spam, duplicate, etc.) do not
+                          reduce this count — they only flag leads downstream.
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : r.label}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{formatNum(count)}</TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
                     {showRel ? (
