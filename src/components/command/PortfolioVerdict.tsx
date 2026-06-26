@@ -20,6 +20,8 @@ import {
   LOW_SAMPLE_CAVEAT,
   formatQualityRate,
   PROJECTED_LABEL,
+  commandQualityRate,
+  commandQualityBase,
 } from "@/lib/leadModel";
 
 type Row = {
@@ -45,27 +47,29 @@ function statusClasses(verdict: "critical" | "warning" | "good") {
 }
 
 function locationVerdict(totals: Totals, provisional: boolean) {
-  // Command-scoped quality: numerator = good + verified sale (replaces
-  // good + AI-projected). Denominator = canonical Total Leads.
+  // Command-scoped quality: (good + verified) / (bad + good + verified).
+  // AI-projected is excluded from BOTH sides on the Command page.
   const verified = totals.revenue;
-  const localRate = totals.totalLeads ? (totals.good + verified) / totals.totalLeads : 0;
-  const tier = qualityTier(localRate, totals.totalLeads);
+  const counts = { bad: totals.bad, good: totals.good, projected: totals.projected, verified };
+  const base = commandQualityBase(counts);
+  const localRate = commandQualityRate(counts);
+  const tier = qualityTier(localRate, base);
   const verdict: "critical" | "warning" | "good" =
     tier === "red" ? "critical" : tier === "amber" ? "warning" : "good";
   if (tier === "low-sample") {
     return {
       verdict: "good" as const,
-      reason: `Low sample (${totals.totalLeads} leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ leads.`,
+      reason: `Low sample (${base} leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ leads.`,
     };
   }
   const rateText = formatQualityRate(localRate);
   const targetText = `${(QUALITY_TARGETS.green * 100).toFixed(0)}% green / ${(QUALITY_TARGETS.amber * 100).toFixed(0)}% amber`;
   const mix = `${totals.bad} bad · ${totals.good} good · ${verified} verified sale`;
   const caveat = provisional
-    ? ` Small sample (${totals.totalLeads} leads) — provisional; not used for pass/fail.`
+    ? ` Small sample (${base} leads) — provisional; not used for pass/fail.`
     : "";
   const reason = provisional
-    ? `Quality ${rateText} on a small sample of ${totals.totalLeads} leads. Mix: ${mix}.${caveat}`
+    ? `Quality ${rateText} on a small sample of ${base} leads. Mix: ${mix}.${caveat}`
     : verdict === "good"
       ? `Quality ${rateText} meets the ${(QUALITY_TARGETS.green * 100).toFixed(0)}% target. Mix: ${mix}.`
       : `Quality ${rateText} is below the ${targetText} target. Mix: ${mix}.`;
@@ -108,8 +112,8 @@ export function PortfolioVerdict({
           proj += Number(r.projected_sale ?? 0);
           verified += Number(r.verified_sale ?? 0);
         }
-        const total = good + bad + proj;
-        return total ? (good + verified) / total : null;
+        const base = good + bad + verified;
+        return base ? (good + verified) / base : null;
       }
       const { data, error } = await supabase
         .from("v_lead_counts_property_daily")
@@ -125,8 +129,8 @@ export function PortfolioVerdict({
         proj += Number(r.projected_sales ?? 0);
         verified += Number(r.verified_sales ?? 0);
       }
-      const total = good + bad + proj;
-      return total ? (good + verified) / total : null;
+      const base = good + bad + verified;
+      return base ? (good + verified) / base : null;
     },
   });
 
@@ -181,10 +185,12 @@ export function PortfolioVerdict({
   if (mode !== "agency") {
     const t = totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 };
     const verified = t.revenue;
-    const localRate = t.totalLeads ? (t.good + verified) / t.totalLeads : 0;
-    const tier = qualityTier(localRate, t.totalLeads);
+    const counts = { bad: t.bad, good: t.good, projected: t.projected, verified };
+    const base = commandQualityBase(counts);
+    const localRate = commandQualityRate(counts);
+    const tier = qualityTier(localRate, base);
     const lowSample = tier === "low-sample"; // < LOW_SAMPLE_BASE (8) — suppress
-    const provisional = !lowSample && t.totalLeads < LOW_SAMPLE_CAVEAT; // 8–14 — caveat
+    const provisional = !lowSample && base < LOW_SAMPLE_CAVEAT; // 8–14 — caveat
     const judged = locationVerdict(t, provisional);
     // Provisional samples must never drive a pass/fail color or fire alerts.
     // Render the gauge in a neutral slate tone, with a "small sample" caveat tag.
