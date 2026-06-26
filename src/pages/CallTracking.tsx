@@ -19,7 +19,6 @@ import { usePropertyMetricConfig } from "@/lib/property-labels";
 import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
   rowTotalLeads,
-  PROJECTED_LABEL,
 } from "@/lib/leadModel";
 
 export default function CallTracking() {
@@ -37,13 +36,12 @@ export default function CallTracking() {
       cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0,
       leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0,
       projected_sale: 0, verified_sale: 0, sessions: 0, users: 0,
-      cost_per_good_lead: 0, cost_per_projected_sale: 0,
+      cost_per_good_lead: 0,
     } as any;
     const buildDaily = (rows: typeof current) =>
       groupByDate(rows).map((r) => ({
         ...r,
         cost_per_good_lead: calc.costPerGoodLead(r.cost, r.good_leads),
-        cost_per_projected_sale: calc.costPerProjectedSale(r.cost, r.projected_sale),
       }));
     const cur = fillDateRange(buildDaily(current), range.from, range.to, zeros);
     if (!showCompare) return cur;
@@ -54,13 +52,12 @@ export default function CallTracking() {
         ...row,
         record_count_prev: p.record_count ?? 0,
         good_leads_prev: p.good_leads ?? 0,
-        projected_sale_prev: p.projected_sale ?? 0,
         spam_prev: p.spam ?? 0,
       };
     });
   }, [current, prior, range, compareRange, showCompare]);
 
-  const buildSourceSeries = (metric: "record_count" | "good_leads" | "projected_sale" | "spam") => {
+  const buildSourceSeries = (metric: "record_count" | "good_leads" | "spam") => {
     const curG = groupByDateAndSource(current, metric);
     const priG = groupByDateAndSource(prior, metric);
     const sources = Array.from(new Set([...curG.sources, ...priG.sources]));
@@ -79,7 +76,6 @@ export default function CallTracking() {
 
   const callsBySource = useMemo(() => buildSourceSeries("record_count"), [current, prior, range, compareRange, showCompare]);
   const goodBySource = useMemo(() => buildSourceSeries("good_leads"), [current, prior, range, compareRange, showCompare]);
-  const projectedBySource = useMemo(() => buildSourceSeries("projected_sale"), [current, prior, range, compareRange, showCompare]);
   const spamBySource = useMemo(() => buildSourceSeries("spam"), [current, prior, range, compareRange, showCompare]);
 
   const cpglBySource = useMemo(() => {
@@ -124,17 +120,6 @@ export default function CallTracking() {
           <MultiLineChart data={goodBySource.series} sources={goodBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
         </ChartCard>
       </Row>
-
-      {!cfg.isHidden("projected_sale") && (
-        <Row>
-          <ChartCard title={`Total ${cfg.label("projected_sale")}`} subtitle="CTM AI transcript projection · provisional">
-            <SingleLineChart data={series} dataKey="projected_sale" label={cfg.label("projected_sale")} color="hsl(var(--chart-4))" fmt={fmtNumber} prevKey="projected_sale_prev" showCompare={showCompare} />
-          </ChartCard>
-          <ChartCard title={`${cfg.label("projected_sale")} by Source`}>
-            <MultiLineChart data={projectedBySource.series} sources={projectedBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
-          </ChartCard>
-        </Row>
-      )}
 
       {isInternal && !cfg.isHidden("spam") && (
         <>
