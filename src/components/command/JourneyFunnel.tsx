@@ -101,7 +101,7 @@ export function JourneyFunnel({
           delta={safeDelta(qualityRatePct, priorQualityRatePct)}
           target={QUALITY_TARGETS.green * 100}
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
-          pass={tier === "green"}
+          tier={tier === "low-sample" ? null : tier}
         />
         <LeadMix bad={t.bad} good={t.good} projected={t.projected} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
       </div>
@@ -152,9 +152,11 @@ function LeadMix({
   benchmarkLabel: string;
   benchmarkRate: string;
 }) {
-  const moreGood = good > bad;
-  const moreBad = bad > good;
-  const numCls = moreGood ? "text-emerald-600" : moreBad ? "text-rose-600" : "text-slate-900";
+  // Benchmark: at least 20% of total leads must be "good" (excluding AI-projected).
+  const goodShare = total > 0 ? good / total : 0;
+  const judged = total > 0;
+  const pass = goodShare >= 0.2;
+  const numCls = !judged ? "text-slate-900" : pass ? "text-emerald-600" : "text-rose-600";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -172,6 +174,11 @@ function LeadMix({
           <span className="text-purple-600">{good} good</span> ·{" "}
           <span className="text-amber-600">{projected} AI-projected</span>
         </div>
+        {judged && (
+          <div className={cn("mt-1 font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
+            Good share {(goodShare * 100).toFixed(1)}% · target ≥ 20% {pass ? "✓" : "✕"}
+          </div>
+        )}
         <div className="text-[10px] text-slate-400 mt-1">{benchmarkLabel} benchmark {benchmarkRate}</div>
       </TooltipContent>
     </Tooltip>
@@ -233,11 +240,12 @@ function Stage({ s }: { s: { label: string; src: string; value: string; Icon: an
   );
 }
 
-function SubKpi({ label, value, numericValue, delta, invert, tip, target, targetText, pass, footnote }: {
+function SubKpi({ label, value, numericValue, delta, invert, tip, target, targetText, pass, tier: tierProp, footnote }: {
   label: string; value: string; numericValue?: number;
   delta: import("@/lib/metrics").SafeDelta;
   invert?: boolean; tip?: string;
   target?: number; targetText?: string; pass?: boolean;
+  tier?: "green" | "amber" | "red" | null;
   footnote?: string;
 }) {
   // Three-tier color for cost-style (invert) metrics: green ≤ target,
@@ -246,7 +254,10 @@ function SubKpi({ label, value, numericValue, delta, invert, tip, target, target
   let tier: "green" | "amber" | "red" | null = null;
   let judged = false;
   let passResolved = pass;
-  if (target != null && value !== "—") {
+  if (tierProp && value !== "—") {
+    tier = tierProp;
+    judged = true;
+  } else if (target != null && value !== "—") {
     if (invert && numericValue != null && numericValue > 0) {
       const ratio = numericValue / target;
       tier = ratio <= 1 ? "green" : ratio <= 1.35 ? "amber" : "red";
