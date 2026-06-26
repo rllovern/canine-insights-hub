@@ -18,7 +18,7 @@ import { rowTotalLeads } from "@/lib/leadModel";
 // disappearing from the legend.
 const REQUIRED_SOURCES = ["Facebook", "Direct", "Google PPC", "Organic"] as const;
 
-export default function Dashboard() {
+export default function Dashboard({ hideAdsOverview = false }: { hideAdsOverview?: boolean } = {}) {
   const { activeProperty: scopeProperty, mode } = useScope();
   const { properties } = useProperties();
   // PPC Overview is single-property today; in agency mode fall back to first.
@@ -106,6 +106,7 @@ export default function Dashboard() {
   const cpc = calc.cpc(totals.cost, totals.clicks);
   const cpcPrev = calc.cpc(prev.cost, prev.clicks);
 
+  if (hideAdsOverview) return null;
   return (
     <>
       <SectionDivider
