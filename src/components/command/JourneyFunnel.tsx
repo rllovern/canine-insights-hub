@@ -152,9 +152,11 @@ function LeadMix({
   benchmarkLabel: string;
   benchmarkRate: string;
 }) {
-  const moreGood = good > bad;
-  const moreBad = bad > good;
-  const numCls = moreGood ? "text-emerald-600" : moreBad ? "text-rose-600" : "text-slate-900";
+  // Benchmark: at least 20% of total leads must be "good" (excluding AI-projected).
+  const goodShare = total > 0 ? good / total : 0;
+  const judged = total > 0;
+  const pass = goodShare >= 0.2;
+  const numCls = !judged ? "text-slate-900" : pass ? "text-emerald-600" : "text-rose-600";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -172,6 +174,11 @@ function LeadMix({
           <span className="text-purple-600">{good} good</span> ·{" "}
           <span className="text-amber-600">{projected} AI-projected</span>
         </div>
+        {judged && (
+          <div className={cn("mt-1 font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
+            Good share {(goodShare * 100).toFixed(1)}% · target ≥ 20% {pass ? "✓" : "✕"}
+          </div>
+        )}
         <div className="text-[10px] text-slate-400 mt-1">{benchmarkLabel} benchmark {benchmarkRate}</div>
       </TooltipContent>
     </Tooltip>
