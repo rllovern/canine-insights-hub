@@ -1,35 +1,40 @@
-# Swap AI-Projected → Verified Sale in Command Funnel + Verdict
+## Goal
+Replace AI-projected with verified sale on **both** sides of the Quality Rate formula across Command surfaces.
 
-## Scope
-Two components on `/command` (owner view and Bob's view, every location):
-- `src/components/command/JourneyFunnel.tsx`
-- `src/components/command/PortfolioVerdict.tsx`
+New formula:
+**Quality = (good + verified_sale) ÷ (bad + good + verified_sale)**
 
-All other surfaces (Performance Report, Assistant, SQL views, `leadModel.ts` canonical math) stay on the existing Good + AI-Projected definition — they're already wired around the canonical model and the user did not ask to change them.
+Total Leads denominator in the rest of the canonical lead model (funnel base, KPIs, etc.) stays unchanged — this swap only affects the **Quality Rate** numerator/denominator pair.
 
 ## Changes
 
-### 1. JourneyFunnel
-- Qualified Leads node value: `good + verified_sale` (today: `good + projected`).
-- Header breadcrumb: `Ad Spend → Records → Qualified (good + verified sale)`.
-- Sub-label under Qualified node: `<quality>% quality` where quality = (good + verified) ÷ total.
-- Tooltip + Lead Mix footer: show `bad · good · verified sale` instead of `bad · good · AI-projected`.
-- CPGL math (Blended/Ad CPGL) keeps using `good_leads` only — unchanged, since CPGL is a media-cost metric tied to good leads.
+### 1. `src/lib/leadModel.ts`
+- Extend `LeadCounts` (or add a sibling helper) with `verified` so the math is shared, not duplicated per component.
+- Add `commandQualityRate(c)` = `(good + verified) / (bad + good + verified)` returning `0` when the new base is `0`.
+- Add `commandQualityBase(c)` = `bad + good + verified` so tier checks (`qualityTier(rate, base)`) use the matching base for the low-sample floor (still 8).
+- Keep existing `qualityRate` / `qualityNumerator` untouched so non-Command surfaces (Performance Report, Assistant, SQL rollups) are not affected.
 
-### 2. PortfolioVerdict
-- Numerator for the ring-gauge quality rate: `good + verified` instead of `good + projected`.
-- Verdict copy: "Mix: X bad · Y good · Z verified sale."
-- Target line + portfolio average label unchanged (still 55%).
+### 2. `src/components/command/PortfolioVerdict.tsx`
+- `locationVerdict`: compute `verified = totals.revenue`, then `localRate = commandQualityRate({ ...counts, verified })` and `base = commandQualityBase(...)`. Pass `base` to `qualityTier` and to the low-sample / provisional copy (so "X leads in window" reflects the new base).
+- Per-location ranking loop (~line 162): same swap — use the new rate + base for tier and sort.
+- Ring gauge value + center label: driven by the same `localRate`.
+- Reason strings: update "Mix: bad · good · verified sale" stays, but the "X leads" figure now refers to the new base. Tooltip copy should say "Quality = (good + verified) ÷ (bad + good + verified)".
 
-### 3. Denominator decision (Total Leads)
-- Keep `Total Leads = bad + good + projected` (the canonical three exclusive tiers) so the "21 total" in Lead Mix and the funnel's Records-to-Qualified ratio stay coherent with the rest of the app.
-- Only the **numerator** swaps from projected → verified. This matches the user's phrasing ("utilize verified sales in place of AI-projected sales" for the Qualified count) without forcing a schema-wide redefinition.
+### 3. `src/components/command/JourneyFunnel.tsx`
+- `qualityCount` stays `good + verified`.
+- Replace `localQualityRate = qualityCount / t.totalLeads` with `commandQualityRate(...)` and use `commandQualityBase(...)` for `qualityTier` + the "X% quality" label inside `QualifiedStage`.
+- Tooltip (`TIPS.qualityRate` or inline copy) updated to the new definition.
+- The **funnel stages themselves** (Records → Leads → Qualified) are not re-shaped; only the Quality % tile and its tier coloring change.
 
-## Technical notes
-- Both components already receive a `totals` object that includes `revenue` (= summed `verified_sale`). No new query or hook is needed.
-- No edits to `src/lib/leadModel.ts`, SQL views, or RPCs.
-- No data-layer changes; this is presentation-only on Command.
+### 4. Portfolio benchmark query (inside `PortfolioVerdict.tsx`)
+- The aggregate that powers "portfolio avg" must use the same formula: sum `good + verified_sale` over sum `bad + good + verified_sale` across the scoped properties/date range/mode.
+- Keep the Ads-vs-Business mode filter as-is.
 
-## Out of scope
-- Performance Report, Sales Performance, Assistant, sync logic, lead-quality SQL rollup.
-- Per-location overrides — applies uniformly to every property as confirmed.
+### 5. Scope
+- Owner view and Bob/Viewer view both pick this up automatically because they share `PortfolioVerdict` + `JourneyFunnel`.
+- No change to Performance Report, CallTracking, Dashboard KPIs, sync functions, or SQL views/RPCs.
+
+## Verification
+- Read the current 30-day numbers for the Ashtabula property and the portfolio, recompute by hand under the new formula, and confirm the ring + funnel tile match.
+- Spot-check a low-sample location to confirm the provisional/low-sample message uses the new base count.
+- Confirm tier coloring (≥55 green, 45–54 amber, <45 red) still applies and that the portfolio benchmark line moves with the new formula.
