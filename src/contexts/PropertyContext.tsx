@@ -18,7 +18,7 @@ const PropertyContext = createContext<PropertyContextValue | undefined>(undefine
 
 export function PropertyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const { effectiveRole } = usePreviewMode();
+  const { effectiveRole, impersonatedUserId } = usePreviewMode();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeProperty, setActivePropertyState] = useState<Property | null>(null);
@@ -39,10 +39,13 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
 
     // Internal previewing-as-viewer: filter client-side to assigned set
     if (effectiveRole === "viewer") {
+      // When the owner is impersonating Bob, scope to Bob's access grants
+      // instead of the real user's. Otherwise use the real user's grants.
+      const accessUserId = impersonatedUserId ?? user.id;
       const { data: access } = await supabase
         .from("viewer_property_access")
         .select("property_id")
-        .eq("user_id", user.id);
+        .eq("user_id", accessUserId);
       const ids = (access ?? []).map((a) => a.property_id);
       if (ids.length === 0) {
         setProperties([]);
@@ -64,7 +67,7 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
       setActivePropertyState(found);
     }
     setLoading(false);
-  }, [user, effectiveRole]);
+  }, [user, effectiveRole, impersonatedUserId]);
 
   useEffect(() => {
     load();
