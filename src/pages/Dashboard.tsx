@@ -166,13 +166,13 @@ export default function Dashboard() {
 }
 
 function ActionsHeader({ cfg }: { cfg: ReturnType<typeof usePropertyMetricConfig> }) {
-  const order: MetricKey[] = ["leads", "good_leads", "projected_sale"];
+  const order: MetricKey[] = ["leads", "good_leads", "verified_sale"];
   const visibleLabels = order.filter((k) => !cfg.isHidden(k)).map((k) => cfg.label(k));
   return <Header title="Actions" subtitle={`By ${visibleLabels.join(", ")}`} />;
 }
 
 function ActionsKpis({ totals, prev, cfg }: { totals: any; prev: any; cfg: ReturnType<typeof usePropertyMetricConfig> }) {
-  const order: MetricKey[] = ["leads", "good_leads", "projected_sale"];
+  const order: MetricKey[] = ["leads", "good_leads", "verified_sale"];
   const visible = order.filter((k) => !cfg.isHidden(k));
   const gridCls =
     visible.length >= 3 ? "grid grid-cols-1 sm:grid-cols-3 gap-2" :
