@@ -45,7 +45,11 @@ function statusClasses(verdict: "critical" | "warning" | "good") {
 }
 
 function locationVerdict(totals: Totals, provisional: boolean) {
-  const tier = qualityTier(totals.qualityRate, totals.totalLeads);
+  // Command-scoped quality: numerator = good + verified sale (replaces
+  // good + AI-projected). Denominator = canonical Total Leads.
+  const verified = totals.revenue;
+  const localRate = totals.totalLeads ? (totals.good + verified) / totals.totalLeads : 0;
+  const tier = qualityTier(localRate, totals.totalLeads);
   const verdict: "critical" | "warning" | "good" =
     tier === "red" ? "critical" : tier === "amber" ? "warning" : "good";
   if (tier === "low-sample") {
@@ -54,9 +58,9 @@ function locationVerdict(totals: Totals, provisional: boolean) {
       reason: `Low sample (${totals.totalLeads} leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ leads.`,
     };
   }
-  const rateText = formatQualityRate(totals.qualityRate);
+  const rateText = formatQualityRate(localRate);
   const targetText = `${(QUALITY_TARGETS.green * 100).toFixed(0)}% green / ${(QUALITY_TARGETS.amber * 100).toFixed(0)}% amber`;
-  const mix = `${totals.bad} bad · ${totals.good} good · ${totals.projected} ${PROJECTED_LABEL}`;
+  const mix = `${totals.bad} bad · ${totals.good} good · ${verified} verified sale`;
   const caveat = provisional
     ? ` Small sample (${totals.totalLeads} leads) — provisional; not used for pass/fail.`
     : "";
@@ -92,35 +96,37 @@ export function PortfolioVerdict({
       if (viewMode === "ads") {
         const { data, error } = await supabase
           .from("daily_metrics")
-          .select("good_leads, bad_leads, projected_sale")
+          .select("good_leads, bad_leads, projected_sale, verified_sale")
           .eq("ad_source", "Google PPC")
           .gte("date", iso.from)
           .lte("date", iso.to);
         if (error) throw error;
-        let good = 0, bad = 0, proj = 0;
+        let good = 0, bad = 0, proj = 0, verified = 0;
         for (const r of (data ?? []) as any[]) {
           good += Number(r.good_leads ?? 0);
           bad += Number(r.bad_leads ?? 0);
           proj += Number(r.projected_sale ?? 0);
+          verified += Number(r.verified_sale ?? 0);
         }
         const total = good + bad + proj;
-        return total ? (good + proj) / total : null;
+        return total ? (good + verified) / total : null;
       }
       const { data, error } = await supabase
         .from("v_lead_counts_property_daily")
-        .select("bad_leads, good_leads, projected_sales, properties:properties!inner(is_active)")
+        .select("bad_leads, good_leads, projected_sales, verified_sales, properties:properties!inner(is_active)")
         .gte("date", iso.from)
         .lte("date", iso.to);
       if (error) throw error;
-      let good = 0, bad = 0, proj = 0;
+      let good = 0, bad = 0, proj = 0, verified = 0;
       for (const r of (data ?? []) as any[]) {
         if (r.properties && r.properties.is_active === false) continue;
         good += Number(r.good_leads ?? 0);
         bad += Number(r.bad_leads ?? 0);
         proj += Number(r.projected_sales ?? 0);
+        verified += Number(r.verified_sales ?? 0);
       }
       const total = good + bad + proj;
-      return total ? (good + proj) / total : null;
+      return total ? (good + verified) / total : null;
     },
   });
 
@@ -174,7 +180,9 @@ export function PortfolioVerdict({
 
   if (mode !== "agency") {
     const t = totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 };
-    const tier = qualityTier(t.qualityRate, t.totalLeads);
+    const verified = t.revenue;
+    const localRate = t.totalLeads ? (t.good + verified) / t.totalLeads : 0;
+    const tier = qualityTier(localRate, t.totalLeads);
     const lowSample = tier === "low-sample"; // < LOW_SAMPLE_BASE (8) — suppress
     const provisional = !lowSample && t.totalLeads < LOW_SAMPLE_CAVEAT; // 8–14 — caveat
     const judged = locationVerdict(t, provisional);
@@ -185,7 +193,7 @@ export function PortfolioVerdict({
       : tier === "red" ? { stroke: "#f43f5e", text: "text-rose-600", word: "Critical" }
       : tier === "amber" ? { stroke: "#f59e0b", text: "text-amber-600", word: "Warning" }
       : { stroke: "#10b981", text: "text-emerald-600", word: "Good" };
-    const score = Math.round((t.qualityRate || 0) * 100);
+    const score = Math.round((localRate || 0) * 100);
     const bench = benchmark.data;
     const scopeLabel = viewMode === "ads" ? "PPC" : "blended";
     const benchText = bench == null
