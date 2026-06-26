@@ -27,7 +27,11 @@ export default function Command() {
   const { propertyIds, label } = useScope();
   const { range, compareRange, compareMode } = useDateRange();
   const [searchParams, setSearchParams] = useSearchParams();
-  const mode: CommandMode = searchParams.get("mode") === "ads" ? "ads" : "business";
+  const { isOwner, impersonateBob } = usePreviewMode();
+  // Owner (not impersonating Bob) sees the original Command layout. Everyone else
+  // (Bob, internal teammates, external viewers) sees the merged Performance Report.
+  const ownerView = isOwner && !impersonateBob;
+  const mode: CommandMode = ownerView && searchParams.get("mode") === "ads" ? "ads" : "business";
   const setMode = (m: CommandMode) => {
     const next = new URLSearchParams(searchParams);
     if (m === "ads") next.set("mode", "ads"); else next.delete("mode");
@@ -36,10 +40,6 @@ export default function Command() {
   const isAds = mode === "ads";
 
   const data = useCommandData(propertyIds, range, compareMode !== "off" ? compareRange : null);
-  const { isOwner, impersonateBob } = usePreviewMode();
-  // Owner (not impersonating Bob) sees the original Command layout. Everyone else
-  // (Bob, internal teammates, external viewers) sees the merged Performance Report.
-  const ownerView = isOwner && !impersonateBob;
   const speed = useSpeed({ propertyIds, from: range.from, to: range.to });
 
   const cmpLabel = `vs ${format(new Date(data.compareRangeIso.from), "MMM d")} – ${format(new Date(data.compareRangeIso.to), "MMM d")}`;
@@ -64,6 +64,7 @@ export default function Command() {
             {isAds && <span className="ml-1 text-amber-700">· Ads view (Google PPC only)</span>}
           </p>
         </div>
+        {ownerView && (
         <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-[11px] shadow-sm shrink-0">
           <button
             type="button"
@@ -80,6 +81,7 @@ export default function Command() {
             Ads
           </button>
         </div>
+        )}
       </div>
 
       {/* 5 KPI cards */}
