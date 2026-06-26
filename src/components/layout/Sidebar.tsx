@@ -251,7 +251,7 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="hidden md:flex flex-col w-[223px] shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border sticky top-0 h-screen self-start">
+    <aside className="hidden md:flex flex-col w-[223px] shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border h-screen overflow-y-auto">
       <div className="px-4 py-3 border-b border-sidebar-border">
         <BrandMark variant="onDark" />
       </div>
