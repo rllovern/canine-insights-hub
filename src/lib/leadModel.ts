@@ -29,6 +29,19 @@ export const qualityRate = (c: LeadCounts) => {
   return t ? qualityNumerator(c) / t : 0;
 };
 
+/**
+ * Command-scoped quality. Replaces AI-projected with verified sale on BOTH
+ * sides of the formula:
+ *   commandQualityRate = (good + verified) / (bad + good + verified)
+ * Used only on the Command page (Funnel + Location Verdict). Other surfaces
+ * keep the canonical `qualityRate`.
+ */
+export const commandQualityBase = (c: LeadCounts) => c.bad + c.good + (c.verified ?? 0);
+export const commandQualityRate = (c: LeadCounts) => {
+  const b = commandQualityBase(c);
+  return b ? (c.good + (c.verified ?? 0)) / b : 0;
+};
+
 /** Absolute, fixed quality targets. Never derived from any single location. */
 export const QUALITY_TARGETS = { green: 0.55, amber: 0.45 } as const;
 
