@@ -40,7 +40,7 @@ export default function Command() {
   // Owner (not impersonating Bob) sees the original Command layout. Everyone else
   // (Bob, internal teammates, external viewers) sees the merged Performance Report.
   const ownerView = isOwner && !impersonateBob;
-  const speed = useSpeed({ propertyIds, from: range.from, to: range.to, enabled: ownerView });
+  const speed = useSpeed({ propertyIds, from: range.from, to: range.to });
 
   const cmpLabel = `vs ${format(new Date(data.compareRangeIso.from), "MMM d")} – ${format(new Date(data.compareRangeIso.to), "MMM d")}`;
 
