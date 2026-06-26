@@ -83,16 +83,16 @@ export function JourneyFunnel({
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
         {isAds ? (
-          <SubKpi tip={TIPS.adCpl} label="Ad CPL" value={cpl ? fmtCurrency(cpl) : "—"} delta={safeDelta(cpl, priorCpl)} invert
+          <SubKpi tip={TIPS.adCpl} label="Ad CPL" value={cpl ? fmtCurrency(cpl) : "—"} numericValue={cpl} delta={safeDelta(cpl, priorCpl)} invert
             footnote="No absolute target — compare locations." />
         ) : (
-          <SubKpi tip={TIPS.cpl} label="Blended CPL" value={cpl ? fmtCurrency(cpl) : "—"} delta={safeDelta(cpl, priorCpl)} target={targets.cpl} targetText={fmtCurrency(targets.cpl)} pass={cpl > 0 && cpl <= targets.cpl} invert />
+          <SubKpi tip={TIPS.cpl} label="Blended CPL" value={cpl ? fmtCurrency(cpl) : "—"} numericValue={cpl} delta={safeDelta(cpl, priorCpl)} target={targets.cpl} targetText={fmtCurrency(targets.cpl)} invert />
         )}
         {isAds ? (
-          <SubKpi tip={TIPS.adCpgl} label="Ad CPGL" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} invert
+          <SubKpi tip={TIPS.adCpgl} label="Ad CPGL" value={cpgl ? fmtCurrency(cpgl) : "—"} numericValue={cpgl} delta={safeDelta(cpgl, priorCpgl)} invert
             footnote={`${benchmarkName} benchmark ${cpglBenchmark}`} />
         ) : (
-          <SubKpi tip={TIPS.cpQualified} label="Blended CPGL" value={cpgl ? fmtCurrency(cpgl) : "—"} delta={safeDelta(cpgl, priorCpgl)} target={targets.cpgl} targetText={fmtCurrency(targets.cpgl)} pass={cpgl > 0 && cpgl <= targets.cpgl} invert />
+          <SubKpi tip={TIPS.cpQualified} label="Blended CPGL" value={cpgl ? fmtCurrency(cpgl) : "—"} numericValue={cpgl} delta={safeDelta(cpgl, priorCpgl)} target={targets.cpgl} targetText={fmtCurrency(targets.cpgl)} invert />
         )}
         <SubKpi
           tip={TIPS.qualityRate}
@@ -233,28 +233,54 @@ function Stage({ s }: { s: { label: string; src: string; value: string; Icon: an
   );
 }
 
-function SubKpi({ label, value, delta, invert, tip, target, targetText, pass, footnote }: {
-  label: string; value: string;
+function SubKpi({ label, value, numericValue, delta, invert, tip, target, targetText, pass, footnote }: {
+  label: string; value: string; numericValue?: number;
   delta: import("@/lib/metrics").SafeDelta;
   invert?: boolean; tip?: string;
   target?: number; targetText?: string; pass?: boolean;
   footnote?: string;
 }) {
-  const judged = target != null && value !== "—" && pass != null;
+  // Three-tier color for cost-style (invert) metrics: green ≤ target,
+  // amber within 35% over, red > 35% over. Quality-rate-style metrics
+  // keep the binary pass coloring passed in by the caller.
+  let tier: "green" | "amber" | "red" | null = null;
+  let judged = false;
+  let passResolved = pass;
+  if (target != null && value !== "—") {
+    if (invert && numericValue != null && numericValue > 0) {
+      const ratio = numericValue / target;
+      tier = ratio <= 1 ? "green" : ratio <= 1.35 ? "amber" : "red";
+      passResolved = tier === "green";
+      judged = true;
+    } else if (pass != null) {
+      tier = pass ? "green" : "red";
+      judged = true;
+    }
+  }
+  const tierColor =
+    tier === "green" ? "text-emerald-600"
+    : tier === "amber" ? "text-amber-600"
+    : tier === "red" ? "text-rose-600"
+    : "text-slate-900";
+  const tierLabel =
+    tier === "green" ? "On target ✓"
+    : tier === "amber" ? "Slightly over target"
+    : tier === "red" ? "Over target ✕"
+    : "";
   return (
     <div>
       <div className="text-[10.5px] text-slate-500 mb-0.5">{label}</div>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className={cn("text-base font-bold tabular-nums cursor-help inline-block", judged ? (pass ? "text-emerald-600" : "text-rose-600") : "text-slate-900")}>
+          <div className={cn("text-base font-bold tabular-nums cursor-help inline-block", judged ? tierColor : "text-slate-900")}>
             {value}
           </div>
         </TooltipTrigger>
         <TooltipContent className="text-xs leading-snug">
           {tip && <div className="mb-1.5 max-w-xs">{tip}</div>}
           {judged && (
-            <div className={cn("font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
-              Target {targetText} {pass ? "✓" : "✕"}
+            <div className={cn("font-semibold tabular-nums", tierColor)}>
+              Target {targetText} · {tierLabel}
             </div>
           )}
           {value !== "—" && (
