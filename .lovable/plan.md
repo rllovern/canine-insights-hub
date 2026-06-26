@@ -1,29 +1,35 @@
-## Goal
+# Swap AI-Projected → Verified Sale in Command Funnel + Verdict
 
-Two changes to the top bar and `/command`:
+## Scope
+Two components on `/command` (owner view and Bob's view, every location):
+- `src/components/command/JourneyFunnel.tsx`
+- `src/components/command/PortfolioVerdict.tsx`
 
-1. Retire the "Internal View" toggle. The owner allowlist (`rl.lovern@gmail.com`) only sees **View as Bob**.
-2. Make `/command` render two distinct layouts:
-   - **Owner view** (you, toggle OFF): the original Command page with the cards we removed earlier brought back — Call Handling, Missed Call Follow‑Up, Call Quality, and Top Opportunities — and **no** Performance Report block.
-   - **Bob / everyone-else view** (toggle ON, or any non‑owner): the new merged layout (hero + funnel + verdict + Performance Report). No old cards.
+All other surfaces (Performance Report, Assistant, SQL views, `leadModel.ts` canonical math) stay on the existing Good + AI-Projected definition — they're already wired around the canonical model and the user did not ask to change them.
 
-## Files to change
+## Changes
 
-- `src/components/layout/TopBar.tsx` — delete the Internal View switch entirely. Keep only the owner's "View as Bob" pill and the non‑owner viewer badge.
-- `src/contexts/PreviewModeContext.tsx` — remove the `isPreviewing` / `togglePreview` / `setPreviewing` API and the internal‑previews‑as‑viewer code path. `effectiveRole` becomes: owner+impersonateBob → `viewer`; otherwise `realRole`. Update the stub value in `src/pages/admin/AdminClientReports.tsx` to drop the removed fields.
-- `src/pages/Command.tsx` — branch on `usePreviewMode()`:
-  - If `isOwner && !impersonateBob`: render the original three Performance Cards (`CallHandlingCard`, `MissedCallFollowUpCard`, `CallQualityCard`) and `TopOpportunities` (re‑import them and `useSpeed`). Do **not** render the Performance Report block.
-  - Otherwise: render the Performance Report block (`<Dashboard /> + <CallTracking />`) we added last turn. Do **not** render the old cards.
-  - The hero (KPI row, funnel, Location Verdict) stays visible in both views.
+### 1. JourneyFunnel
+- Qualified Leads node value: `good + verified_sale` (today: `good + projected`).
+- Header breadcrumb: `Ad Spend → Records → Qualified (good + verified sale)`.
+- Sub-label under Qualified node: `<quality>% quality` where quality = (good + verified) ÷ total.
+- Tooltip + Lead Mix footer: show `bad · good · verified sale` instead of `bad · good · AI-projected`.
+- CPGL math (Blended/Ad CPGL) keeps using `good_leads` only — unchanged, since CPGL is a media-cost metric tied to good leads.
 
-## Out of scope
+### 2. PortfolioVerdict
+- Numerator for the ring-gauge quality rate: `good + verified` instead of `good + projected`.
+- Verdict copy: "Mix: X bad · Y good · Z verified sale."
+- Target line + portfolio average label unchanged (still 55%).
 
-- Sidebar scoping (already correct: viewers see Command + Budget Pacing; internals see everything else gated by `ViewerBlock`).
-- The Bob seed / `viewer_property_access` plumbing (already deployed).
-- Any data‑model or backend changes.
+### 3. Denominator decision (Total Leads)
+- Keep `Total Leads = bad + good + projected` (the canonical three exclusive tiers) so the "21 total" in Lead Mix and the funnel's Records-to-Qualified ratio stay coherent with the rest of the app.
+- Only the **numerator** swaps from projected → verified. This matches the user's phrasing ("utilize verified sales in place of AI-projected sales" for the Qualified count) without forcing a schema-wide redefinition.
 
 ## Technical notes
+- Both components already receive a `totals` object that includes `revenue` (= summed `verified_sale`). No new query or hook is needed.
+- No edits to `src/lib/leadModel.ts`, SQL views, or RPCs.
+- No data-layer changes; this is presentation-only on Command.
 
-- `Command.tsx` will re‑add these imports it had before the merge: `CallHandlingCard, MissedCallFollowUpCard, CallQualityCard` from `@/components/command/PerformanceCards`, `TopOpportunities` from `@/components/command/TopOpportunities`, and `useSpeed` from `@/components/lead-perf/hooks`. The `speed` query should only run in the owner branch to avoid a wasted fetch for viewers.
-- After removing `isPreviewing` from the context, search for any remaining consumers (`rg "isPreviewing|togglePreview|setPreviewing"`) and clean them up so the typecheck passes.
-- `effectiveRole` semantics stay the same for the rest of the app: `viewer` when Bob is active, otherwise the user's real role. The `ViewerBlock` route guard keeps working unchanged.
+## Out of scope
+- Performance Report, Sales Performance, Assistant, sync logic, lead-quality SQL rollup.
+- Per-location overrides — applies uniformly to every property as confirmed.
