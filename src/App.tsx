@@ -30,6 +30,7 @@ import { DateRangeProvider } from "./contexts/DateRangeContext";
 import { ScopeProvider } from "./contexts/ScopeContext";
 import { AppShell } from "./components/layout/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
+import { ViewerBlock } from "./components/ViewerBlock";
 
 const queryClient = new QueryClient();
 
@@ -59,14 +60,14 @@ const App = () => (
 
                   <Route element={<RequireAuth><AppShell /></RequireAuth>}>
                     <Route path="/command" element={<Command />} />
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/calls" element={<CallTracking />} />
-                    <Route path="/keywords" element={<Keywords />} />
-                    <Route path="/properties/:slug" element={<PropertyPage />} />
-                    <Route path="/assistant" element={<Assistant />} />
-                    <Route path="/reports" element={<Reports />} />
-                    <Route path="/budget" element={<RequireAuth requireRealRole="internal"><BudgetPacing /></RequireAuth>} />
-                    <Route path="/lead-performance" element={<LeadPerformance />} />
+                    <Route path="/dashboard" element={<ViewerBlock><Dashboard /></ViewerBlock>} />
+                    <Route path="/calls" element={<ViewerBlock><CallTracking /></ViewerBlock>} />
+                    <Route path="/keywords" element={<ViewerBlock><Keywords /></ViewerBlock>} />
+                    <Route path="/properties/:slug" element={<ViewerBlock><PropertyPage /></ViewerBlock>} />
+                    <Route path="/assistant" element={<ViewerBlock><Assistant /></ViewerBlock>} />
+                    <Route path="/reports" element={<ViewerBlock><Reports /></ViewerBlock>} />
+                    <Route path="/budget" element={<BudgetPacing />} />
+                    <Route path="/lead-performance" element={<ViewerBlock><LeadPerformance /></ViewerBlock>} />
                     <Route
                       path="/admin/properties"
                       element={<RequireAuth requireRealRole="internal"><AdminProperties /></RequireAuth>}

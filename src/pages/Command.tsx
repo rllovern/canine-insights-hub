@@ -11,14 +11,9 @@ import { KpiSparkCard } from "@/components/command/KpiSparkCard";
 import { TIPS } from "@/components/command/tooltips";
 import { JourneyFunnel } from "@/components/command/JourneyFunnel";
 import { PortfolioVerdict } from "@/components/command/PortfolioVerdict";
-import {
-  CallHandlingCard,
-  MissedCallFollowUpCard,
-  CallQualityCard,
-} from "@/components/command/PerformanceCards";
-import { TopOpportunities } from "@/components/command/TopOpportunities";
-import { useSpeed } from "@/components/lead-perf/hooks";
 import { cn } from "@/lib/utils";
+import Dashboard from "@/pages/Dashboard";
+import CallTracking from "@/pages/CallTracking";
 
 export default function Command() {
   const { propertyIds, label } = useScope();
@@ -33,7 +28,6 @@ export default function Command() {
   const isAds = mode === "ads";
 
   const data = useCommandData(propertyIds, range, compareMode !== "off" ? compareRange : null);
-  const speed = useSpeed({ propertyIds, from: range.from, to: range.to });
 
   const cmpLabel = `vs ${format(new Date(data.compareRangeIso.from), "MMM d")} – ${format(new Date(data.compareRangeIso.to), "MMM d")}`;
 
@@ -145,15 +139,11 @@ export default function Command() {
         </div>
       </div>
 
-      {/* 3 Performance cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[200px]">
-        <CallHandlingCard totals={data.current} />
-        <MissedCallFollowUpCard />
-        <CallQualityCard />
+      {/* Performance Report — PPC overview + call tracking, stacked below the hero. */}
+      <div className="mt-4 bg-white rounded-2xl border border-slate-200 p-4 space-y-6">
+        <Dashboard />
+        <CallTracking />
       </div>
-
-      {/* Top Opportunities */}
-      <TopOpportunities totals={data.current} speed={speed.data ?? null} targets={data.targets} />
     </div>
   );
 }

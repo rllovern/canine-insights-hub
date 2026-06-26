@@ -27,6 +27,10 @@ const VIEWER_PREVIEW_VALUE = {
   isPreviewing: false,
   togglePreview: () => {},
   setPreviewing: () => {},
+  impersonateBob: false,
+  toggleBob: () => {},
+  impersonatedUserId: null,
+  isOwner: false,
 };
 
 export default function AdminClientReports() {
