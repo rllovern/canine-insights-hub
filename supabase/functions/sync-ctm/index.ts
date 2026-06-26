@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
     let page = 1;
     const perPage = 150;
     while (true) {
-      const url = `https://api.calltrackingmetrics.com/api/v1/accounts/${accountId}/calls/search.json?start_date=${from}&end_date=${to}&page=${page}&per_page=${perPage}&fields=tag_list,tags,score,sale,source,custom_fields,reporting_tags,scoring_tags,tracking_number,called_at,start_time`;
+      const url = `https://api.calltrackingmetrics.com/api/v1/accounts/${accountId}/calls/search.json?start_date=${from}&end_date=${to}&page=${page}&per_page=${perPage}&fields=tag_list,tags,score,sale,source,custom_fields,reporting_tags,scoring_tags,tracking_number,called_at,start_time,converted,conversion_value`;
       const res = await fetch(url, { headers: { Authorization: authHeader, Accept: "application/json" } });
       const text = await res.text();
       let json: any = null;
@@ -261,9 +261,21 @@ Deno.serve(async (req) => {
     }
 
     // Aggregate by date × channel × campaign for daily_metrics.
-    type Agg = { record_count: number; leads: number; good_leads: number; bad_leads: number; projected_sale: number; no_entry: number; spam: number };
+    // verified_sale = CTM call with the "converted" toggle set on. This is the
+    // canonical source for verified_sale; sync-ghl no longer writes it.
+    const isConverted = (c: any): boolean => {
+      const v = c?.converted;
+      if (v === true) return true;
+      if (typeof v === "string") {
+        const s = v.trim().toLowerCase();
+        return s === "true" || s === "1" || s === "yes";
+      }
+      if (typeof v === "number") return v === 1;
+      return false;
+    };
+    type Agg = { record_count: number; leads: number; good_leads: number; bad_leads: number; projected_sale: number; verified_sale: number; no_entry: number; spam: number };
     const agg = new Map<string, Agg>();
-    const newAgg = (): Agg => ({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, projected_sale: 0, no_entry: 0, spam: 0 });
+    const newAgg = (): Agg => ({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, projected_sale: 0, verified_sale: 0, no_entry: 0, spam: 0 });
     for (const c of filtered) {
       const callDate = String(c.called_at ?? c.start_time ?? c.date ?? "").slice(0, 10);
       if (!callDate) continue;
@@ -282,6 +294,7 @@ Deno.serve(async (req) => {
         case "spam":      b.spam       += 1; b.bad_leads += 1; b.leads += 1; break;
         case "unmapped":  /* counted in record_count only */ break;
       }
+      if (isConverted(c)) b.verified_sale += 1;
       agg.set(key, b);
     }
 
@@ -304,13 +317,14 @@ Deno.serve(async (req) => {
         no_entry: b.no_entry,
         spam: b.spam,
         projected_sale: b.projected_sale,
+        verified_sale: b.verified_sale,
       };
     });
 
     let metricsWritten = 0;
     await admin
       .from("daily_metrics")
-      .update({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, no_entry: 0, spam: 0, projected_sale: 0 })
+      .update({ record_count: 0, leads: 0, good_leads: 0, bad_leads: 0, no_entry: 0, spam: 0, projected_sale: 0, verified_sale: 0 })
       .eq("property_id", propertyId)
       .gte("date", from)
       .lte("date", to);
