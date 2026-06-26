@@ -19,6 +19,8 @@ import {
 import { TopOpportunities } from "@/components/command/TopOpportunities";
 import { useSpeed } from "@/components/lead-perf/hooks";
 import { cn } from "@/lib/utils";
+import Dashboard from "@/pages/Dashboard";
+import CallTracking from "@/pages/CallTracking";
 
 export default function Command() {
   const { propertyIds, label } = useScope();
@@ -145,15 +147,11 @@ export default function Command() {
         </div>
       </div>
 
-      {/* 3 Performance cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[200px]">
-        <CallHandlingCard totals={data.current} />
-        <MissedCallFollowUpCard />
-        <CallQualityCard />
+      {/* Performance Report — PPC overview + call tracking, stacked below the hero. */}
+      <div className="mt-4 bg-white rounded-2xl border border-slate-200 p-4 space-y-6">
+        <Dashboard />
+        <CallTracking />
       </div>
-
-      {/* Top Opportunities */}
-      <TopOpportunities totals={data.current} speed={speed.data ?? null} targets={data.targets} />
     </div>
   );
 }
