@@ -87,11 +87,11 @@ export default function Command() {
 
       {/* 5 KPI cards */}
       {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <KpiSparkCard
             label={isAds ? "Ad Spend (Google PPC)" : "Ad Spend"}
             value={fmtCurrency(active.spend)}
