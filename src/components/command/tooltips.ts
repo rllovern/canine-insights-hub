@@ -20,7 +20,7 @@ export const TIPS = {
   cpAppt:
     "Ad Spend ÷ AI-projected sales (count). Cost per AI-projected sale. AI-projected is a quality signal — do not read this as cost-per-sale or ROI.",
   qualityRate:
-    "Quality = (good + AI-projected) ÷ (bad + good + AI-projected). Target: ≥55% green, 45–54% amber, <45% red. The benchmark reference follows the current location or all-location scope and active mode; it is not the pass/fail threshold.",
+    "Quality = (good + verified sale) ÷ (bad + good + verified sale). AI-projected is excluded on both sides on the Command page. Target: ≥55% green, 45–54% amber, <45% red. The benchmark reference follows the current location or all-location scope and active mode; it is not the pass/fail threshold.",
   callHandling:
     "Answer rate, avg pickup time, abandon rate. Pending — CTM call-disposition feed is not yet ingested.",
   missedFollowUp:
