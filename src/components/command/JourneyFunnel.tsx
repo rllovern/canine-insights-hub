@@ -275,8 +275,8 @@ function SubKpi({ label, value, numericValue, delta, invert, tip, target, target
     : "text-slate-900";
   const tierLabel =
     tier === "green" ? "On target ✓"
-    : tier === "amber" ? "Slightly over target"
-    : tier === "red" ? "Over target ✕"
+    : tier === "amber" ? (invert ? "Slightly over target" : "Slightly under target")
+    : tier === "red" ? (invert ? "Over target ✕" : "Under target ✕")
     : "";
   return (
     <div>
