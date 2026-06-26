@@ -22,7 +22,11 @@ import {
 } from "@/lib/leadModel";
 
 export default function CallTracking() {
-  const { current, prior, isLoading, range, compareMode, compareRange } = useDashboard();
+  const { current: rawCurrent, prior: rawPrior, isLoading, range, compareMode, compareRange } = useDashboard();
+  // GHL Won is a sales-disposition feed, not a media source — never render it
+  // as a source on charts, tables, or breakdowns on this report.
+  const current = useMemo(() => rawCurrent.filter((r: any) => r.ad_source !== "GHL Won"), [rawCurrent]);
+  const prior = useMemo(() => rawPrior.filter((r: any) => r.ad_source !== "GHL Won"), [rawPrior]);
   const { activeProperty: scopeProperty, mode } = useScope();
   const { properties } = useProperties();
   const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
