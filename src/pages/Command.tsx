@@ -120,16 +120,29 @@ export default function Command() {
             formatValue={fmtNumber}
             sourceTable={isAds ? "daily_metrics.good_leads where ad_source = 'Google PPC'" : "daily_metrics.good_leads"}
           />
-          <KpiSparkCard
-            label={isAds ? "PPC AI-Projected" : "AI-Projected Sale (count)"}
-            value={fmtNumber(active.appointments)}
-            current={active.appointments} prior={activePrior.appointments}
-            series={series("projected_sale")}
-            compareLabel={cmpLabel}
-            tip={TIPS.appointments}
-            formatValue={fmtNumber}
-            sourceTable={isAds ? "daily_metrics.projected_sale where ad_source = 'Google PPC'" : "daily_metrics.projected_sale"}
-          />
+          {ownerView ? (
+            <KpiSparkCard
+              label={isAds ? "PPC AI-Projected" : "AI-Projected Sale (count)"}
+              value={fmtNumber(active.appointments)}
+              current={active.appointments} prior={activePrior.appointments}
+              series={series("projected_sale")}
+              compareLabel={cmpLabel}
+              tip={TIPS.appointments}
+              formatValue={fmtNumber}
+              sourceTable={isAds ? "daily_metrics.projected_sale where ad_source = 'Google PPC'" : "daily_metrics.projected_sale"}
+            />
+          ) : (
+            <KpiSparkCard
+              label={isAds ? "PPC Verified Sale" : "Verified Sale"}
+              value={fmtNumber(active.revenue)}
+              current={active.revenue} prior={activePrior.revenue}
+              series={series("verified_sale")}
+              compareLabel={cmpLabel}
+              tip={TIPS.appointments}
+              formatValue={fmtNumber}
+              sourceTable={isAds ? "daily_metrics.verified_sale where ad_source = 'Google PPC'" : "daily_metrics.verified_sale"}
+            />
+          )}
         </div>
       )}
 
@@ -165,7 +178,7 @@ export default function Command() {
       ) : (
         /* Merged Performance Report for Bob and everyone else. */
         <div className="mt-4 bg-white rounded-2xl border border-slate-200 p-4 space-y-6">
-          <Dashboard />
+          <Dashboard hideAdsOverview />
           <CallTracking />
         </div>
       )}
