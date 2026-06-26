@@ -14,6 +14,14 @@ import { PortfolioVerdict } from "@/components/command/PortfolioVerdict";
 import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/Dashboard";
 import CallTracking from "@/pages/CallTracking";
+import { usePreviewMode } from "@/contexts/PreviewModeContext";
+import {
+  CallHandlingCard,
+  MissedCallFollowUpCard,
+  CallQualityCard,
+} from "@/components/command/PerformanceCards";
+import { TopOpportunities } from "@/components/command/TopOpportunities";
+import { useSpeed } from "@/components/lead-perf/hooks";
 
 export default function Command() {
   const { propertyIds, label } = useScope();
@@ -28,6 +36,11 @@ export default function Command() {
   const isAds = mode === "ads";
 
   const data = useCommandData(propertyIds, range, compareMode !== "off" ? compareRange : null);
+  const { isOwner, impersonateBob } = usePreviewMode();
+  // Owner (not impersonating Bob) sees the original Command layout. Everyone else
+  // (Bob, internal teammates, external viewers) sees the merged Performance Report.
+  const ownerView = isOwner && !impersonateBob;
+  const speed = useSpeed({ propertyIds, from: range.from, to: range.to, enabled: ownerView });
 
   const cmpLabel = `vs ${format(new Date(data.compareRangeIso.from), "MMM d")} – ${format(new Date(data.compareRangeIso.to), "MMM d")}`;
 
@@ -139,11 +152,23 @@ export default function Command() {
         </div>
       </div>
 
-      {/* Performance Report — PPC overview + call tracking, stacked below the hero. */}
-      <div className="mt-4 bg-white rounded-2xl border border-slate-200 p-4 space-y-6">
-        <Dashboard />
-        <CallTracking />
-      </div>
+      {ownerView ? (
+        <>
+          {/* Original owner-only performance cards. */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[200px]">
+            <CallHandlingCard totals={data.current} />
+            <MissedCallFollowUpCard />
+            <CallQualityCard />
+          </div>
+          <TopOpportunities totals={data.current} speed={speed.data ?? null} targets={data.targets} />
+        </>
+      ) : (
+        /* Merged Performance Report for Bob and everyone else. */
+        <div className="mt-4 bg-white rounded-2xl border border-slate-200 p-4 space-y-6">
+          <Dashboard />
+          <CallTracking />
+        </div>
+      )}
     </div>
   );
 }
