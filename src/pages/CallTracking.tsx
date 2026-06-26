@@ -150,7 +150,11 @@ function Row({ children }: { children: React.ReactNode }) {
 
 function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }) {
   if (colKey === "verified_sale") {
-    return <TableCell className="text-right tabular-nums"><div>—</div></TableCell>;
+    return (
+      <TableCell className="text-right tabular-nums">
+        <div>{fmtNumber(row?.[colKey] ?? 0)}</div>
+      </TableCell>
+    );
   }
   const invert = colKey === "bad_leads" || colKey === "no_entry" || colKey === "spam";
   return (
@@ -192,7 +196,6 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
     { key: "total_leads", label: "Total Leads" },
     ...(cfg?.isHidden("bad_leads") ? [] : [{ key: "bad_leads", label: cfg?.label("bad_leads") ?? "Bad Leads" }]),
     ...(cfg?.isHidden("good_leads") ? [] : [{ key: "good_leads", label: cfg?.label("good_leads") ?? "Good Leads" }]),
-    ...(cfg?.isHidden("projected_sale") ? [] : [{ key: "projected_sale", label: PROJECTED_LABEL }]),
     ...(cfg?.isHidden("verified_sale") ? [] : [{ key: "verified_sale", label: cfg?.label("verified_sale") ?? "Verified Sale" }]),
   ];
 
@@ -252,11 +255,10 @@ function CampaignTable({ current, prior, cfg }: any) {
   const slice = sorted.slice(page * PAGE, page * PAGE + PAGE);
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE));
 
-  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "projected_sale", "verified_sale"].filter((c) => {
+  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "verified_sale"].filter((c) => {
     if (c === "spam" && cfg?.isHidden("spam")) return false;
     if (c === "bad_leads" && cfg?.isHidden("bad_leads")) return false;
     if (c === "good_leads" && cfg?.isHidden("good_leads")) return false;
-    if (c === "projected_sale" && cfg?.isHidden("projected_sale")) return false;
     if (c === "verified_sale" && cfg?.isHidden("verified_sale")) return false;
     return true;
   });
@@ -265,7 +267,6 @@ function CampaignTable({ current, prior, cfg }: any) {
     spam: cfg?.label("spam") ?? "Spam", total_leads: "Total Leads",
     bad_leads: cfg?.label("bad_leads") ?? "Bad Leads",
     good_leads: cfg?.label("good_leads") ?? "Good Leads",
-    projected_sale: PROJECTED_LABEL,
     verified_sale: cfg?.label("verified_sale") ?? "Verified Sale",
   };
 
