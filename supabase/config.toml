@@ -1,1 +1,4 @@
 project_id = "yptgdovnvmpgwcvfdnrq"
+
+[functions.seed-bob]
+verify_jwt = false
