@@ -11,6 +11,8 @@ import {
   QUALITY_TARGETS,
   qualityTier,
   formatQualityRate,
+  commandQualityRate,
+  commandQualityBase,
 } from "@/lib/leadModel";
 
 function pct(num: number, den: number) {
@@ -50,17 +52,23 @@ export function JourneyFunnel({
   const priorCpgl = priorQualityCount ? prior.spend / priorQualityCount : 0;
   const cpl = t.totalLeads ? t.spend / t.totalLeads : 0;
   const priorCpl = prior.totalLeads ? prior.spend / prior.totalLeads : 0;
-  const localQualityRate = t.totalLeads ? qualityCount / t.totalLeads : 0;
-  const priorLocalQualityRate = prior.totalLeads ? priorQualityCount / prior.totalLeads : 0;
+  // Command-page Quality = (good + verified) / (bad + good + verified).
+  // AI-projected is excluded from BOTH sides of this ratio.
+  const qCounts = { bad: t.bad, good: t.good, projected: t.projected, verified };
+  const priorQCounts = { bad: prior.bad, good: prior.good, projected: prior.projected, verified: priorVerified };
+  const qualityBase = commandQualityBase(qCounts);
+  const priorQualityBase = commandQualityBase(priorQCounts);
+  const localQualityRate = commandQualityRate(qCounts);
+  const priorLocalQualityRate = commandQualityRate(priorQCounts);
   const qualityRatePct = localQualityRate * 100;
   const priorQualityRatePct = priorLocalQualityRate * 100;
-  const tier = qualityTier(localQualityRate, t.totalLeads);
+  const tier = qualityTier(localQualityRate, qualityBase);
   const callsConvPct = t.calls ? 100 : 0; // 100% of calls flow into the funnel
   const leadsConvPct = t.calls ? (t.totalLeads / t.calls) * 100 : 0;
   const mer = isAds && t.totalLeads && blendedTotalLeads ? blendedTotalLeads / t.totalLeads : null;
   const benchmarkName = benchmarkLabel ?? "Current scope";
   const cpglBenchmark = cpgl ? `${fmtCurrency(cpgl)}/good lead` : "unavailable";
-  const qualityBenchmark = t.totalLeads ? formatQualityRate(localQualityRate) : "unavailable";
+  const qualityBenchmark = qualityBase ? formatQualityRate(localQualityRate) : "unavailable";
 
   return (
     <div className={cn(CARD_CHROME, "p-3 h-full flex flex-col")}>
@@ -85,7 +93,7 @@ export function JourneyFunnel({
         <Connector />
         <Stage s={{ label: isAds ? "PPC Records" : "Records", src: isAds ? "daily_metrics.record_count · Google PPC" : "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
         <Connector />
-        <QualifiedStage good={t.good} verified={verified} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
+        <QualifiedStage good={t.good} verified={verified} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={qualityBase > 0} leadsConvPct={leadsConvPct} />
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
@@ -104,7 +112,7 @@ export function JourneyFunnel({
         <SubKpi
           tip={TIPS.qualityRate}
           label="Quality Rate"
-          value={t.totalLeads ? formatQualityRate(localQualityRate) : "—"}
+          value={qualityBase ? formatQualityRate(localQualityRate) : "—"}
           delta={safeDelta(qualityRatePct, priorQualityRatePct)}
           target={QUALITY_TARGETS.green * 100}
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
