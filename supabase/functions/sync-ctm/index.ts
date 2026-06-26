@@ -264,13 +264,18 @@ Deno.serve(async (req) => {
     // verified_sale = CTM call with the "converted" toggle set on. This is the
     // canonical source for verified_sale; sync-ghl no longer writes it.
     const isConverted = (c: any): boolean => {
-      const v = c?.converted;
-      if (v === true) return true;
-      if (typeof v === "string") {
-        const s = v.trim().toLowerCase();
-        return s === "true" || s === "1" || s === "yes";
+      // CTM API surfaces the "converted" toggle nested as sale.conversion (boolean).
+      // We also tolerate a top-level `converted` field for forward compatibility,
+      // plus the usual string/number variants.
+      const candidates: any[] = [c?.sale?.conversion, c?.converted, c?.conversion];
+      for (const v of candidates) {
+        if (v === true) return true;
+        if (typeof v === "string") {
+          const s = v.trim().toLowerCase();
+          if (s === "true" || s === "1" || s === "yes") return true;
+        }
+        if (typeof v === "number" && v === 1) return true;
       }
-      if (typeof v === "number") return v === 1;
       return false;
     };
     type Agg = { record_count: number; leads: number; good_leads: number; bad_leads: number; projected_sale: number; verified_sale: number; no_entry: number; spam: number };

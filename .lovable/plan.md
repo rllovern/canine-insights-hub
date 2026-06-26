@@ -1,43 +1,29 @@
-# Sales Performance — Verified Sale only, sourced from CTM "converted"
+## Why Verified Sale shows 0
 
-Two-part change. Part 1 is presentation (the page the user is looking at). Part 2 rewires where `verified_sale` actually comes from, because today it's populated from GHL won opportunities — not from CTM's converted toggle as the user specified.
+The performance report filters out the legacy `ad_source = 'GHL Won'` rows (correctly — per the earlier cleanup), so the only verified-sale data that exists is hidden. CTM is supposed to be the source of truth now, but the CTM sync is reading the wrong field, so `verified_sale` is `0` on every CTM-sourced row.
 
-## Scope confirmation
+CTM's API returns the "converted" toggle nested as `sale.conversion` (boolean). The sync function reads `call.converted` at the top level, which CTM never sends — so `isConverted` always returns false. I confirmed against `ctm_calls.raw_payload`:
 
-"Sales performance page" = `src/pages/CallTracking.tsx` — the client-facing performance report with the Source Performance and Campaign Breakdown cards we just edited. (Not the Command page; not Lead Performance.) If you meant a different page, say so and I'll re-plan.
+- `sale.conversion = true`: 4 calls (e.g. 2026-06-23 Sale $1040, 2026-06-14 Sale $1800)
+- `sale.conversion = false`: 607
+- `sale` missing: 591
 
-## Part 1 — Page changes (`src/pages/CallTracking.tsx`)
+So there are real verified sales in the raw payload — the aggregator just isn't counting them.
 
-Remove every AI-Projected Sale surface:
+## Fix
 
-- Delete the "Total {Projected}" + "{Projected} by Source" chart pair (the conditional block around line 128–137).
-- Drop `projected_sale` / `cost_per_projected_sale` from the `series` builder and from `buildSourceSeries`.
-- Remove `projected_sale` from Source Performance + Campaign Breakdown column arrays and label maps.
-- Remove the `PROJECTED_LABEL` import and unused `calc.costPerProjectedSale` references.
+1. `supabase/functions/sync-ctm/index.ts` — rewrite `isConverted(call)` to read the correct location:
+   - primary: `call?.sale?.conversion === true`
+   - tolerate the string/number/`yes` variants we already handle
+   - keep the existing `call?.converted` fallback in case CTM ever surfaces it top-level
+2. Redeploy `sync-ctm`, then trigger a resync for the 5 CTM-connected properties over the last ~90 days so `daily_metrics.verified_sale` is rewritten from the corrected aggregation.
+3. Verify in SQL that `verified_sale` is now populated on real `ad_source` rows (Google PPC, Organic, Direct, etc.) and that the `GHL Won` row stays at the legacy values (we no longer surface that source).
+4. Reload `/calls` (Source Performance + Campaign Breakdown) — Verified Sale column should show non-zero values for the 4 confirmed conversions and any others in range.
 
-Keep `verified_sale` exactly where it already renders in those two tables. No other column changes (the Quality column was already removed last turn; the GHL Won source filter stays).
-
-Note: `Total Leads = bad + good + AI-projected` (canonical lead model) is unaffected — that math lives in `leadModel.ts` and isn't tied to the displayed column.
-
-## Part 2 — Re-source `verified_sale` from CTM "converted"
-
-Today `daily_metrics.verified_sale` is written by `sync_verified_sales_daily_metrics` from GHL won opportunities, called inside `sync-ghl`. The user wants it to mean "CTM call where `converted` toggle is on." That requires:
-
-1. **Sync** — update `supabase/functions/sync-ctm/index.ts` to read each call's `converted` flag from the CTM API (CTM exposes it on the call object) and count it per `date × property × ad_source × campaign` alongside the existing buckets. Write the count into `daily_metrics.verified_sale` in the same upsert that writes `record_count`, `good_leads`, etc.
-2. **Stop the GHL writer from clobbering it** — remove the `sync_verified_sales_daily_metrics` call from `supabase/functions/sync-ghl/index.ts` so GHL no longer overwrites the CTM-sourced number. Leave the SQL function in place (harmless, unused) to avoid a destructive migration this turn.
-3. **Backfill** — trigger a fresh CTM sync for the active date range so historical `verified_sale` reflects CTM converted toggles instead of stale GHL values.
-
-No schema change needed: `daily_metrics.verified_sale` already exists and is the right shape.
+No UI/code changes to the report itself — column already binds to `verified_sale`; the bug is purely upstream in the sync.
 
 ## Out of scope
 
-- Command page funnel / verdict / KPI tiles.
-- Lead Performance page.
-- Jarvis + ai-assistant prompts (they read `v_lead_counts_daily`, which doesn't surface verified_sale).
-- Renaming the column or label — stays "Verified Sale".
-
-## Verification
-
-- Load the report on a property with known CTM converted calls; confirm Verified Sale column matches the CTM "converted" count for that range.
-- Confirm the AI-Projected chart pair and table column are gone.
-- Confirm a GHL re-sync no longer changes `verified_sale`.
+- Not touching Command, Lead Performance, canonical lead model, or any other surface.
+- Not re-enabling GHL → `verified_sale`; CTM remains the sole writer.
+- Not changing the report's filtering of `GHL Won`.
