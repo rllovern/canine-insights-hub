@@ -39,21 +39,28 @@ export function JourneyFunnel({
   t = t ?? EMPTY_TOTALS;
   prior = prior ?? EMPTY_TOTALS;
   const isAds = mode === "ads";
-  const qualityCount = t.good + t.projected;
-  const priorQualityCount = prior.good + prior.projected;
+  // Command page override: Qualified Leads numerator = good + verified sale
+  // (replaces good + AI-projected). Total Leads denominator unchanged so the
+  // Lead Mix and Records ratio stay coherent with the canonical model.
+  const verified = t.revenue;
+  const priorVerified = prior.revenue;
+  const qualityCount = t.good + verified;
+  const priorQualityCount = prior.good + priorVerified;
   const cpgl = qualityCount ? t.spend / qualityCount : 0;
   const priorCpgl = priorQualityCount ? prior.spend / priorQualityCount : 0;
   const cpl = t.totalLeads ? t.spend / t.totalLeads : 0;
   const priorCpl = prior.totalLeads ? prior.spend / prior.totalLeads : 0;
-  const qualityRatePct = t.qualityRate * 100;
-  const priorQualityRatePct = prior.qualityRate * 100;
-  const tier = qualityTier(t.qualityRate, t.totalLeads);
+  const localQualityRate = t.totalLeads ? qualityCount / t.totalLeads : 0;
+  const priorLocalQualityRate = prior.totalLeads ? priorQualityCount / prior.totalLeads : 0;
+  const qualityRatePct = localQualityRate * 100;
+  const priorQualityRatePct = priorLocalQualityRate * 100;
+  const tier = qualityTier(localQualityRate, t.totalLeads);
   const callsConvPct = t.calls ? 100 : 0; // 100% of calls flow into the funnel
   const leadsConvPct = t.calls ? (t.totalLeads / t.calls) * 100 : 0;
   const mer = isAds && t.totalLeads && blendedTotalLeads ? blendedTotalLeads / t.totalLeads : null;
   const benchmarkName = benchmarkLabel ?? "Current scope";
   const cpglBenchmark = cpgl ? `${fmtCurrency(cpgl)}/good lead` : "unavailable";
-  const qualityBenchmark = t.totalLeads ? formatQualityRate(t.qualityRate) : "unavailable";
+  const qualityBenchmark = t.totalLeads ? formatQualityRate(localQualityRate) : "unavailable";
 
   return (
     <div className={cn(CARD_CHROME, "p-3 h-full flex flex-col")}>
@@ -68,8 +75,8 @@ export function JourneyFunnel({
       </div>
       <p className="text-[11px] text-slate-500 mt-0.5">
         {isAds
-          ? "PPC Spend → PPC Records → PPC Qualified (good + AI-projected)"
-          : "Ad Spend → Records → Qualified (good + AI-projected)"}
+          ? "PPC Spend → PPC Records → PPC Qualified (good + verified sale)"
+          : "Ad Spend → Records → Qualified (good + verified sale)"}
       </p>
 
       {/* Single horizontal row: three stages on one baseline, long connector arrows. */}
@@ -78,7 +85,7 @@ export function JourneyFunnel({
         <Connector />
         <Stage s={{ label: isAds ? "PPC Records" : "Records", src: isAds ? "daily_metrics.record_count · Google PPC" : "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
         <Connector />
-        <QualifiedStage good={t.good} projected={t.projected} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
+        <QualifiedStage good={t.good} verified={verified} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
@@ -97,13 +104,13 @@ export function JourneyFunnel({
         <SubKpi
           tip={TIPS.qualityRate}
           label="Quality Rate"
-          value={t.totalLeads ? formatQualityRate(t.qualityRate) : "—"}
+          value={t.totalLeads ? formatQualityRate(localQualityRate) : "—"}
           delta={safeDelta(qualityRatePct, priorQualityRatePct)}
           target={QUALITY_TARGETS.green * 100}
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
           pass={tier === "green"}
         />
-        <LeadMix bad={t.bad} good={t.good} projected={t.projected} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
+        <LeadMix bad={t.bad} good={t.good} verified={verified} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
       </div>
 
       {isAds && (
@@ -140,14 +147,14 @@ function Connector() {
 function LeadMix({
   bad,
   good,
-  projected,
+  verified,
   total,
   benchmarkLabel,
   benchmarkRate,
 }: {
   bad: number;
   good: number;
-  projected: number;
+  verified: number;
   total: number;
   benchmarkLabel: string;
   benchmarkRate: string;
@@ -170,7 +177,7 @@ function LeadMix({
         <div className="tabular-nums">
           <span className="text-rose-600">{bad} bad</span> ·{" "}
           <span className="text-purple-600">{good} good</span> ·{" "}
-          <span className="text-amber-600">{projected} AI-projected</span>
+          <span className="text-emerald-600">{verified} verified sale</span>
         </div>
         <div className="text-[10px] text-slate-400 mt-1">{benchmarkLabel} benchmark {benchmarkRate}</div>
       </TooltipContent>
@@ -178,8 +185,8 @@ function LeadMix({
   );
 }
 
-function QualifiedStage({ good, projected, bad, qualityRatePct, hasBase, leadsConvPct }: { good: number; projected: number; bad: number; qualityRatePct: number; hasBase: boolean; leadsConvPct: number }) {
-  const total = good + projected;
+function QualifiedStage({ good, verified, bad, qualityRatePct, hasBase, leadsConvPct }: { good: number; verified: number; bad: number; qualityRatePct: number; hasBase: boolean; leadsConvPct: number }) {
+  const total = good + verified;
   const moreGood = good > bad;
   const moreBad = bad > good;
   const numCls = moreGood ? "text-emerald-600" : moreBad ? "text-rose-600" : "text-slate-900";
@@ -198,14 +205,14 @@ function QualifiedStage({ good, projected, bad, qualityRatePct, hasBase, leadsCo
         </div>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-snug">
-        <div className="font-semibold">Qualified leads (good + AI-projected)</div>
+        <div className="font-semibold">Qualified leads (good + verified sale)</div>
         <div className="mt-1 tabular-nums">
           <span className="text-purple-600 font-medium">{good} good</span>
           <span className="text-slate-400"> · </span>
-          <span className="text-amber-600 font-medium">{projected} AI-projected</span>
+          <span className="text-emerald-600 font-medium">{verified} verified sale</span>
         </div>
-        <div className="text-slate-400 text-[10px] mt-0.5">Source: CTM scored + CTM transcript projection</div>
-        <div className="mt-1">Good and AI-projected are parallel quality outcomes, not a sequence. Both count toward quality rate.</div>
+        <div className="text-slate-400 text-[10px] mt-0.5">Source: CTM scored good leads + CTM sale.conversion verified sales</div>
+        <div className="mt-1">Good and verified sale are parallel quality outcomes, not a sequence. Both count toward quality rate.</div>
       </TooltipContent>
     </Tooltip>
   );
