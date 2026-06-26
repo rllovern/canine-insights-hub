@@ -19,8 +19,9 @@ type NavItem = {
 
 const COMMAND_ITEM: NavItem = { key: "command", to: "/command", label: "Command", icon: LayoutDashboard };
 
+const BUDGET_ITEM: NavItem = { key: "budget", to: "/budget", label: "Budget Pacing", icon: Wallet };
+
 const MONITOR_ITEMS: NavItem[] = [
-  { key: "budget", to: "/budget", label: "Budget Pacing", icon: Wallet, internalOnly: true },
   { key: "dashboard", to: "/dashboard", label: "PPC Overview", icon: BarChart3 },
   { key: "calls", to: "/calls", label: "Call Tracking", icon: PhoneCall },
   { key: "lead-performance", to: "/lead-performance", label: "Lead Performance", icon: Target },
@@ -48,6 +49,7 @@ export function Sidebar() {
   const nav = useNavigate();
   const loc = useLocation();
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
+  const isViewer = effectiveRole !== "internal";
 
   const filterVisible = (items: NavItem[]) =>
     items.filter((i) => !i.internalOnly || effectiveRole === "internal");
@@ -259,24 +261,26 @@ export function Sidebar() {
       <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
         <GroupLabel>EXECUTIVE VIEW</GroupLabel>
         {renderItem(COMMAND_ITEM)}
+        {isViewer && renderItem(BUDGET_ITEM)}
 
-        {monitorItems.length > 0 && (
+        {!isViewer && monitorItems.length > 0 && (
           <>
             <GroupLabel>Monitor</GroupLabel>
+            {renderItem(BUDGET_ITEM)}
             {monitorItems.map((it) => renderItem(it, { groupKey: "monitor", items: monitorItems, setItems: setMonitorItems }))}
           </>
         )}
 
-        {deliverItems.length > 0 && (
+        {!isViewer && deliverItems.length > 0 && (
           <>
             <GroupLabel>Deliver</GroupLabel>
             {deliverItems.map((it) => renderItem(it, { groupKey: "deliver", items: deliverItems, setItems: setDeliverItems }))}
           </>
         )}
 
-        {renderItem(JARVIS_ITEM, { accent: true })}
+        {!isViewer && renderItem(JARVIS_ITEM, { accent: true })}
 
-        {adminItems.length > 0 && (
+        {!isViewer && adminItems.length > 0 && (
           <>
             <button
               type="button"
