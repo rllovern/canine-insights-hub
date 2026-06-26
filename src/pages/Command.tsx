@@ -14,6 +14,7 @@ import { PortfolioVerdict } from "@/components/command/PortfolioVerdict";
 import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/Dashboard";
 import CallTracking from "@/pages/CallTracking";
+import { SectionDividerVariantProvider } from "@/components/dashboard/SectionDivider";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import {
   CallHandlingCard,
@@ -179,10 +180,12 @@ export default function Command() {
         </>
       ) : (
         /* Merged Performance Report for Bob and everyone else. */
-        <div className="mt-4 bg-white rounded-2xl border border-slate-200 p-4 space-y-6">
-          <Dashboard hideAdsOverview />
-          <CallTracking />
-        </div>
+        <SectionDividerVariantProvider variant="plain">
+          <div className="mt-4 space-y-6">
+            <Dashboard hideAdsOverview />
+            <CallTracking />
+          </div>
+        </SectionDividerVariantProvider>
       )}
     </div>
   );
