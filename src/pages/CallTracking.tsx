@@ -19,10 +19,6 @@ import { usePropertyMetricConfig } from "@/lib/property-labels";
 import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
   rowTotalLeads,
-  rowQualityRate,
-  qualityTier,
-  formatQualityRate,
-  TIER_TEXT,
   PROJECTED_LABEL,
 } from "@/lib/leadModel";
 
@@ -171,19 +167,6 @@ function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }
   if (colKey === "verified_sale") {
     return <TableCell className="text-right tabular-nums"><div>—</div></TableCell>;
   }
-  if (colKey === "quality_rate") {
-    const base = Number(row?.total_leads ?? 0);
-    const rate = Number(row?.quality_rate ?? 0);
-    const tier = qualityTier(rate, base);
-    if (tier === "low-sample") {
-      return <TableCell className="text-right tabular-nums text-muted-foreground">—</TableCell>;
-    }
-    return (
-      <TableCell className={`text-right tabular-nums font-medium ${TIER_TEXT[tier]}`}>
-        {formatQualityRate(rate)}
-      </TableCell>
-    );
-  }
   const invert = colKey === "bad_leads" || colKey === "no_entry" || colKey === "spam";
   return (
     <TableCell className="text-right tabular-nums">
@@ -194,17 +177,19 @@ function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }
 }
 
 function SourceOutcomeTable({ current, prior, cfg }: any) {
-  const cur = useMemo(() => groupBySource(current), [current]);
-  const pre = useMemo(() => groupBySource(prior), [prior]);
+  // Performance report scope: GHL Won is a sales-disposition feed, not a media
+  // source — exclude it from the source/campaign breakdowns. Other surfaces
+  // (Command, Lead Performance) still consume it untouched.
+  const cur = useMemo(() => groupBySource(current).filter((r: any) => r.ad_source !== "GHL Won"), [current]);
+  const pre = useMemo(() => groupBySource(prior).filter((r: any) => r.ad_source !== "GHL Won"), [prior]);
   const [sortKey, setSortKey] = useState<string>("good_leads");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  // Canonical totals/quality — every value flows through leadModel.ts.
-  // No inline arithmetic on good/bad/projected lives in this file.
+  // Canonical totals via leadModel.ts. Quality column removed per the
+  // performance-report scope.
   const withTotals = (rows: any[]) => rows.map((r: any) => ({
     ...r,
     total_leads: rowTotalLeads(r),
-    quality_rate: rowQualityRate(r),
   }));
   const curT = withTotals(cur);
   const preT = withTotals(pre);
@@ -220,19 +205,14 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
     { key: "no_entry", label: "No Entry" },
     ...(cfg?.isHidden("spam") ? [] : [{ key: "spam", label: cfg?.label("spam") ?? "Spam" }]),
     { key: "total_leads", label: "Total Leads" },
-    { key: "quality_rate", label: "Quality" },
     ...(cfg?.isHidden("bad_leads") ? [] : [{ key: "bad_leads", label: cfg?.label("bad_leads") ?? "Bad Leads" }]),
     ...(cfg?.isHidden("good_leads") ? [] : [{ key: "good_leads", label: cfg?.label("good_leads") ?? "Good Leads" }]),
     ...(cfg?.isHidden("projected_sale") ? [] : [{ key: "projected_sale", label: PROJECTED_LABEL }]),
     ...(cfg?.isHidden("verified_sale") ? [] : [{ key: "verified_sale", label: cfg?.label("verified_sale") ?? "Verified Sale" }]),
   ];
 
-  // Sum count cols normally; quality is ratio-of-sums via leadModel.ts.
-  const sumCols = cols.filter((c) => c.key !== "quality_rate");
-  const totals: any = curT.reduce((acc: any, r: any) => { for (const c of sumCols) acc[c.key] = (acc[c.key] || 0) + (r[c.key] ?? 0); return acc; }, {});
-  const ptotals: any = preT.reduce((acc: any, r: any) => { for (const c of sumCols) acc[c.key] = (acc[c.key] || 0) + (r[c.key] ?? 0); return acc; }, {});
-  totals.quality_rate = rowQualityRate(totals);
-  ptotals.quality_rate = rowQualityRate(ptotals);
+  const totals: any = curT.reduce((acc: any, r: any) => { for (const c of cols) acc[c.key] = (acc[c.key] || 0) + (r[c.key] ?? 0); return acc; }, {});
+  const ptotals: any = preT.reduce((acc: any, r: any) => { for (const c of cols) acc[c.key] = (acc[c.key] || 0) + (r[c.key] ?? 0); return acc; }, {});
 
   const sortBtn = (key: string, label: string) => (
     <button onClick={() => { if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortKey(key); setSortDir("desc"); } }}
@@ -271,14 +251,14 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
 }
 
 function CampaignTable({ current, prior, cfg }: any) {
-  // Canonical totals/quality from leadModel.ts. No local arithmetic.
+  // Canonical totals via leadModel.ts. Quality column removed; GHL Won filtered
+  // out (it's a sales-disposition feed, not a media source).
   const withTotals = (rows: any[]) => rows.map((r: any) => ({
     ...r,
     total_leads: rowTotalLeads(r),
-    quality_rate: rowQualityRate(r),
   }));
-  const cur = useMemo(() => withTotals(groupByCampaign(current)), [current]);
-  const pre = useMemo(() => withTotals(groupByCampaign(prior)), [prior]);
+  const cur = useMemo(() => withTotals(groupByCampaign(current).filter((r: any) => r.ad_source !== "GHL Won")), [current]);
+  const pre = useMemo(() => withTotals(groupByCampaign(prior).filter((r: any) => r.ad_source !== "GHL Won")), [prior]);
   const preMap = new Map(pre.map((r: any) => [`${r.ad_source}::${r.campaign}`, r]));
   const [page, setPage] = useState(0);
   const PAGE = 100;
@@ -287,7 +267,7 @@ function CampaignTable({ current, prior, cfg }: any) {
   const slice = sorted.slice(page * PAGE, page * PAGE + PAGE);
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE));
 
-  const cols = ["record_count", "no_entry", "spam", "total_leads", "quality_rate", "bad_leads", "good_leads", "projected_sale", "verified_sale"].filter((c) => {
+  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "projected_sale", "verified_sale"].filter((c) => {
     if (c === "spam" && cfg?.isHidden("spam")) return false;
     if (c === "bad_leads" && cfg?.isHidden("bad_leads")) return false;
     if (c === "good_leads" && cfg?.isHidden("good_leads")) return false;
@@ -298,7 +278,6 @@ function CampaignTable({ current, prior, cfg }: any) {
   const labels: Record<string, string> = {
     record_count: "Records", no_entry: "No Entry",
     spam: cfg?.label("spam") ?? "Spam", total_leads: "Total Leads",
-    quality_rate: "Quality",
     bad_leads: cfg?.label("bad_leads") ?? "Bad Leads",
     good_leads: cfg?.label("good_leads") ?? "Good Leads",
     projected_sale: PROJECTED_LABEL,
