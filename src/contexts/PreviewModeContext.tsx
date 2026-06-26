@@ -6,11 +6,8 @@ import { isOwnerEmail, BOB_USER_ID } from "@/lib/owners";
 interface PreviewModeContextValue {
   /** The role actually granted by the database. */
   realRole: AppRole | null;
-  /** The role currently being previewed in the UI (only differs from realRole when an internal user previews as viewer). */
+  /** The role currently being previewed in the UI. Differs from realRole only when the owner is impersonating Bob. */
   effectiveRole: AppRole | null;
-  isPreviewing: boolean;
-  togglePreview: () => void;
-  setPreviewing: (v: boolean) => void;
   /** True when the owner is impersonating Bob (the demo viewer). */
   impersonateBob: boolean;
   toggleBob: () => void;
@@ -24,7 +21,6 @@ export const PreviewModeContext = createContext<PreviewModeContextValue | undefi
 
 export function PreviewModeProvider({ children }: { children: ReactNode }) {
   const { role, user } = useAuth();
-  const [previewing, setPreviewing] = useState(false);
   const [impersonateBob, setImpersonateBob] = useState<boolean>(() => {
     try { return localStorage.getItem("preview.bob") === "1"; } catch { return false; }
   });
@@ -39,11 +35,9 @@ export function PreviewModeProvider({ children }: { children: ReactNode }) {
 
   const effectiveRole: AppRole | null = useMemo(() => {
     if (isOwner && impersonateBob) return "viewer";
-    if (realRole === "internal" && previewing) return "viewer";
     return realRole;
-  }, [realRole, previewing, isOwner, impersonateBob]);
+  }, [realRole, isOwner, impersonateBob]);
 
-  const togglePreview = () => setPreviewing((p) => !p);
   const toggleBob = () => {
     setImpersonateBob((p) => {
       const next = !p;
@@ -57,7 +51,7 @@ export function PreviewModeProvider({ children }: { children: ReactNode }) {
   return (
     <PreviewModeContext.Provider
       value={{
-        realRole, effectiveRole, isPreviewing: previewing, togglePreview, setPreviewing,
+        realRole, effectiveRole,
         impersonateBob: isOwner && impersonateBob, toggleBob, impersonatedUserId, isOwner,
       }}
     >
