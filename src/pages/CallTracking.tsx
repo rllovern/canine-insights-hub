@@ -19,7 +19,6 @@ import { usePropertyMetricConfig } from "@/lib/property-labels";
 import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
   rowTotalLeads,
-  PROJECTED_LABEL,
 } from "@/lib/leadModel";
 
 export default function CallTracking() {
@@ -37,13 +36,12 @@ export default function CallTracking() {
       cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0,
       leads: 0, good_leads: 0, bad_leads: 0, medicaid: 0, spam: 0,
       projected_sale: 0, verified_sale: 0, sessions: 0, users: 0,
-      cost_per_good_lead: 0, cost_per_projected_sale: 0,
+      cost_per_good_lead: 0,
     } as any;
     const buildDaily = (rows: typeof current) =>
       groupByDate(rows).map((r) => ({
         ...r,
         cost_per_good_lead: calc.costPerGoodLead(r.cost, r.good_leads),
-        cost_per_projected_sale: calc.costPerProjectedSale(r.cost, r.projected_sale),
       }));
     const cur = fillDateRange(buildDaily(current), range.from, range.to, zeros);
     if (!showCompare) return cur;
@@ -54,13 +52,12 @@ export default function CallTracking() {
         ...row,
         record_count_prev: p.record_count ?? 0,
         good_leads_prev: p.good_leads ?? 0,
-        projected_sale_prev: p.projected_sale ?? 0,
         spam_prev: p.spam ?? 0,
       };
     });
   }, [current, prior, range, compareRange, showCompare]);
 
-  const buildSourceSeries = (metric: "record_count" | "good_leads" | "projected_sale" | "spam") => {
+  const buildSourceSeries = (metric: "record_count" | "good_leads" | "spam") => {
     const curG = groupByDateAndSource(current, metric);
     const priG = groupByDateAndSource(prior, metric);
     const sources = Array.from(new Set([...curG.sources, ...priG.sources]));
@@ -79,7 +76,6 @@ export default function CallTracking() {
 
   const callsBySource = useMemo(() => buildSourceSeries("record_count"), [current, prior, range, compareRange, showCompare]);
   const goodBySource = useMemo(() => buildSourceSeries("good_leads"), [current, prior, range, compareRange, showCompare]);
-  const projectedBySource = useMemo(() => buildSourceSeries("projected_sale"), [current, prior, range, compareRange, showCompare]);
   const spamBySource = useMemo(() => buildSourceSeries("spam"), [current, prior, range, compareRange, showCompare]);
 
   const cpglBySource = useMemo(() => {
@@ -125,17 +121,6 @@ export default function CallTracking() {
         </ChartCard>
       </Row>
 
-      {!cfg.isHidden("projected_sale") && (
-        <Row>
-          <ChartCard title={`Total ${cfg.label("projected_sale")}`} subtitle="CTM AI transcript projection · provisional">
-            <SingleLineChart data={series} dataKey="projected_sale" label={cfg.label("projected_sale")} color="hsl(var(--chart-4))" fmt={fmtNumber} prevKey="projected_sale_prev" showCompare={showCompare} />
-          </ChartCard>
-          <ChartCard title={`${cfg.label("projected_sale")} by Source`}>
-            <MultiLineChart data={projectedBySource.series} sources={projectedBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
-          </ChartCard>
-        </Row>
-      )}
-
       {isInternal && !cfg.isHidden("spam") && (
         <>
           <SectionDivider title="Spam Monitoring" subtitle="Internal view only" />
@@ -165,7 +150,11 @@ function Row({ children }: { children: React.ReactNode }) {
 
 function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }) {
   if (colKey === "verified_sale") {
-    return <TableCell className="text-right tabular-nums"><div>—</div></TableCell>;
+    return (
+      <TableCell className="text-right tabular-nums">
+        <div>{fmtNumber(row?.[colKey] ?? 0)}</div>
+      </TableCell>
+    );
   }
   const invert = colKey === "bad_leads" || colKey === "no_entry" || colKey === "spam";
   return (
@@ -207,7 +196,6 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
     { key: "total_leads", label: "Total Leads" },
     ...(cfg?.isHidden("bad_leads") ? [] : [{ key: "bad_leads", label: cfg?.label("bad_leads") ?? "Bad Leads" }]),
     ...(cfg?.isHidden("good_leads") ? [] : [{ key: "good_leads", label: cfg?.label("good_leads") ?? "Good Leads" }]),
-    ...(cfg?.isHidden("projected_sale") ? [] : [{ key: "projected_sale", label: PROJECTED_LABEL }]),
     ...(cfg?.isHidden("verified_sale") ? [] : [{ key: "verified_sale", label: cfg?.label("verified_sale") ?? "Verified Sale" }]),
   ];
 
@@ -267,11 +255,10 @@ function CampaignTable({ current, prior, cfg }: any) {
   const slice = sorted.slice(page * PAGE, page * PAGE + PAGE);
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE));
 
-  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "projected_sale", "verified_sale"].filter((c) => {
+  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "verified_sale"].filter((c) => {
     if (c === "spam" && cfg?.isHidden("spam")) return false;
     if (c === "bad_leads" && cfg?.isHidden("bad_leads")) return false;
     if (c === "good_leads" && cfg?.isHidden("good_leads")) return false;
-    if (c === "projected_sale" && cfg?.isHidden("projected_sale")) return false;
     if (c === "verified_sale" && cfg?.isHidden("verified_sale")) return false;
     return true;
   });
@@ -280,7 +267,6 @@ function CampaignTable({ current, prior, cfg }: any) {
     spam: cfg?.label("spam") ?? "Spam", total_leads: "Total Leads",
     bad_leads: cfg?.label("bad_leads") ?? "Bad Leads",
     good_leads: cfg?.label("good_leads") ?? "Good Leads",
-    projected_sale: PROJECTED_LABEL,
     verified_sale: cfg?.label("verified_sale") ?? "Verified Sale",
   };
 

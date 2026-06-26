@@ -750,17 +750,13 @@ Deno.serve(async (req) => {
     counts.lead_facts = (data as Json | null)?.facts_written ?? 0;
   }, undefined);
 
-  await safe("sync_verified_sales_daily_metrics", async () => {
-    const { data, error } = await admin.rpc("sync_verified_sales_daily_metrics", { _property_id: property_id });
-    if (error) throw new Error(error.message);
-    counts.verified_sales_metrics = Number(data ?? 0);
-  }, undefined);
+  // verified_sale is now sourced from CTM's "converted" toggle, written by
+  // sync-ctm. GHL no longer overwrites daily_metrics.verified_sale.
 
   // ===== Bookkeeping ================================================
   summary.finished_at = new Date().toISOString();
   const blockingErrors = errs.filter((msg) =>
-    !msg.startsWith("rebuild_lead_facts:") &&
-    !msg.startsWith("sync_verified_sales_daily_metrics:"),
+    !msg.startsWith("rebuild_lead_facts:"),
   );
   await admin
     .from("property_data_sources")
