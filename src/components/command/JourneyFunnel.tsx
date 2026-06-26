@@ -101,7 +101,7 @@ export function JourneyFunnel({
           delta={safeDelta(qualityRatePct, priorQualityRatePct)}
           target={QUALITY_TARGETS.green * 100}
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
-          pass={tier === "green"}
+          tier={tier === "low-sample" ? null : tier}
         />
         <LeadMix bad={t.bad} good={t.good} projected={t.projected} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
       </div>
@@ -233,11 +233,12 @@ function Stage({ s }: { s: { label: string; src: string; value: string; Icon: an
   );
 }
 
-function SubKpi({ label, value, numericValue, delta, invert, tip, target, targetText, pass, footnote }: {
+function SubKpi({ label, value, numericValue, delta, invert, tip, target, targetText, pass, tier: tierProp, footnote }: {
   label: string; value: string; numericValue?: number;
   delta: import("@/lib/metrics").SafeDelta;
   invert?: boolean; tip?: string;
   target?: number; targetText?: string; pass?: boolean;
+  tier?: "green" | "amber" | "red" | null;
   footnote?: string;
 }) {
   // Three-tier color for cost-style (invert) metrics: green ≤ target,
@@ -246,7 +247,10 @@ function SubKpi({ label, value, numericValue, delta, invert, tip, target, target
   let tier: "green" | "amber" | "red" | null = null;
   let judged = false;
   let passResolved = pass;
-  if (target != null && value !== "—") {
+  if (tierProp && value !== "—") {
+    tier = tierProp;
+    judged = true;
+  } else if (target != null && value !== "—") {
     if (invert && numericValue != null && numericValue > 0) {
       const ratio = numericValue / target;
       tier = ratio <= 1 ? "green" : ratio <= 1.35 ? "amber" : "red";
