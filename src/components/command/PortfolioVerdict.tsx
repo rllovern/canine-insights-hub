@@ -77,7 +77,8 @@ export function PortfolioVerdict({
   targets?: CommandTargets;
   viewMode?: "business" | "ads";
 }) {
-  const { propertyIds, mode, label } = useScope();
+  const { propertyIds, mode, label, setScope } = useScope();
+  const navigate = useNavigate();
   const { range } = useDateRange();
   const iso = rangeToISO(range);
 
