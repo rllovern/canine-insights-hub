@@ -163,7 +163,7 @@ function PropertyDialog({
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="p-name">Name</Label>
-              <Input id="p-name" value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="Ridgeside Canine — Asheville" />
+              <Input id="p-name" value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="Ridgeside K9 — Asheville" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="p-slug">Slug</Label>
@@ -373,7 +373,7 @@ export default function AdminProperties() {
     <div className="mx-auto max-w-7xl space-y-6 p-6">
       <PageHeader
         title="Properties"
-        description="Manage every Ridgeside Canine location, its data sources, and public share links."
+        description="Manage every Ridgeside K9 location, its data sources, and public share links."
         actions={
           <div className="flex items-center gap-2">
             <MCCImportDialog
@@ -412,7 +412,7 @@ export default function AdminProperties() {
       {loading ? (
         <div className="h-40 animate-pulse rounded-xl border border-border bg-card/40" />
       ) : rows.length === 0 ? (
-        <EmptyState title="No properties yet" description="Add your first Ridgeside Canine location to get started." />
+        <EmptyState title="No properties yet" description="Add your first Ridgeside K9 location to get started." />
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <Table>

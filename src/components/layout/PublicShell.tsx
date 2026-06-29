@@ -31,7 +31,7 @@ export function PublicShell({
       </header>
       <main className="mx-auto w-full max-w-7xl flex-1 overflow-x-hidden px-4 py-6 sm:px-6">{children}</main>
       <footer className="border-t border-border py-4 text-center text-[11px] text-muted-foreground">
-        <div className="mx-auto max-w-7xl">Powered by Ridgeside Canine Dashboard</div>
+        <div className="mx-auto max-w-7xl">Powered by Ridgeside K9 Dashboard</div>
       </footer>
     </div>
   );
