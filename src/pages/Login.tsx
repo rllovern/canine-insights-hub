@@ -26,7 +26,7 @@ export default function Login() {
   };
 
   return (
-    <AuthShell title="Sign in" subtitle="Welcome back to the Ridgeside Canine Dashboard.">
+    <AuthShell title="Sign in" subtitle="Welcome back to the Ridgeside K9 Dashboard.">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
