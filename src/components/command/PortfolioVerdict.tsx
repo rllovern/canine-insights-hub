@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { AlertTriangle, AlertOctagon, CheckCircle2, ChevronRight, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useScope } from "@/contexts/ScopeContext";
@@ -77,7 +77,8 @@ export function PortfolioVerdict({
   targets?: CommandTargets;
   viewMode?: "business" | "ads";
 }) {
-  const { propertyIds, mode, label } = useScope();
+  const { propertyIds, mode, label, setScope } = useScope();
+  const navigate = useNavigate();
   const { range } = useDateRange();
   const iso = rangeToISO(range);
 
@@ -252,14 +253,21 @@ export function PortfolioVerdict({
           <ul className="space-y-1">
             {rows.slice(0, 6).map((r) => (
               <li key={r.property_id}>
-                <Link to={`/property/${r.property_id}`} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScope({ mode: "property", propertyId: r.property_id });
+                    navigate("/command");
+                  }}
+                  className="w-full flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50 text-left"
+                >
                   <div className="flex items-center gap-2 min-w-0">
                     <Dot tone={r.verdict} />
                     <span className="text-[12px] font-semibold text-slate-900 truncate">{r.name}</span>
                     <span className="text-[11px] text-slate-500 truncate">· {r.reason}</span>
                   </div>
                   <ChevronRight className="size-3.5 text-slate-300 shrink-0" />
-                </Link>
+                </button>
               </li>
             ))}
           </ul>
