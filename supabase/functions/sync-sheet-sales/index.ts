@@ -183,14 +183,24 @@ async function processRows(
   }
 
   // Batch upsert in chunks of 500
-  for (let i = 0; i < toUpsert.length; i += 500) {
-    const chunk = toUpsert.slice(i, i + 500);
+  // Deduplicate on (property_id, source_row_hash) — duplicate sheet rows would
+  // otherwise trigger "ON CONFLICT DO UPDATE command cannot affect row a
+  // second time" from Postgres.
+  const seen = new Set<string>();
+  const deduped = toUpsert.filter((r) => {
+    const k = `${r.property_id}|${r.source_row_hash}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  for (let i = 0; i < deduped.length; i += 500) {
+    const chunk = deduped.slice(i, i + 500);
     const { error } = await admin.from("sheet_sales").upsert(chunk, {
       onConflict: "property_id,source_row_hash",
     });
     if (error) throw new Error(`Upsert failed: ${error.message}`);
   }
-  return { imported: toUpsert.length, skipped };
+  return { imported: deduped.length, skipped: skipped + (toUpsert.length - deduped.length) };
 }
 
 Deno.serve(async (req) => {
