@@ -1,35 +1,57 @@
-Replace the current "View as Location Owner" toggle in the TopBar with a role-preview dropdown, visible only to Super Admin.
+Tighten role visibility so Admin, Owner, and Location Owner see only what they're allowed to.
 
-## Behavior
+## Changes
 
-Dropdown labeled "Viewing as" with four options:
-- Super Admin (default — real role, no impersonation)
-- Admin
-- Owner
-- Location Owner
+### 1. Admin no longer sees mutation-only admin pages
+The rule is "Admin cannot add/refresh APIs or mutate." Every current admin page except Clients and Users exists purely to configure or trigger changes, so gate them to Super Admin only:
 
-Selecting an option sets the effective role in `PreviewModeContext`. All existing role-gated UI (sidebar nav, route guards, mutation buttons, cost/spam visibility, property scoping) already reads the effective role, so they respond automatically. Selecting Super Admin clears impersonation.
+| Sidebar / Route | Now |
+|---|---|
+| Clients (`/admin/properties`) | Super Admin + Admin (read) |
+| Users (`/admin/users`) | Super Admin only (unchanged) |
+| Pipeline Mapping | Super Admin only |
+| SLA Settings | Super Admin only |
+| Data Sources | Super Admin only |
+| Settings | Super Admin only |
+| Performance Reports | Super Admin + Admin (unchanged) |
 
-Location Owner preview keeps its current behavior (scoped to Bob's assigned property, limited nav). Admin preview shows full read across properties with mutation buttons disabled. Owner preview shows all locations read-only with no admin pages.
+Sidebar hides items the user can't access; routes are guarded so a typed URL 404s / redirects.
 
-Persistence: remember selection in `localStorage` so a refresh keeps the chosen view (same as today's toggle).
+### 2. Owner nav restricted to Command + Budget Pacing
+Owner keeps all-properties visibility (still sees every location's spend and metrics) but the sidebar drops Monitor, Deliver, Jarvis, and Admin groups. Nav becomes:
+- Command
+- Budget Pacing
+
+Route guard: `/dashboard`, `/calls`, `/lead-performance`, `/reports`, `/assistant`, `/keywords`, `/admin/*` all redirect to `/command` for Owner.
+
+### 3. Location Owner single-location assignment
+`viewer_property_access` is already the assignment table. Change the semantics for `location_owner` users:
+- **Admin > Users**: replace the checkbox grid with a single-choice dropdown labeled "Assigned location" for every Location Owner row. Picking a property replaces the current assignment (delete existing rows for that user, insert the new one).
+- **DB guard**: add a partial unique index / trigger enforcing at most one `viewer_property_access` row per `location_owner` user, and require exactly one for them.
+- **Scoping**: `PropertyContext` already scopes to their assigned property list; because that list is now length 1, they see only that one location on Command and Budget Pacing. Confirm the Command page and Budget Pacing page filter their queries by `currentProperty.id` (they do — same code path as Super Admin previewing as Bob).
+
+### 4. Super Admin preview dropdown unchanged
+The Viewing-as dropdown continues to flip `effectiveRole`. All the gates above key off `effectiveRole`, so previewing as Admin/Owner/Location Owner produces the exact experience each role gets in production.
 
 ## Technical
 
-**`src/contexts/PreviewModeContext.tsx`**
-- Replace boolean `isPreviewingAsLocationOwner` with `previewRole: 'super_admin' | 'admin' | 'owner' | 'location_owner'` (defaults to real role).
-- Expose `effectiveRole`, `setPreviewRole`, `isPreviewing` (true when previewRole !== real role).
-- Keep backward-compat getter `isPreviewingAsLocationOwner = previewRole === 'location_owner'` so untouched call sites keep working, then migrate them.
+**`src/components/layout/Sidebar.tsx`**
+- Introduce `showBudgetOnlyNav = effectiveRole === "owner" || isLocationOwner`. When true, render only Command + Budget Pacing (skip Monitor/Deliver/Jarvis/Admin groups).
+- Add `superAdminOnly?: boolean` to `NavItem`. Mark Pipeline Mapping, SLA Settings, Data Sources, Settings as `superAdminOnly`. Update `filterVisible` to drop `superAdminOnly` items unless `isSuperAdmin` (from `effectiveRole`).
 
-**`src/components/layout/TopBar.tsx`**
-- Replace the toggle with a shadcn `Select` (or `DropdownMenu`) rendered only when real role is `super_admin`.
-- Label "Viewing as", four items above.
+**`src/App.tsx`**
+- Add `requireSuperAdmin` guards to `/admin/pipeline-mapping`, `/admin/sla-settings`, `/admin/data-sources`, `/admin/settings`.
+- Wrap `/dashboard`, `/calls`, `/keywords`, `/lead-performance`, `/reports`, `/assistant` in a new `BlockForOwner` (or extend `ViewerBlock`) that redirects `owner` / `location_owner` to `/command`. Location Owner is already redirected; add Owner to the same guard.
 
-**Consumers to update** (swap boolean checks for `effectiveRole` comparisons):
-- `src/lib/scoping.ts` — `canSeeCost`, `canSeeSpam`, `canSeeBadLead`, property scoping.
-- `src/contexts/ScopeContext.tsx` / `PropertyContext.tsx` — force Bob's property only when `effectiveRole === 'location_owner'`.
-- `src/components/layout/Sidebar.tsx` — nav visibility by `effectiveRole`.
-- `src/App.tsx` route guards — use `effectiveRole`.
-- Mutation gates (`GHLConnectionDialog`, sync buttons, admin pages) — enable only when `effectiveRole === 'super_admin'`.
+**`src/components/RequireAuth.tsx`**
+- Confirm `requireSuperAdmin` uses `effectiveRole` so preview works.
 
-No database or RLS changes — RLS still keys off the real role so the super admin retains real DB permissions; the dropdown only affects client-side visibility (matching how the current toggle works).
+**`src/pages/admin/AdminUsers.tsx`**
+- Location Owner section: swap the checkbox grid for a `Select` bound to a single property. On change, delete all `viewer_property_access` rows for that user, then insert the chosen one.
+- Show "Not assigned" state with a warning badge when a Location Owner has no property yet.
+
+**Migration**
+- Add `CREATE UNIQUE INDEX viewer_property_access_one_per_location_owner ON viewer_property_access(user_id) WHERE user_id IN (SELECT user_id FROM user_roles WHERE role = 'location_owner')` — Postgres doesn't allow subqueries in partial indexes, so instead use a `BEFORE INSERT/UPDATE` trigger that raises when the inserting user's role is `location_owner` and another row for them already exists.
+- Backfill: if any Location Owner currently has >1 access row, keep the earliest and delete the rest (logged for the Super Admin to review).
+
+No changes to RLS beyond the trigger — existing policies already scope reads by `viewer_property_access`, so restricting the list to one row automatically restricts what a Location Owner sees.
