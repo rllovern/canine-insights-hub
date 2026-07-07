@@ -29,7 +29,7 @@ const MONITOR_ITEMS: NavItem[] = [
 ];
 
 const DELIVER_ITEMS: NavItem[] = [
-  { key: "client-reports", to: "/admin/client-reports", label: "Performance Reports", icon: FileSearch, internalOnly: true, external: true },
+  { key: "client-reports", to: "/admin/client-reports", label: "Performance Reports", icon: FileSearch, staffOnly: true, external: true },
   { key: "reports", to: "/reports", label: "Reports", icon: FileText },
 ];
 
