@@ -193,12 +193,26 @@ async function processRows(
     seen.add(k);
     return true;
   });
+  console.log(`[processRows] property=${propertyId} rows_in=${toUpsert.length} deduped=${deduped.length}`);
   for (let i = 0; i < deduped.length; i += 500) {
     const chunk = deduped.slice(i, i + 500);
     const { error } = await admin.from("sheet_sales").upsert(chunk, {
       onConflict: "property_id,source_row_hash",
     });
-    if (error) throw new Error(`Upsert failed: ${error.message}`);
+    if (error) {
+      console.error(`[processRows] chunk upsert failed size=${chunk.length}:`, error.message);
+      // Fallback: upsert one row at a time so a single bad/duplicate row can't
+      // sink the whole tab.
+      let ok = 0;
+      for (const row of chunk) {
+        const { error: e2 } = await admin.from("sheet_sales").upsert(row, {
+          onConflict: "property_id,source_row_hash",
+        });
+        if (!e2) ok++;
+      }
+      console.log(`[processRows] per-row fallback: ${ok}/${chunk.length} succeeded`);
+      if (ok === 0) throw new Error(`Upsert failed: ${error.message}`);
+    }
   }
   return { imported: deduped.length, skipped: skipped + (toUpsert.length - deduped.length) };
 }
