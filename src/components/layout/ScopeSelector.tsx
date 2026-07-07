@@ -11,10 +11,21 @@ import { cn } from "@/lib/utils";
 export function ScopeSelector() {
   const { mode, propertyId, setScope, label } = useScope();
   const { properties } = useProperties();
-  const { isAllPropertiesReader } = usePreviewMode();
+  const { isAllPropertiesReader, isLocationOwner } = usePreviewMode();
   const [open, setOpen] = useState(false);
 
   const agencyLabel = isAllPropertiesReader ? "All locations" : "All my properties";
+
+  if (isLocationOwner) {
+    return (
+      <div className="w-full rounded-md bg-white/[0.05] px-3 py-2 text-left text-xs font-medium text-white/85">
+        <span className="flex min-w-0 items-center gap-2">
+          <Building2 className="size-4 shrink-0 text-white/70" />
+          <span className="truncate">{label}</span>
+        </span>
+      </div>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

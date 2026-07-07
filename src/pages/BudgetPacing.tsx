@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useProperties } from "@/contexts/PropertyContext";
+import { usePreviewMode } from "@/contexts/PreviewModeContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,6 +70,8 @@ const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padSta
 
 export default function BudgetPacing() {
   const { properties } = useProperties();
+  const { propertyIds } = useScope();
+  const { isSuperAdmin } = usePreviewMode();
   const propMap = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
 
   const [month, setMonth] = useState(monthOptions()[0].value);
@@ -81,8 +85,16 @@ export default function BudgetPacing() {
 
   const range = useMemo(() => monthRange(month), [month]);
 
+  const scopedPropertyIds = propertyIds;
+
   const reloadRows = async () => {
-    const { data } = await supabase.from("budget_accounts").select("*").order("sort_order").order("created_at");
+    if (scopedPropertyIds !== null && scopedPropertyIds.length === 0) {
+      setRows([]);
+      return;
+    }
+    let query = supabase.from("budget_accounts").select("*").order("sort_order").order("created_at");
+    if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
+    const { data } = await query;
     setRows((data ?? []) as BudgetRow[]);
   };
 
@@ -92,36 +104,54 @@ export default function BudgetPacing() {
       await reloadRows();
       setLoading(false);
     })();
-  }, []);
+  }, [scopedPropertyIds]);
 
   useEffect(() => {
     (async () => {
+      if (scopedPropertyIds !== null && scopedPropertyIds.length === 0) {
+        setMetrics([]);
+        return;
+      }
       const last5From = new Date(range.to);
       last5From.setDate(last5From.getDate() - 4);
       const fromISO = toISO(range.from < last5From ? range.from : last5From);
       const toIso = toISO(range.to);
-      const { data } = await supabase
+      let query = supabase
         .from("daily_metrics")
         .select("property_id, date, campaign, cost")
         .gte("date", fromISO)
         .lte("date", toIso);
+      if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
+      const { data } = await query;
       setMetrics((data ?? []) as MetricRow[]);
     })();
-  }, [month, range.from, range.to]);
+  }, [month, range.from, range.to, scopedPropertyIds]);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("campaign_budgets").select("property_id, campaign, daily_budget, status");
+      if (scopedPropertyIds !== null && scopedPropertyIds.length === 0) {
+        setBudgets([]);
+        return;
+      }
+      let query = supabase.from("campaign_budgets").select("property_id, campaign, daily_budget, status");
+      if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
+      const { data } = await query;
       setBudgets((data ?? []) as BudgetSnap[]);
     })();
-  }, []);
+  }, [scopedPropertyIds]);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("campaign_labels").select("property_id, campaign, label_name");
+      if (scopedPropertyIds !== null && scopedPropertyIds.length === 0) {
+        setLabels([]);
+        return;
+      }
+      let query = supabase.from("campaign_labels").select("property_id, campaign, label_name");
+      if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
+      const { data } = await query;
       setLabels((data ?? []) as LabelRow[]);
     })();
-  }, []);
+  }, [scopedPropertyIds]);
 
   // property_id -> lower(label_name) -> Set<campaign>
   const labelIndex = useMemo(() => {
@@ -187,12 +217,14 @@ export default function BudgetPacing() {
   }, [rows, metrics, budgets, labelIndex, range]);
 
   const updateRow = async (id: string, patch: Partial<BudgetRow>) => {
+    if (!isSuperAdmin) return;
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } as BudgetRow : r)));
     const { error } = await supabase.from("budget_accounts").update(patch).eq("id", id);
     if (error) toast({ title: "Save failed", description: error.message, variant: "destructive" });
   };
 
   const deleteRow = async (id: string) => {
+    if (!isSuperAdmin) return;
     if (!confirm("Delete this budget row?")) return;
     const { error } = await supabase.from("budget_accounts").delete().eq("id", id);
     if (error) return toast({ title: "Delete failed", description: error.message, variant: "destructive" });
@@ -200,6 +232,7 @@ export default function BudgetPacing() {
   };
 
   const syncBudgets = async () => {
+    if (!isSuperAdmin) return;
     setSyncing(true);
     const propsWithGoogle = Array.from(new Set(rows.map((r) => r.property_id)));
     let ok = 0;
@@ -209,9 +242,13 @@ export default function BudgetPacing() {
         if (!error) ok++;
       } catch {}
     }
-    const { data } = await supabase.from("campaign_budgets").select("property_id, campaign, daily_budget, status");
+    let budgetQuery = supabase.from("campaign_budgets").select("property_id, campaign, daily_budget, status");
+    if (scopedPropertyIds !== null) budgetQuery = budgetQuery.in("property_id", scopedPropertyIds);
+    const { data } = await budgetQuery;
     setBudgets((data ?? []) as BudgetSnap[]);
-    const { data: lbl } = await supabase.from("campaign_labels").select("property_id, campaign, label_name");
+    let labelQuery = supabase.from("campaign_labels").select("property_id, campaign, label_name");
+    if (scopedPropertyIds !== null) labelQuery = labelQuery.in("property_id", scopedPropertyIds);
+    const { data: lbl } = await labelQuery;
     setLabels((lbl ?? []) as LabelRow[]);
     setSyncing(false);
     toast({ title: "Synced", description: `Refreshed budgets for ${ok}/${propsWithGoogle.length} accounts.` });
@@ -231,10 +268,14 @@ export default function BudgetPacing() {
               {monthOptions().map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={syncBudgets} disabled={syncing || rows.length === 0}>
-            <RefreshCw className={cn("size-4 mr-1.5", syncing && "animate-spin")} /> Sync budgets
-          </Button>
-          <AddRowDialog open={addOpen} onOpenChange={setAddOpen} properties={properties} onAdded={reloadRows} />
+          {isSuperAdmin && (
+            <>
+              <Button variant="outline" size="sm" onClick={syncBudgets} disabled={syncing || rows.length === 0}>
+                <RefreshCw className={cn("size-4 mr-1.5", syncing && "animate-spin")} /> Sync budgets
+              </Button>
+              <AddRowDialog open={addOpen} onOpenChange={setAddOpen} properties={properties} onAdded={reloadRows} />
+            </>
+          )}
         </div>
       </div>
 
@@ -254,15 +295,15 @@ export default function BudgetPacing() {
               <TableHead className="text-right">Target Daily Spend</TableHead>
               <TableHead className="text-right">Projection</TableHead>
               <TableHead className="text-right">Proj Run Rate</TableHead>
-              <TableHead className="w-10" />
+              {isSuperAdmin && <TableHead className="w-10" />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && (
-              <TableRow><TableCell colSpan={13} className="text-center text-sm text-muted-foreground py-8">Loading…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={isSuperAdmin ? 13 : 12} className="text-center text-sm text-muted-foreground py-8">Loading…</TableCell></TableRow>
             )}
             {!loading && computed.length === 0 && (
-              <TableRow><TableCell colSpan={13} className="text-center text-sm text-muted-foreground py-8">No budget rows yet. Click <span className="font-medium">Add Account</span> to create one.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={isSuperAdmin ? 13 : 12} className="text-center text-sm text-muted-foreground py-8">No budget rows yet.</TableCell></TableRow>
             )}
             {computed.map((c, i) => {
               const prop = propMap.get(c.row.property_id);
@@ -273,18 +314,21 @@ export default function BudgetPacing() {
                   <TableCell>
                     <EditableText
                       value={c.row.campaign_label ?? ""}
+                      readOnly={!isSuperAdmin}
                       onSave={(v) => updateRow(c.row.id, { campaign_label: v.trim() || null })}
                     />
                   </TableCell>
                   <TableCell>
                     <EditableText
                       value={c.row.notes ?? ""}
+                      readOnly={!isSuperAdmin}
                       onSave={(v) => updateRow(c.row.id, { notes: v.trim() || null })}
                     />
                   </TableCell>
                   <TableCell className="text-right">
                     <EditableText
                       value={String(c.row.monthly_budget)}
+                      readOnly={!isSuperAdmin}
                       align="right"
                       number
                       display={fmtUSD(Number(c.row.monthly_budget))}
@@ -309,15 +353,17 @@ export default function BudgetPacing() {
                       {fmtPct(c.projRunRate)}
                     </span>
                   </TableCell>
-                  <TableCell>
-                    <button
-                      onClick={() => deleteRow(c.row.id)}
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                      title="Delete row"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </TableCell>
+                  {isSuperAdmin && (
+                    <TableCell>
+                      <button
+                        onClick={() => deleteRow(c.row.id)}
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                        title="Delete row"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}
@@ -333,8 +379,8 @@ export default function BudgetPacing() {
 }
 
 function EditableText({
-  value, onSave, align = "left", number = false, display,
-}: { value: string; onSave: (v: string) => void; align?: "left" | "right"; number?: boolean; display?: string }) {
+  value, onSave, align = "left", number = false, display, readOnly = false,
+}: { value: string; onSave: (v: string) => void; align?: "left" | "right"; number?: boolean; display?: string; readOnly?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -373,6 +419,10 @@ function EditableText({
   }
 
   const shown = display ?? (value || "—");
+  if (readOnly) {
+    return <span className={cn("block w-full min-h-[1.75rem] px-1 py-0.5 text-sm", align === "right" && "text-right tabular-nums", !value && "text-muted-foreground")}>{shown}</span>;
+  }
+
   return (
     <button
       type="button"
