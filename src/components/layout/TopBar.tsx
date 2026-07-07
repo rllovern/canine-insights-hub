@@ -1,18 +1,31 @@
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useScope } from "@/contexts/ScopeContext";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Globe2, Building2, UserCog } from "lucide-react";
 import { format } from "date-fns";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { DateRangePicker } from "./DateRangePicker";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { AppRole } from "@/lib/types";
+
+const PREVIEW_ROLE_LABELS: Record<Exclude<AppRole, "internal" | "viewer">, string> = {
+  super_admin: "Super Admin",
+  admin: "Admin",
+  owner: "Owner",
+  location_owner: "Location Owner",
+};
 
 export function TopBar() {
   const { mode, label } = useScope();
-  const { isSuperAdmin, isLocationOwner, previewingLocationOwner, togglePreviewLocationOwner } = usePreviewMode();
+  const { realRole, previewRole, setPreviewRole, isPreviewing, isLocationOwner } = usePreviewMode();
   const { range, compareMode, compareRange } = useDashboard();
+  const realIsSuperAdmin = realRole === "super_admin";
 
   return (
     <header className="shrink-0 border-b border-border bg-card sticky top-0 z-30">
@@ -35,17 +48,30 @@ export function TopBar() {
 
         <DateRangePicker />
 
-        {isSuperAdmin && (
-          <div className="flex items-center gap-2 h-9 px-2 sm:px-3 rounded-md border border-amber-300 bg-amber-50">
-            <UserCog className="size-3.5 text-amber-700" />
-            <Label htmlFor="view-as-location-owner-toggle" className="hidden sm:inline text-xs font-medium cursor-pointer select-none text-amber-900">
-              {previewingLocationOwner ? "Viewing as Location Owner" : "View as Location Owner"}
-            </Label>
-            <Switch id="view-as-location-owner-toggle" checked={previewingLocationOwner} onCheckedChange={togglePreviewLocationOwner} />
+        {realIsSuperAdmin && (
+          <div className={`flex items-center gap-2 h-9 px-2 sm:px-3 rounded-md border ${isPreviewing ? "border-amber-300 bg-amber-50" : "border-border bg-card"}`}>
+            <UserCog className={`size-3.5 ${isPreviewing ? "text-amber-700" : "text-muted-foreground"}`} />
+            <span className={`hidden sm:inline text-xs font-medium ${isPreviewing ? "text-amber-900" : "text-muted-foreground"}`}>
+              Viewing as
+            </span>
+            <Select
+              value={(previewRole ?? "super_admin") as string}
+              onValueChange={(v) => setPreviewRole(v as AppRole)}
+            >
+              <SelectTrigger className="h-7 w-[150px] border-0 bg-transparent px-2 text-xs font-semibold focus:ring-0 focus:ring-offset-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="super_admin">{PREVIEW_ROLE_LABELS.super_admin}</SelectItem>
+                <SelectItem value="admin">{PREVIEW_ROLE_LABELS.admin}</SelectItem>
+                <SelectItem value="owner">{PREVIEW_ROLE_LABELS.owner}</SelectItem>
+                <SelectItem value="location_owner">{PREVIEW_ROLE_LABELS.location_owner}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         )}
 
-        {isLocationOwner && (
+        {!realIsSuperAdmin && isLocationOwner && (
           <Badge variant="secondary" className="gap-1.5 h-9 px-2 sm:px-3 rounded-md">
             <Eye className="size-3.5" /> <span className="hidden sm:inline">Client View</span>
           </Badge>
