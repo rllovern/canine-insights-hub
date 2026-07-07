@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { SectionDivider } from "@/components/dashboard/SectionDivider";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLineChart";
@@ -20,6 +22,48 @@ import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
   rowTotalLeads,
 } from "@/lib/leadModel";
+
+const PPC_SOURCE = "Google PPC";
+
+/**
+ * Label rule: for properties that have any campaign_labels rows, only PPC
+ * rows whose (property_id, campaign) is labeled for that property count.
+ * Properties with zero labels are unaffected. Non-PPC rows are always kept.
+ */
+function useLabelRuleFilter(rows: any[]) {
+  const propertyIds = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.property_id).filter(Boolean))),
+    [rows],
+  );
+  const key = propertyIds.slice().sort().join(",");
+  const { data } = useQuery({
+    queryKey: ["campaign-labels", key],
+    enabled: propertyIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("campaign_labels")
+        .select("property_id, campaign")
+        .in("property_id", propertyIds);
+      if (error) throw error;
+      return (data ?? []) as { property_id: string; campaign: string }[];
+    },
+  });
+
+  return useMemo(() => {
+    if (!data || data.length === 0) return rows;
+    const allowed = new Map<string, Set<string>>();
+    for (const l of data) {
+      if (!allowed.has(l.property_id)) allowed.set(l.property_id, new Set());
+      allowed.get(l.property_id)!.add(l.campaign);
+    }
+    return rows.filter((r) => {
+      if (r.ad_source !== PPC_SOURCE) return true;
+      const set = allowed.get(r.property_id);
+      if (!set) return true; // property has no labels -> unfiltered
+      return set.has(r.campaign);
+    });
+  }, [rows, data]);
+}
 
 export default function CallTracking() {
   const { current: rawCurrent, prior: rawPrior, isLoading, range, compareMode, compareRange } = useDashboard();
