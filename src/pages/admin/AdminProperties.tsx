@@ -381,35 +381,39 @@ export default function AdminProperties() {
         description="Manage every Ridgeside K9 location, its data sources, and public share links."
         actions={
           <div className="flex items-center gap-2">
-            <MCCImportDialog
-              properties={rows}
-              onImported={load}
-              trigger={
-                <Button variant="outline" size="sm">
-                  <Download className="mr-1.5 h-4 w-4" />
-                  Import from MCC
-                </Button>
-              }
-            />
-            <CTMImportDialog
-              properties={rows}
-              onImported={load}
-              trigger={
-                <Button variant="outline" size="sm">
-                  <Download className="mr-1.5 h-4 w-4" />
-                  Import from CTM
-                </Button>
-              }
-            />
-            <PropertyDialog
-              onSaved={load}
-              trigger={
-                <Button size="sm">
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Add property
-                </Button>
-              }
-            />
+            {isSuperAdmin && (
+              <>
+                <MCCImportDialog
+                  properties={rows}
+                  onImported={load}
+                  trigger={
+                    <Button variant="outline" size="sm">
+                      <Download className="mr-1.5 h-4 w-4" />
+                      Import from MCC
+                    </Button>
+                  }
+                />
+                <CTMImportDialog
+                  properties={rows}
+                  onImported={load}
+                  trigger={
+                    <Button variant="outline" size="sm">
+                      <Download className="mr-1.5 h-4 w-4" />
+                      Import from CTM
+                    </Button>
+                  }
+                />
+                <PropertyDialog
+                  onSaved={load}
+                  trigger={
+                    <Button size="sm">
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      Add property
+                    </Button>
+                  }
+                />
+              </>
+            )}
           </div>
         }
       />
