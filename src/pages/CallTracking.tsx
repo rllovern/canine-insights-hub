@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { SectionDivider } from "@/components/dashboard/SectionDivider";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { MultiLineChart, SingleLineChart } from "@/components/dashboard/MultiLineChart";
@@ -20,6 +22,48 @@ import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
   rowTotalLeads,
 } from "@/lib/leadModel";
+
+const PPC_SOURCE = "Google PPC";
+
+/**
+ * Label rule: for properties that have any campaign_labels rows, only PPC
+ * rows whose (property_id, campaign) is labeled for that property count.
+ * Properties with zero labels are unaffected. Non-PPC rows are always kept.
+ */
+function useLabelRuleFilter(rows: any[]) {
+  const propertyIds = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.property_id).filter(Boolean))),
+    [rows],
+  );
+  const key = propertyIds.slice().sort().join(",");
+  const { data } = useQuery({
+    queryKey: ["campaign-labels", key],
+    enabled: propertyIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("campaign_labels")
+        .select("property_id, campaign")
+        .in("property_id", propertyIds);
+      if (error) throw error;
+      return (data ?? []) as { property_id: string; campaign: string }[];
+    },
+  });
+
+  return useMemo(() => {
+    if (!data || data.length === 0) return rows;
+    const allowed = new Map<string, Set<string>>();
+    for (const l of data) {
+      if (!allowed.has(l.property_id)) allowed.set(l.property_id, new Set());
+      allowed.get(l.property_id)!.add(l.campaign);
+    }
+    return rows.filter((r) => {
+      if (r.ad_source !== PPC_SOURCE) return true;
+      const set = allowed.get(r.property_id);
+      if (!set) return true; // property has no labels -> unfiltered
+      return set.has(r.campaign);
+    });
+  }, [rows, data]);
+}
 
 export default function CallTracking() {
   const { current: rawCurrent, prior: rawPrior, isLoading, range, compareMode, compareRange } = useDashboard();
@@ -171,10 +215,13 @@ function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }
 
 function SourceOutcomeTable({ current, prior, cfg }: any) {
   // Performance report scope: GHL Won is a sales-disposition feed, not a media
-  // source — exclude it from the source/campaign breakdowns. Other surfaces
-  // (Command, Lead Performance) still consume it untouched.
-  const cur = useMemo(() => groupBySource(current).filter((r: any) => r.ad_source !== "GHL Won"), [current]);
-  const pre = useMemo(() => groupBySource(prior).filter((r: any) => r.ad_source !== "GHL Won"), [prior]);
+  // source — exclude it from the source/campaign breakdowns. PPC rows are
+  // filtered by the campaign_labels label rule so shared Google Ads accounts
+  // (Winchester / NOVA) only surface each location's own campaigns.
+  const curFiltered = useLabelRuleFilter(current);
+  const preFiltered = useLabelRuleFilter(prior);
+  const cur = useMemo(() => groupBySource(curFiltered).filter((r: any) => r.ad_source !== "GHL Won"), [curFiltered]);
+  const pre = useMemo(() => groupBySource(preFiltered).filter((r: any) => r.ad_source !== "GHL Won"), [preFiltered]);
   const [sortKey, setSortKey] = useState<string>("good_leads");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -244,13 +291,17 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
 
 function CampaignTable({ current, prior, cfg }: any) {
   // Canonical totals via leadModel.ts. Quality column removed; GHL Won filtered
-  // out (it's a sales-disposition feed, not a media source).
+  // out (it's a sales-disposition feed, not a media source). PPC rows are
+  // filtered by campaign_labels so shared accounts only surface their own
+  // campaigns.
   const withTotals = (rows: any[]) => rows.map((r: any) => ({
     ...r,
     total_leads: rowTotalLeads(r),
   }));
-  const cur = useMemo(() => withTotals(groupByCampaign(current).filter((r: any) => r.ad_source !== "GHL Won")), [current]);
-  const pre = useMemo(() => withTotals(groupByCampaign(prior).filter((r: any) => r.ad_source !== "GHL Won")), [prior]);
+  const curFiltered = useLabelRuleFilter(current);
+  const preFiltered = useLabelRuleFilter(prior);
+  const cur = useMemo(() => withTotals(groupByCampaign(curFiltered).filter((r: any) => r.ad_source !== "GHL Won")), [curFiltered]);
+  const pre = useMemo(() => withTotals(groupByCampaign(preFiltered).filter((r: any) => r.ad_source !== "GHL Won")), [preFiltered]);
   const preMap = new Map(pre.map((r: any) => [`${r.ad_source}::${r.campaign}`, r]));
   const [page, setPage] = useState(0);
   const PAGE = 100;
