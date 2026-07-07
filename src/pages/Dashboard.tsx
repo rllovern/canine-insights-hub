@@ -12,6 +12,7 @@ import { calc } from "@/lib/data-sources";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePropertyMetricConfig, type MetricKey } from "@/lib/property-labels";
 import { rowTotalLeads } from "@/lib/leadModel";
+import { useVerifiedSalesTotal } from "@/lib/verified-sales";
 
 // Cost / Good Lead by-source chart always renders these 4 series so missing
 // connectors (Facebook / Direct / Organic) appear as flat $0 lines instead of
@@ -29,6 +30,25 @@ export default function Dashboard({ hideAdsOverview = false }: { hideAdsOverview
   const totals = useMemo(() => sumMetrics(current), [current]);
   const prev = useMemo(() => sumMetrics(prior), [prior]);
   const showCompare = compareMode !== "off";
+
+  // Verified Sale is sourced from Google Sheets (sheet_sales), not
+  // daily_metrics.verified_sale. Only Call Tracking still reads the
+  // daily_metrics column.
+  const sheetIds = activeProperty ? [activeProperty.id] : null;
+  const isoFrom = range.from.toISOString().slice(0, 10);
+  const isoTo = range.to.toISOString().slice(0, 10);
+  const cmpFrom = compareRange.from.toISOString().slice(0, 10);
+  const cmpTo = compareRange.to.toISOString().slice(0, 10);
+  const vsCur = useVerifiedSalesTotal(sheetIds, isoFrom, isoTo, !!activeProperty);
+  const vsPrev = useVerifiedSalesTotal(sheetIds, cmpFrom, cmpTo, !!activeProperty && showCompare);
+  const totalsWithSheet = useMemo(
+    () => ({ ...totals, verified_sale: vsCur.data ?? 0 }),
+    [totals, vsCur.data],
+  );
+  const prevWithSheet = useMemo(
+    () => ({ ...prev, verified_sale: vsPrev.data ?? 0 }),
+    [prev, vsPrev.data],
+  );
   const series = useMemo(() => {
     const zeros = {
       cost: 0, impressions: 0, clicks: 0, record_count: 0, no_entry: 0,
@@ -150,7 +170,7 @@ export default function Dashboard({ hideAdsOverview = false }: { hideAdsOverview
 
         <div className="space-y-3">
           <ActionsHeader cfg={cfg} />
-          <ActionsKpis totals={totals} prev={prev} cfg={cfg} />
+          <ActionsKpis totals={totalsWithSheet} prev={prevWithSheet} cfg={cfg} />
           <ChartCard title="Impressions vs Calls" subtitle="Daily trend">
             <DualAxisChart
               data={series}

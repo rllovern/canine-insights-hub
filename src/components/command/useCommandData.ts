@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { eachDateISO, rangeToISO, priorRange, type DateRange } from "@/lib/metrics";
 import { totalLeads as canonicalTotalLeads, qualityRate as canonicalQualityRate, type LeadCounts } from "@/lib/leadModel";
+import { fetchVerifiedSalesByDate } from "@/lib/verified-sales";
 
 export type CommandMode = "business" | "ads";
 
@@ -223,11 +224,23 @@ export function useCommandData(
 
   const current = useQuery({
     queryKey: ["command-window", key, iso.from, iso.to],
-    queryFn: () => fetchWindow(propertyIds, iso.from, iso.to),
+    queryFn: async () => {
+      const [rows, sales] = await Promise.all([
+        fetchWindow(propertyIds, iso.from, iso.to),
+        fetchVerifiedSalesByDate(propertyIds, iso.from, iso.to),
+      ]);
+      return rows.map((r) => ({ ...r, verified_sale: sales[r.date] ?? 0 }));
+    },
   });
   const prior = useQuery({
     queryKey: ["command-window", key, cmpIso.from, cmpIso.to],
-    queryFn: () => fetchWindow(propertyIds, cmpIso.from, cmpIso.to),
+    queryFn: async () => {
+      const [rows, sales] = await Promise.all([
+        fetchWindow(propertyIds, cmpIso.from, cmpIso.to),
+        fetchVerifiedSalesByDate(propertyIds, cmpIso.from, cmpIso.to),
+      ]);
+      return rows.map((r) => ({ ...r, verified_sale: sales[r.date] ?? 0 }));
+    },
   });
   const targets = useQuery({
     queryKey: ["command-targets", key, periodStart],
@@ -238,11 +251,23 @@ export function useCommandData(
   // mode toggle is instant and Media Efficiency Ratio can render either way.
   const ppcCurrent = useQuery({
     queryKey: ["command-ppc-window", key, iso.from, iso.to],
-    queryFn: () => fetchPpcWindow(propertyIds, iso.from, iso.to),
+    queryFn: async () => {
+      const [rows, sales] = await Promise.all([
+        fetchPpcWindow(propertyIds, iso.from, iso.to),
+        fetchVerifiedSalesByDate(propertyIds, iso.from, iso.to),
+      ]);
+      return rows.map((r) => ({ ...r, verified_sale: sales[r.date] ?? 0 }));
+    },
   });
   const ppcPrior = useQuery({
     queryKey: ["command-ppc-window", key, cmpIso.from, cmpIso.to],
-    queryFn: () => fetchPpcWindow(propertyIds, cmpIso.from, cmpIso.to),
+    queryFn: async () => {
+      const [rows, sales] = await Promise.all([
+        fetchPpcWindow(propertyIds, cmpIso.from, cmpIso.to),
+        fetchVerifiedSalesByDate(propertyIds, cmpIso.from, cmpIso.to),
+      ]);
+      return rows.map((r) => ({ ...r, verified_sale: sales[r.date] ?? 0 }));
+    },
   });
 
   // CTM call-score distribution for AI Quality card (we have buckets but they

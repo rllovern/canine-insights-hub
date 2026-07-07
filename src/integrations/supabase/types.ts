@@ -1389,6 +1389,7 @@ export type Database = {
           brand_color: string | null
           created_at: string
           default_lead_owner_user_id: string | null
+          google_sheet_tab: string | null
           hidden_metrics: Json
           id: string
           is_active: boolean
@@ -1404,6 +1405,7 @@ export type Database = {
           brand_color?: string | null
           created_at?: string
           default_lead_owner_user_id?: string | null
+          google_sheet_tab?: string | null
           hidden_metrics?: Json
           id?: string
           is_active?: boolean
@@ -1419,6 +1421,7 @@ export type Database = {
           brand_color?: string | null
           created_at?: string
           default_lead_owner_user_id?: string | null
+          google_sheet_tab?: string | null
           hidden_metrics?: Json
           id?: string
           is_active?: boolean
@@ -1758,6 +1761,104 @@ export type Database = {
           },
         ]
       }
+      sheet_sales: {
+        Row: {
+          city_state: string | null
+          created_at: string
+          creation_date: string | null
+          deal_value: number | null
+          email: string | null
+          first_session: string | null
+          full_name: string | null
+          id: string
+          notes: string | null
+          phone: string | null
+          property_id: string
+          sale_date: string
+          sold_date: string | null
+          source_row_hash: string
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          city_state?: string | null
+          created_at?: string
+          creation_date?: string | null
+          deal_value?: number | null
+          email?: string | null
+          first_session?: string | null
+          full_name?: string | null
+          id?: string
+          notes?: string | null
+          phone?: string | null
+          property_id: string
+          sale_date: string
+          sold_date?: string | null
+          source_row_hash: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          city_state?: string | null
+          created_at?: string
+          creation_date?: string | null
+          deal_value?: number | null
+          email?: string | null
+          first_session?: string | null
+          full_name?: string | null
+          id?: string
+          notes?: string | null
+          phone?: string | null
+          property_id?: string
+          sale_date?: string
+          sold_date?: string | null
+          source_row_hash?: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sheet_sales_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sheet_sync_config: {
+        Row: {
+          created_at: string
+          id: string
+          last_sync_at: string | null
+          last_sync_error: string | null
+          last_sync_status: string | null
+          singleton: boolean
+          spreadsheet_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          last_sync_status?: string | null
+          singleton?: boolean
+          spreadsheet_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          last_sync_status?: string | null
+          singleton?: boolean
+          spreadsheet_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sync_runs: {
         Row: {
           acknowledged_at: string | null
@@ -2073,6 +2174,7 @@ export type Database = {
           brand_color: string | null
           created_at: string
           default_lead_owner_user_id: string | null
+          google_sheet_tab: string | null
           hidden_metrics: Json
           id: string
           is_active: boolean
@@ -2105,6 +2207,33 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "property_call_score_mappings"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_sheet_sales_by_report_token: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: {
+          city_state: string | null
+          created_at: string
+          creation_date: string | null
+          deal_value: number | null
+          email: string | null
+          first_session: string | null
+          full_name: string | null
+          id: string
+          notes: string | null
+          phone: string | null
+          property_id: string
+          sale_date: string
+          sold_date: string | null
+          source_row_hash: string
+          synced_at: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "sheet_sales"
           isOneToOne: false
           isSetofReturn: true
         }
