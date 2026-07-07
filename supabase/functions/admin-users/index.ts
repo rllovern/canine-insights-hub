@@ -23,13 +23,25 @@ Deno.serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
   const authHeader = req.headers.get("Authorization") ?? "";
-  const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return json({ error: "Missing bearer token" }, 401);
+  }
+
+  const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: userRes, error: uErr } = await userClient.auth.getUser();
+  const caller = userRes?.user;
+  if (uErr || !caller) {
+    return json(
+      { error: "Your session has expired. Sign out and sign back in, then retry." },
+      401,
+    );
+  }
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-  const { data: userRes } = await admin.auth.getUser(jwt);
-  const caller = userRes?.user;
-  if (!caller) return json({ error: "Unauthorized" }, 401);
 
   const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: caller.id });
   if (!isSuper) return json({ error: "Forbidden" }, 403);
