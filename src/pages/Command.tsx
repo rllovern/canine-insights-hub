@@ -126,13 +126,13 @@ export default function Command() {
           {ownerView ? (
             <KpiSparkCard
               label={isAds ? "PPC Sales" : "Sales (count)"}
-              value={fmtNumber(active.appointments)}
-              current={active.appointments} prior={activePrior.appointments}
-              series={series("projected_sale")}
+              value={fmtNumber(active.sales)}
+              current={active.sales} prior={activePrior.sales}
+              series={series("verified_sale")}
               compareLabel={cmpLabel}
               tip={TIPS.appointments}
               formatValue={fmtNumber}
-              sourceTable={isAds ? "daily_metrics.projected_sale where ad_source = 'Google PPC'" : "daily_metrics.projected_sale"}
+              sourceTable="sheet_sales (Google Sheets import — not ad-attributed, so PPC and Business show the same total)"
             />
           ) : (
             <KpiSparkCard

@@ -28,6 +28,9 @@ export type Totals = {
   projected: number;
   bad: number;
   qualityRate: number;
+  /** Sales count from the Google Sheet import (`sheet_sales`).
+   * Distinct from `projected` (CTM AI-projected count kept only for quality-rate math). */
+  sales: number;
 };
 
 export type CommandTargets = {
@@ -146,7 +149,7 @@ export function totalsOf(rows: DailyAgg[]): Totals {
     calls,
     // Legacy aliases preserved for surfaces still wired to them.
     qualifiedCalls: good,
-    appointments: projected,
+    appointments: verified,
     revenue: verified,
     // Canonical model — all lead totals/quality flow through leadModel.ts.
     good,
@@ -154,6 +157,10 @@ export function totalsOf(rows: DailyAgg[]): Totals {
     bad,
     totalLeads: canonicalTotalLeads(counts),
     qualityRate: canonicalQualityRate(counts),
+    // Google-Sheet-imported sales count. Display-facing "Sales" everywhere
+    // (except Call Tracking) reads this. Quality-rate math stays on
+    // `projected` (CTM AI-projected) to preserve the transcript-based signal.
+    sales: verified,
   };
 }
 

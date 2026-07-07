@@ -174,7 +174,7 @@ export function PortfolioVerdict({
   });
 
   if (mode !== "agency") {
-    const t = totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 };
+    const t = totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0, sales: 0 };
     const tier = qualityTier(t.qualityRate, t.totalLeads);
     const lowSample = tier === "low-sample"; // < LOW_SAMPLE_BASE (8) — suppress
     const provisional = !lowSample && t.totalLeads < LOW_SAMPLE_CAVEAT; // 8–14 — caveat
