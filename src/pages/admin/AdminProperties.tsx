@@ -34,6 +34,7 @@ import { SourceBadges } from "@/components/data/SourceBadges";
 import { PropertyAvatar } from "@/components/brand/PropertyAvatar";
 import { generateReportToken, slugify } from "@/lib/tokens";
 import { useProperties } from "@/contexts/PropertyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/data/EmptyState";
 import { CTMConnectionDialog } from "@/components/data/CTMConnectionDialog";
@@ -238,6 +239,8 @@ function PropertyDialog({
 
 export default function AdminProperties() {
   const { reload } = useProperties();
+  const { role } = useAuth();
+  const isSuperAdmin = role === "super_admin";
   const [rows, setRows] = useState<Property[]>([]);
   const [sources, setSources] = useState<PropertyDataSource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -303,6 +306,7 @@ export default function AdminProperties() {
   }, [sources]);
 
   const regenToken = async (p: Property) => {
+    if (!isSuperAdmin) return;
     const token = generateReportToken();
     const { error } = await supabase.from("properties").update({ public_report_token: token }).eq("id", p.id);
     if (error) toast.error(error.message);
@@ -323,6 +327,7 @@ export default function AdminProperties() {
   };
 
   const syncNow = async (p: Property) => {
+    if (!isSuperAdmin) return;
     setSyncingId(p.id);
     const hasGoogle = !!googleAdsByProp.get(p.id)?.is_connected;
     const hasCtm = !!ctmByProp.get(p.id)?.is_connected;
@@ -376,35 +381,39 @@ export default function AdminProperties() {
         description="Manage every Ridgeside K9 location, its data sources, and public share links."
         actions={
           <div className="flex items-center gap-2">
-            <MCCImportDialog
-              properties={rows}
-              onImported={load}
-              trigger={
-                <Button variant="outline" size="sm">
-                  <Download className="mr-1.5 h-4 w-4" />
-                  Import from MCC
-                </Button>
-              }
-            />
-            <CTMImportDialog
-              properties={rows}
-              onImported={load}
-              trigger={
-                <Button variant="outline" size="sm">
-                  <Download className="mr-1.5 h-4 w-4" />
-                  Import from CTM
-                </Button>
-              }
-            />
-            <PropertyDialog
-              onSaved={load}
-              trigger={
-                <Button size="sm">
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Add property
-                </Button>
-              }
-            />
+            {isSuperAdmin && (
+              <>
+                <MCCImportDialog
+                  properties={rows}
+                  onImported={load}
+                  trigger={
+                    <Button variant="outline" size="sm">
+                      <Download className="mr-1.5 h-4 w-4" />
+                      Import from MCC
+                    </Button>
+                  }
+                />
+                <CTMImportDialog
+                  properties={rows}
+                  onImported={load}
+                  trigger={
+                    <Button variant="outline" size="sm">
+                      <Download className="mr-1.5 h-4 w-4" />
+                      Import from CTM
+                    </Button>
+                  }
+                />
+                <PropertyDialog
+                  onSaved={load}
+                  trigger={
+                    <Button size="sm">
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      Add property
+                    </Button>
+                  }
+                />
+              </>
+            )}
           </div>
         }
       />
@@ -488,31 +497,35 @@ export default function AdminProperties() {
                               <Copy className="mr-2 h-4 w-4" />
                               Copy share link
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setRegenTarget(p); setRegenConfirm(""); }}>
-                              <RefreshCw className="mr-2 h-4 w-4" />
-                              Regenerate share link
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => setCtmTarget(p)}>
-                              <Phone className="mr-2 h-4 w-4" />
-                              CTM connection
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setGhlTarget(p)}>
-                              <Zap className="mr-2 h-4 w-4" />
-                              Go High Level connection
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              disabled={isSyncing}
-                              onClick={() => syncNow(p)}
-                            >
-                              <Zap className="mr-2 h-4 w-4" />
-                              {isSyncing ? "Syncing…" : "Sync now"}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => setEditTarget(p)}>
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit property
-                            </DropdownMenuItem>
+                            {isSuperAdmin && (
+                              <>
+                                <DropdownMenuItem onClick={() => { setRegenTarget(p); setRegenConfirm(""); }}>
+                                  <RefreshCw className="mr-2 h-4 w-4" />
+                                  Regenerate share link
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setCtmTarget(p)}>
+                                  <Phone className="mr-2 h-4 w-4" />
+                                  CTM connection
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setGhlTarget(p)}>
+                                  <Zap className="mr-2 h-4 w-4" />
+                                  Go High Level connection
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={isSyncing}
+                                  onClick={() => syncNow(p)}
+                                >
+                                  <Zap className="mr-2 h-4 w-4" />
+                                  {isSyncing ? "Syncing…" : "Sync now"}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setEditTarget(p)}>
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Edit property
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
