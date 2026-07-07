@@ -199,7 +199,7 @@ function ActionsKpis({ totals, prev, cfg }: { totals: any; prev: any; cfg: Retur
     visible.length >= 3 ? "grid grid-cols-1 sm:grid-cols-3 gap-2" :
     visible.length === 2 ? "grid grid-cols-1 sm:grid-cols-2 gap-2" :
     "grid grid-cols-1 gap-2";
-  // Canonical Lead Model: "leads" displays as Total Leads = bad + good + AI-projected.
+  // Canonical Lead Model: "leads" displays as Total Leads = bad + good + sales.
   // Never read the legacy `leads` column for the total — always derive via leadModel.
   const valueFor = (k: MetricKey, src: any) =>
     k === "leads" ? rowTotalLeads(src) : Number((src as any)[k] ?? 0);

@@ -32,7 +32,7 @@ export function TopOpportunities({ totals, speed, targets = DEFAULT_COMMAND_TARG
   // formula mixed live period spend with fallback conversion constants, which is
   // why opportunity dollars could swing by ~200x between builds.
 
-  // Lead-quality gap — judged on canonical (good + AI-projected) ÷ total
+  // Lead-quality gap — judged on canonical (good + sales) ÷ total
   // tiers from leadModel.ts. Never good ÷ calls (that's the banned
   // record-denominator that caused the false "Critical" verdict).
   const counts: LeadCounts = { bad: totals.bad, good: totals.good, projected: totals.projected };
@@ -46,7 +46,7 @@ export function TopOpportunities({ totals, speed, targets = DEFAULT_COMMAND_TARG
     ops.push({
       label: "Improve Lead Quality",
       severity: tier === "red" ? "critical" : "warning",
-      why: `${formatQualityRate(rate)} quality ((good + AI-projected) ÷ ${base} leads). Target ${formatQualityRate(QUALITY_TARGETS.green)}${gap > 0 ? ` · ~${gap} more quality leads to hit target` : ""}.`,
+      why: `${formatQualityRate(rate)} quality ((good + sales) ÷ ${base} leads). Target ${formatQualityRate(QUALITY_TARGETS.green)}${gap > 0 ? ` · ~${gap} more quality leads to hit target` : ""}.`,
       href: "/calls",
       formula: "Pending dollar impact: quality-lead gap × anchored cost-per-quality-lead.",
     });

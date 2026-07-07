@@ -70,7 +70,7 @@ async function fetchWindow(
   if (dmRes.error) throw dmRes.error;
 
   // Records superset (calls + forms) — canonical source for the funnel's
-  // top stage. No Entry / Spam / Bad / Good / AI-projected are slices
+  // top stage. No Entry / Spam / Bad / Good / sales are slices
   // INSIDE records, never additions on top. Counting ctm_calls rows here
   // would double-count by stacking call rows on top of records.
   let rc = supabase
