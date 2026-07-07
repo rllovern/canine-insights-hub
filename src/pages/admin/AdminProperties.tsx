@@ -34,6 +34,7 @@ import { SourceBadges } from "@/components/data/SourceBadges";
 import { PropertyAvatar } from "@/components/brand/PropertyAvatar";
 import { generateReportToken, slugify } from "@/lib/tokens";
 import { useProperties } from "@/contexts/PropertyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/data/EmptyState";
 import { CTMConnectionDialog } from "@/components/data/CTMConnectionDialog";
@@ -238,6 +239,8 @@ function PropertyDialog({
 
 export default function AdminProperties() {
   const { reload } = useProperties();
+  const { role } = useAuth();
+  const isSuperAdmin = role === "super_admin";
   const [rows, setRows] = useState<Property[]>([]);
   const [sources, setSources] = useState<PropertyDataSource[]>([]);
   const [loading, setLoading] = useState(true);
