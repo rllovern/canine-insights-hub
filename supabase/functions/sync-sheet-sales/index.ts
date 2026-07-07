@@ -184,7 +184,16 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get("Authorization") ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
-  const isCron = !!token && (token === SERVICE_KEY || (!!CRON_SECRET && token === CRON_SECRET));
+  let vaultCronSecret = "";
+  try {
+    const { data: vaultVal } = await admin.rpc("get_cron_secret_v2");
+    vaultCronSecret = typeof vaultVal === "string" ? vaultVal : "";
+  } catch (_e) { /* optional */ }
+  const isCron = !!token && (
+    token === SERVICE_KEY ||
+    (!!CRON_SECRET && token === CRON_SECRET) ||
+    (!!vaultCronSecret && token === vaultCronSecret)
+  );
 
   let isSuper = false;
   if (!isCron) {
