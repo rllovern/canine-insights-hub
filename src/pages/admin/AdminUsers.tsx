@@ -16,6 +16,25 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Pencil } from "lucide-react";
 
 interface UserRow {
   user_id: string;
@@ -25,6 +44,7 @@ interface UserRow {
 interface AuthUser {
   id: string;
   email: string | null;
+  display_name?: string | null;
   created_at: string;
   last_sign_in_at: string | null;
 }
@@ -38,6 +58,17 @@ export default function AdminUsers() {
   const [authUsers, setAuthUsers] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [editTarget, setEditTarget] = useState<UserRow | null>(null);
+  const [editForm, setEditForm] = useState<{
+    email: string;
+    display_name: string;
+    password: string;
+    role: AppRole;
+    property_id: string;
+  }>({ email: "", display_name: "", password: "", role: "location_owner", property_id: "" });
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState<{ email: string; password: string; role: AppRole; property_id: string }>(
     { email: "", password: "", role: "location_owner", property_id: "" },
   );
@@ -67,6 +98,9 @@ export default function AdminUsers() {
 
   const emailFor = (userId: string) =>
     authUsers.find((u) => u.id === userId)?.email ?? null;
+
+  const displayNameFor = (userId: string) =>
+    authUsers.find((u) => u.id === userId)?.display_name ?? null;
 
   const staff = roleRows.filter((r) => r.role === "super_admin" || r.role === "admin");
   const owners = roleRows.filter((r) => r.role === "owner");
@@ -118,15 +152,88 @@ export default function AdminUsers() {
     load();
   };
 
+  const openEdit = (u: UserRow) => {
+    if (!isSuperAdmin) return;
+    const assigned = access.find((a) => a.user_id === u.user_id);
+    setEditTarget(u);
+    setEditForm({
+      email: emailFor(u.user_id) ?? "",
+      display_name: displayNameFor(u.user_id) ?? "",
+      password: "",
+      role: u.role,
+      property_id: assigned?.property_id ?? "",
+    });
+    setConfirmDelete(false);
+  };
+
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTarget) return;
+    if (editForm.role === "location_owner" && !editForm.property_id) {
+      toast.error("Pick an assigned location for a Location Owner");
+      return;
+    }
+    setSaving(true);
+    const originalEmail = emailFor(editTarget.user_id) ?? "";
+    const originalName = displayNameFor(editTarget.user_id) ?? "";
+    const payload: Record<string, unknown> = { action: "update", user_id: editTarget.user_id };
+    if (editForm.email && editForm.email !== originalEmail) payload.email = editForm.email;
+    if (editForm.display_name !== originalName) payload.display_name = editForm.display_name;
+    if (editForm.password) payload.password = editForm.password;
+    if (editForm.role !== editTarget.role) payload.role = editForm.role;
+    if (editForm.role === "location_owner") payload.property_id = editForm.property_id;
+
+    const { data, error } = await supabase.functions.invoke("admin-users", { body: payload });
+    setSaving(false);
+    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    if (err) { toast.error(err); return; }
+    toast.success("User updated");
+    setEditTarget(null);
+    load();
+  };
+
+  const deleteUser = async () => {
+    if (!editTarget) return;
+    setDeleting(true);
+    const { data, error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "delete", user_id: editTarget.user_id },
+    });
+    setDeleting(false);
+    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    if (err) { toast.error(err); return; }
+    toast.success("User deleted");
+    setConfirmDelete(false);
+    setEditTarget(null);
+    load();
+  };
+
   const renderIdentity = (userId: string) => {
     const email = emailFor(userId);
+    const name = displayNameFor(userId);
     return (
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium">{email ?? "(email unavailable)"}</div>
+        <div className="truncate text-sm font-medium">
+          {name || email || "(email unavailable)"}
+        </div>
+        {name && email && (
+          <div className="truncate text-[11px] text-muted-foreground">{email}</div>
+        )}
         <div className="truncate font-mono text-[10px] text-muted-foreground">{userId}</div>
       </div>
     );
   };
+
+  const editButton = (u: UserRow) =>
+    isSuperAdmin ? (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 gap-1 text-xs"
+        onClick={() => openEdit(u)}
+      >
+        <Pencil className="h-3 w-3" /> Edit
+      </Button>
+    ) : null;
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6">
