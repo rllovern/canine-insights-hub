@@ -2,10 +2,17 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/data/PageHeader";
 import { Property, AppRole } from "@/lib/types";
-import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/data/EmptyState";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 interface UserRow {
   user_id: string;
@@ -46,24 +53,14 @@ export default function AdminUsers() {
     location_owner: "Location Owner",
   };
 
-  const toggleAccess = async (user_id: string, property_id: string, on: boolean) => {
-    if (on) {
-      const { error } = await supabase.from("viewer_property_access").insert({ user_id, property_id });
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-    } else {
-      const { error } = await supabase
-        .from("viewer_property_access")
-        .delete()
-        .eq("user_id", user_id)
-        .eq("property_id", property_id);
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-    }
+  const assignLocationOwner = async (user_id: string, property_id: string) => {
+    // Location Owners get exactly one assigned property. Wipe existing rows
+    // for this user then insert the new pick.
+    const del = await supabase.from("viewer_property_access").delete().eq("user_id", user_id);
+    if (del.error) { toast.error(del.error.message); return; }
+    const ins = await supabase.from("viewer_property_access").insert({ user_id, property_id });
+    if (ins.error) { toast.error(ins.error.message); return; }
+    toast.success("Assigned location updated");
     load();
   };
 
@@ -129,25 +126,35 @@ export default function AdminUsers() {
             ) : (
               <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                 <ul className="divide-y divide-border">
-                  {locationOwners.map((u) => (
-                    <li key={u.user_id} className="px-4 py-3">
-                      <div className="mb-2 font-mono text-xs text-muted-foreground">{u.user_id}</div>
-                      <div className="flex flex-wrap gap-3">
-                        {properties.map((p) => {
-                          const checked = access.some((a) => a.user_id === u.user_id && a.property_id === p.id);
-                          return (
-                            <label key={p.id} className="inline-flex items-center gap-1.5 text-xs">
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(v) => toggleAccess(u.user_id, p.id, !!v)}
-                              />
-                              {p.name}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </li>
-                  ))}
+                  {locationOwners.map((u) => {
+                    const assigned = access.find((a) => a.user_id === u.user_id);
+                    return (
+                      <li key={u.user_id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                        <div className="min-w-0 space-y-1">
+                          <div className="font-mono text-xs text-muted-foreground truncate">{u.user_id}</div>
+                          {!assigned && (
+                            <Badge variant="destructive" className="text-[10px]">Not assigned</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Assigned location</span>
+                          <Select
+                            value={assigned?.property_id ?? ""}
+                            onValueChange={(v) => assignLocationOwner(u.user_id, v)}
+                          >
+                            <SelectTrigger className="h-8 w-[220px] text-xs">
+                              <SelectValue placeholder="Choose a location…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {properties.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
