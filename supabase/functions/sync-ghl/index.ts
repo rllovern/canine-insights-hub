@@ -68,8 +68,13 @@ async function ghlFetch(method: string, path: string, token: string, body?: Json
     const res = await fetch(GHL_BASE + path, init);
     const text = await res.text();
     if (res.status === 429 && attempt < MAX_RETRIES) {
-      const retryAfter = res.headers.get("Retry-After");
-      const waitMs = retryAfter ? Number(retryAfter) * 1000 : BACKOFF_BASE_MS * Math.pow(2, attempt);
+      const retryAfterRaw = res.headers.get("Retry-After");
+      const retryAfterSec = retryAfterRaw ? Number(retryAfterRaw) : NaN;
+      // Cloudflare 1015 rate limits usually omit Retry-After. Use a longer
+      // floor (min 10s, growing to 60s) so we clear the ban window instead of
+      // hammering the API and failing the sync.
+      const backoff = Math.min(60_000, Math.max(10_000, BACKOFF_BASE_MS * Math.pow(2, attempt + 1)));
+      const waitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : backoff;
       await new Promise((r) => setTimeout(r, waitMs));
       attempt++;
       continue;
