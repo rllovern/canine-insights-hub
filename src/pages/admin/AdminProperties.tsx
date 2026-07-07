@@ -306,6 +306,7 @@ export default function AdminProperties() {
   }, [sources]);
 
   const regenToken = async (p: Property) => {
+    if (!isSuperAdmin) return;
     const token = generateReportToken();
     const { error } = await supabase.from("properties").update({ public_report_token: token }).eq("id", p.id);
     if (error) toast.error(error.message);
@@ -326,6 +327,7 @@ export default function AdminProperties() {
   };
 
   const syncNow = async (p: Property) => {
+    if (!isSuperAdmin) return;
     setSyncingId(p.id);
     const hasGoogle = !!googleAdsByProp.get(p.id)?.is_connected;
     const hasCtm = !!ctmByProp.get(p.id)?.is_connected;
