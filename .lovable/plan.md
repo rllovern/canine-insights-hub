@@ -1,23 +1,29 @@
-## Plan
+## Goal
 
-1. **Remove location switching for Location Owner**
-   - In the sidebar scope selector, show the assigned location as read-only when the effective role is `location_owner`.
-   - Hide the dropdown/combobox behavior so a Location Owner cannot choose “All locations” or switch to another location.
-   - Keep Super Admin’s top-right role preview dropdown intact; only the location selector is removed/locked for Location Owner view.
+Make `/admin/properties` (Clients) read-only for Admin users. Only Super Admin can add, import, edit, sync, or reconnect properties.
 
-2. **Force Budget Pacing to the assigned location**
-   - Update Budget Pacing to use the existing scope/property context instead of loading all budget rows.
-   - When the effective role is `location_owner`, filter budget accounts, daily metrics, Google Ads budgets, labels, and sync targets to only the assigned property.
-   - This will make the Ashtabula Location Owner view show only Ashtabula ad spend and performance.
+## Changes
 
-3. **Remove non-Super Admin budget actions**
-   - Hide or disable `Sync budgets`, `Add Account`, inline budget edits, notes/label edits, and delete actions unless the effective role is `super_admin`.
-   - Admin, Owner, and Location Owner remain read-only on Budget Pacing.
+**`src/pages/admin/AdminProperties.tsx`**
+- Pull `role` from `useAuth` and compute `isSuperAdmin`.
+- Header actions row — render `Import from MCC`, `Import from CTM`, and `Add property` buttons only when `isSuperAdmin`.
+- Row actions dropdown — Admins keep only the read-only entries (`Open public report`, `Copy share link`). Hide these entries for non-super-admins:
+  - Regenerate share link
+  - CTM connection
+  - Go High Level connection
+  - Sync now
+  - Edit property
+- When an Admin viewer would end up with no actions in the row menu, hide the dropdown trigger entirely so the column stays clean.
+- Guard the callbacks (`handleDelete`, `syncNow`, regenerate, dialog openers) with an early `isSuperAdmin` check as a defensive stop, even though the UI won't expose them.
 
-4. **Backend policy alignment for budget accounts**
-   - Add a database migration so `budget_accounts` read access is property-scoped with `can_access_property(...)`, matching `daily_metrics`, `campaign_budgets`, and `campaign_labels`.
-   - This prevents a real Location Owner from reading budget rows for unrelated locations even if the frontend is bypassed.
+**`src/App.tsx`**
+- No route change needed — `/admin/properties` stays behind `requireStaff` so Admins can still view the list, but the page itself now gates every mutation.
 
-5. **Validate**
-   - Check TypeScript.
-   - Verify the Location Owner preview no longer has a location dropdown and Budget Pacing only renders the assigned location’s row.
+**Backend**
+- No database or RLS changes in this pass. Mutation controls are being removed from the UI for Admin; existing RLS on `properties` and related tables already blocks non-privileged writes for the client, and Super Admin retains full access.
+
+## Out of scope
+
+- Sidebar visibility of the Admin section (already handled in a prior change).
+- Role preview toggle behavior (already handled).
+- Client Reports page (`/admin/client-reports`) — untouched unless you want the same lockdown there; say the word and I'll extend it.
