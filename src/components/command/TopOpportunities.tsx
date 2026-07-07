@@ -72,15 +72,15 @@ export function TopOpportunities({ totals, speed, targets = DEFAULT_COMMAND_TARG
       });
     }
   }
-  // Appointment conversion
-  const apptRate = totals.qualifiedCalls ? totals.appointments / totals.qualifiedCalls : 0;
+  // Sales conversion (sheet-based sales ÷ qualified calls)
+  const apptRate = totals.qualifiedCalls ? totals.sales / totals.qualifiedCalls : 0;
   if (totals.qualifiedCalls && apptRate < targets.projectionRate) {
     ops.push({
-      label: "Improve Projection Rate",
+      label: "Improve Sales Rate",
       severity: apptRate < targets.projectionRate * 0.6 ? "critical" : "warning",
-      why: `${(apptRate * 100).toFixed(0)}% of qualified calls become projected sales. Target is ${(targets.projectionRate * 100).toFixed(0)}%.`,
+      why: `${(apptRate * 100).toFixed(0)}% of qualified calls become sales. Target is ${(targets.projectionRate * 100).toFixed(0)}%.`,
       href: "/lead-performance",
-      formula: "Pending dollar impact: projected-sale gap × anchored cost-per-projected sale.",
+      formula: "Pending dollar impact: sales gap × anchored cost-per-sale.",
     });
   }
 
