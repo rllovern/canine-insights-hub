@@ -56,7 +56,7 @@ export function qualityTier(rate: number, base: number): QualityTier {
 }
 
 /** Canonical UI label for the projected-sale tier. Never "expected sales". */
-export const PROJECTED_LABEL = "sale";
+export const PROJECTED_LABEL = "Sales";
 
 /** Tailwind color helpers so every page styles the same tier the same way. */
 export const TIER_TEXT: Record<QualityTier, string> = {
