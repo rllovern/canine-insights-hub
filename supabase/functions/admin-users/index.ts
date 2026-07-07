@@ -29,21 +29,19 @@ Deno.serve(async (req) => {
     return json({ error: "Missing bearer token" }, 401);
   }
 
+  const token = authHeader.replace("Bearer ", "").trim();
   const userClient = createClient(SUPABASE_URL, ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
   });
-  const { data: userRes, error: uErr } = await userClient.auth.getUser();
-  const caller = userRes?.user;
-  if (uErr || !caller) {
-    return json(
-      { error: "Your session has expired. Sign out and sign back in, then retry." },
-      401,
-    );
+  const { data: claimsRes, error: claimsErr } = await userClient.auth.getClaims(token);
+  const callerId = claimsRes?.claims?.sub;
+  if (claimsErr || !callerId) {
+    return json({ error: "Unauthorized" }, 401);
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: caller.id });
+  const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: callerId });
   if (!isSuper) return json({ error: "Forbidden" }, 403);
 
   const body = await req.json().catch(() => ({}));
@@ -126,7 +124,7 @@ Deno.serve(async (req) => {
 
     if (role) {
       // Prevent a Super Admin from demoting themselves out of super_admin
-      if (user_id === caller.id && role !== "super_admin") {
+      if (user_id === callerId && role !== "super_admin") {
         return json({ error: "You cannot change your own role away from Super Admin" }, 400);
       }
       const del = await admin.from("user_roles").delete().eq("user_id", user_id);
@@ -157,7 +155,7 @@ Deno.serve(async (req) => {
   if (action === "delete") {
     const user_id = (body.user_id as string | undefined)?.trim();
     if (!user_id) return json({ error: "user_id required" }, 400);
-    if (user_id === caller.id) return json({ error: "You cannot delete your own account" }, 400);
+    if (user_id === callerId) return json({ error: "You cannot delete your own account" }, 400);
     const { error: dErr } = await admin.auth.admin.deleteUser(user_id);
     if (dErr) return json({ error: dErr.message }, 400);
     return json({ ok: true });
