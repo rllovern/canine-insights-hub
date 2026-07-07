@@ -3,12 +3,14 @@ import { Navigate } from "react-router-dom";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 
 /**
- * Blocks Location Owner (and Super Admin previewing as one) from reaching
- * routes outside their allowed surfaces (Command + Budget Pacing). Everyone
- * above Location Owner (Super Admin, Admin, Owner) passes through.
+ * Blocks Owner and Location Owner (real or previewed) from reaching routes
+ * outside their allowed surfaces (Command + Budget Pacing). Super Admin and
+ * Admin pass through.
  */
 export function ViewerBlock({ children }: { children: ReactNode }) {
-  const { isLocationOwner } = usePreviewMode();
-  if (isLocationOwner) return <Navigate to="/command" replace />;
+  const { effectiveRole } = usePreviewMode();
+  if (effectiveRole === "location_owner" || effectiveRole === "owner") {
+    return <Navigate to="/command" replace />;
+  }
   return <>{children}</>;
 }

@@ -16,6 +16,8 @@ type NavItem = {
   external?: boolean;
   /** Show only to Super Admin + Admin (internal staff). */
   staffOnly?: boolean;
+  /** Show only to Super Admin. */
+  superAdminOnly?: boolean;
 };
 
 const COMMAND_ITEM: NavItem = { key: "command", to: "/command", label: "Command", icon: LayoutDashboard };
@@ -37,28 +39,32 @@ const JARVIS_ITEM: NavItem = { key: "jarvis", to: "/assistant", label: "Jarvis",
 
 const ADMIN_ITEMS: NavItem[] = [
   { key: "clients", to: "/admin/properties", label: "Clients", icon: Users, staffOnly: true },
-  { key: "users", to: "/admin/users", label: "Users", icon: Users, staffOnly: true },
-  { key: "pipeline-mapping", to: "/admin/pipeline-mapping", label: "Pipeline Mapping", icon: GitBranch, staffOnly: true },
-  { key: "sla-settings", to: "/admin/sla-settings", label: "SLA Settings", icon: Timer, staffOnly: true },
-  { key: "data-sources", to: "/admin/data-sources", label: "Data Sources", icon: Database, staffOnly: true },
-  { key: "settings", to: "/admin/settings", label: "Settings", icon: Settings, staffOnly: true },
+  { key: "users", to: "/admin/users", label: "Users", icon: Users, superAdminOnly: true },
+  { key: "pipeline-mapping", to: "/admin/pipeline-mapping", label: "Pipeline Mapping", icon: GitBranch, superAdminOnly: true },
+  { key: "sla-settings", to: "/admin/sla-settings", label: "SLA Settings", icon: Timer, superAdminOnly: true },
+  { key: "data-sources", to: "/admin/data-sources", label: "Data Sources", icon: Database, superAdminOnly: true },
+  { key: "settings", to: "/admin/settings", label: "Settings", icon: Settings, superAdminOnly: true },
 ];
 
 export function Sidebar() {
   const { signOut, user } = useAuth();
-  const { effectiveRole, isStaff, isAllPropertiesReader, isLocationOwner } = usePreviewMode();
+  const { effectiveRole, isStaff, isSuperAdmin, isLocationOwner } = usePreviewMode();
   const nav = useNavigate();
   const loc = useLocation();
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
-  // Location Owner gets a stripped-down nav: Command + Budget Pacing only.
-  const isMinimal = isLocationOwner;
-  // Admin section visible only to Super Admin + Admin (not Owner, not Location Owner).
-  const showAdminSection = isStaff && !isLocationOwner;
-  // Owner and above see the full monitoring / deliver / jarvis groups.
-  const showRichNav = isAllPropertiesReader && !isLocationOwner;
+  // Owner and Location Owner get a stripped-down nav: Command + Budget Pacing only.
+  const isMinimal = isLocationOwner || effectiveRole === "owner";
+  // Admin group visible only to internal staff (Super Admin + Admin).
+  const showAdminSection = isStaff && !isMinimal;
+  // Full monitoring / deliver / jarvis groups only for internal staff.
+  const showRichNav = isStaff && !isMinimal;
 
   const filterVisible = (items: NavItem[]) =>
-    items.filter((i) => !i.staffOnly || isStaff);
+    items.filter((i) => {
+      if (i.superAdminOnly && !isSuperAdmin) return false;
+      if (i.staffOnly && !isStaff) return false;
+      return true;
+    });
 
   const applyOrder = (groupKey: string, items: NavItem[]) => {
     try {
