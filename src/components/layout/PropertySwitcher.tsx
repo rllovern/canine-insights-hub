@@ -21,7 +21,7 @@ export function PropertySwitcher() {
   const navigate = useNavigate();
   const { slug } = useParams();
   const { properties, loading } = useProperties();
-  const { effectiveRole } = usePreviewMode();
+  const { isStaff } = usePreviewMode();
   const [open, setOpen] = useState(false);
 
   const active = properties.find((p) => p.slug === slug) ?? null;
@@ -81,7 +81,7 @@ export function PropertySwitcher() {
                 </CommandItem>
               ))}
             </CommandGroup>
-            {effectiveRole === "internal" && (
+            {isStaff && (
               <>
                 <CommandSeparator />
                 <CommandGroup>

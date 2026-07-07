@@ -33,13 +33,20 @@ function readStored(): Stored | null {
 
 export function ScopeProvider({ children }: { children: ReactNode }) {
   const { properties, loading } = useProperties();
-  const { effectiveRole } = usePreviewMode();
+  const { effectiveRole, isAllPropertiesReader, isLocationOwner } = usePreviewMode();
   const [mode, setMode] = useState<ScopeMode>("agency");
   const [propertyId, setPropertyId] = useState<string | null>(null);
 
   // Hydrate from storage / sensible defaults once properties load.
   useEffect(() => {
     if (loading) return;
+    // Location Owner: force property scope to their (single) assigned property.
+    if (isLocationOwner) {
+      const first = properties[0] ?? null;
+      setMode("property");
+      setPropertyId(first?.id ?? null);
+      return;
+    }
     const stored = readStored();
     if (stored) {
       // If a stored property id no longer exists, fall back to agency.
@@ -51,13 +58,9 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
       }
       return;
     }
-    // Defaults: internal → agency; viewer with exactly one property → that property; otherwise agency.
-    if (effectiveRole === "viewer" && properties.length === 1) {
-      setMode("property"); setPropertyId(properties[0].id);
-    } else {
-      setMode("agency"); setPropertyId(null);
-    }
-  }, [loading, properties, effectiveRole]);
+    // Defaults: agency view for everyone else.
+    setMode("agency"); setPropertyId(null);
+  }, [loading, properties, isLocationOwner]);
 
   const setScope = useCallback((next: { mode: ScopeMode; propertyId?: string | null }) => {
     const nextMode = next.mode;
@@ -69,20 +72,21 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ScopeValue>(() => {
     const activeProperty = mode === "property" ? (properties.find((p) => p.id === propertyId) ?? null) : null;
-    // Internal users in agency mode → null (unrestricted). Viewers → explicit list of accessible ids.
+    // All-properties readers in agency mode → null (unrestricted).
+    // Everyone else → explicit list of accessible ids.
     let propertyIds: string[] | null;
     if (mode === "property") {
       propertyIds = propertyId ? [propertyId] : [];
-    } else if (effectiveRole === "internal") {
+    } else if (isAllPropertiesReader) {
       propertyIds = null;
     } else {
       propertyIds = properties.map((p) => p.id);
     }
     const label = mode === "agency"
-      ? (effectiveRole === "internal" ? "All locations" : "All my properties")
+      ? (isAllPropertiesReader ? "All locations" : "All my properties")
       : (activeProperty?.name ?? "Unknown property");
     return { mode, propertyId, propertyIds, activeProperty, setScope, label };
-  }, [mode, propertyId, properties, effectiveRole, setScope]);
+  }, [mode, propertyId, properties, isAllPropertiesReader, setScope]);
 
   return <ScopeCtx.Provider value={value}>{children}</ScopeCtx.Provider>;
 }

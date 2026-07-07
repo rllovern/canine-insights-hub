@@ -11,10 +11,10 @@ import { cn } from "@/lib/utils";
 export function ScopeSelector() {
   const { mode, propertyId, setScope, label } = useScope();
   const { properties } = useProperties();
-  const { effectiveRole } = usePreviewMode();
+  const { isAllPropertiesReader } = usePreviewMode();
   const [open, setOpen] = useState(false);
 
-  const agencyLabel = effectiveRole === "internal" ? "All locations" : "All my properties";
+  const agencyLabel = isAllPropertiesReader ? "All locations" : "All my properties";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

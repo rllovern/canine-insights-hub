@@ -1,4 +1,4 @@
-export type AppRole = "internal" | "viewer";
+export type AppRole = "super_admin" | "admin" | "owner" | "location_owner";
 
 export type DataSource = "google_ads" | "ctm" | "ga4" | "keyword_com" | "ghl";
 

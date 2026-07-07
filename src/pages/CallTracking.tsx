@@ -74,8 +74,8 @@ export default function CallTracking() {
   const { activeProperty: scopeProperty, mode } = useScope();
   const { properties } = useProperties();
   const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
-  const { effectiveRole } = usePreviewMode();
-  const isInternal = effectiveRole === "internal";
+  const { isAllPropertiesReader } = usePreviewMode();
+  const isInternal = isAllPropertiesReader;
   const cfg = usePropertyMetricConfig();
   const showCompare = compareMode !== "off";
 

@@ -14,7 +14,8 @@ type NavItem = {
   label: string;
   icon: typeof BarChart3;
   external?: boolean;
-  internalOnly?: boolean;
+  /** Show only to Super Admin + Admin (internal staff). */
+  staffOnly?: boolean;
 };
 
 const COMMAND_ITEM: NavItem = { key: "command", to: "/command", label: "Command", icon: LayoutDashboard };
@@ -28,31 +29,36 @@ const MONITOR_ITEMS: NavItem[] = [
 ];
 
 const DELIVER_ITEMS: NavItem[] = [
-  { key: "client-reports", to: "/admin/client-reports", label: "Performance Reports", icon: FileSearch, internalOnly: true, external: true },
+  { key: "client-reports", to: "/admin/client-reports", label: "Performance Reports", icon: FileSearch, staffOnly: true, external: true },
   { key: "reports", to: "/reports", label: "Reports", icon: FileText },
 ];
 
 const JARVIS_ITEM: NavItem = { key: "jarvis", to: "/assistant", label: "Jarvis", icon: Sparkles };
 
 const ADMIN_ITEMS: NavItem[] = [
-  { key: "clients", to: "/admin/properties", label: "Clients", icon: Users, internalOnly: true },
-  { key: "users", to: "/admin/users", label: "Users", icon: Users, internalOnly: true },
-  { key: "pipeline-mapping", to: "/admin/pipeline-mapping", label: "Pipeline Mapping", icon: GitBranch, internalOnly: true },
-  { key: "sla-settings", to: "/admin/sla-settings", label: "SLA Settings", icon: Timer, internalOnly: true },
-  { key: "data-sources", to: "/admin/data-sources", label: "Data Sources", icon: Database, internalOnly: true },
-  { key: "settings", to: "/admin/settings", label: "Settings", icon: Settings, internalOnly: true },
+  { key: "clients", to: "/admin/properties", label: "Clients", icon: Users, staffOnly: true },
+  { key: "users", to: "/admin/users", label: "Users", icon: Users, staffOnly: true },
+  { key: "pipeline-mapping", to: "/admin/pipeline-mapping", label: "Pipeline Mapping", icon: GitBranch, staffOnly: true },
+  { key: "sla-settings", to: "/admin/sla-settings", label: "SLA Settings", icon: Timer, staffOnly: true },
+  { key: "data-sources", to: "/admin/data-sources", label: "Data Sources", icon: Database, staffOnly: true },
+  { key: "settings", to: "/admin/settings", label: "Settings", icon: Settings, staffOnly: true },
 ];
 
 export function Sidebar() {
   const { signOut, user } = useAuth();
-  const { effectiveRole } = usePreviewMode();
+  const { effectiveRole, isStaff, isAllPropertiesReader, isLocationOwner } = usePreviewMode();
   const nav = useNavigate();
   const loc = useLocation();
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
-  const isViewer = effectiveRole !== "internal";
+  // Location Owner gets a stripped-down nav: Command + Budget Pacing only.
+  const isMinimal = isLocationOwner;
+  // Admin section visible only to Super Admin + Admin (not Owner, not Location Owner).
+  const showAdminSection = isStaff && !isLocationOwner;
+  // Owner and above see the full monitoring / deliver / jarvis groups.
+  const showRichNav = isAllPropertiesReader && !isLocationOwner;
 
   const filterVisible = (items: NavItem[]) =>
-    items.filter((i) => !i.internalOnly || effectiveRole === "internal");
+    items.filter((i) => !i.staffOnly || isStaff);
 
   const applyOrder = (groupKey: string, items: NavItem[]) => {
     try {
@@ -261,9 +267,9 @@ export function Sidebar() {
       <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
         <GroupLabel>EXECUTIVE VIEW</GroupLabel>
         {renderItem(COMMAND_ITEM)}
-        {isViewer && renderItem(BUDGET_ITEM)}
+        {isMinimal && renderItem(BUDGET_ITEM)}
 
-        {!isViewer && monitorItems.length > 0 && (
+        {showRichNav && monitorItems.length > 0 && (
           <>
             <GroupLabel>Monitor</GroupLabel>
             {renderItem(BUDGET_ITEM)}
@@ -271,16 +277,16 @@ export function Sidebar() {
           </>
         )}
 
-        {!isViewer && deliverItems.length > 0 && (
+        {showRichNav && deliverItems.length > 0 && (
           <>
             <GroupLabel>Deliver</GroupLabel>
             {deliverItems.map((it) => renderItem(it, { groupKey: "deliver", items: deliverItems, setItems: setDeliverItems }))}
           </>
         )}
 
-        {!isViewer && renderItem(JARVIS_ITEM, { accent: true })}
+        {showRichNav && renderItem(JARVIS_ITEM, { accent: true })}
 
-        {!isViewer && adminItems.length > 0 && (
+        {showAdminSection && adminItems.length > 0 && (
           <>
             <button
               type="button"
@@ -314,7 +320,10 @@ export function Sidebar() {
           <div className="min-w-0 flex-1">
             <div className="text-xs font-medium truncate text-white">{user?.email ?? "Account"}</div>
             <div className="text-[10px] uppercase tracking-wider text-white/50">
-              {effectiveRole === "internal" ? "Administrator" : "Viewer"}
+              {effectiveRole === "super_admin" ? "Super Admin"
+                : effectiveRole === "admin" ? "Admin"
+                : effectiveRole === "owner" ? "Owner"
+                : "Location Owner"}
             </div>
           </div>
           <button

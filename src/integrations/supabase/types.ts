@@ -1969,6 +1969,10 @@ export type Database = {
         Args: { _from: string; _property_id: string; _to: string }
         Returns: Json
       }
+      can_access_property: {
+        Args: { _property_id: string; _user_id: string }
+        Returns: boolean
+      }
       get_api_health_summary: {
         Args: never
         Returns: {
@@ -2120,6 +2124,9 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_all_properties_reader: { Args: { _user_id: string }; Returns: boolean }
+      is_staff: { Args: { _user_id: string }; Returns: boolean }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       lead_perf_agents: {
         Args: { _from: string; _property_ids: string[]; _to: string }
         Returns: {
@@ -2325,7 +2332,13 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "internal" | "viewer"
+      app_role:
+        | "internal"
+        | "viewer"
+        | "super_admin"
+        | "admin"
+        | "owner"
+        | "location_owner"
       ghl_appointment_status:
         | "booked"
         | "confirmed"
@@ -2479,7 +2492,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["internal", "viewer"],
+      app_role: [
+        "internal",
+        "viewer",
+        "super_admin",
+        "admin",
+        "owner",
+        "location_owner",
+      ],
       ghl_appointment_status: [
         "booked",
         "confirmed",

@@ -38,7 +38,7 @@ export default function Keywords() {
   const { activeProperty: scopeProperty, mode } = useScope();
   const { properties } = useProperties();
   const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
-  const { realRole } = usePreviewMode();
+  const { isSuperAdmin } = usePreviewMode();
   const [latest, setLatest] = useState<RankingRow[]>([]);
   const [history, setHistory] = useState<RankingRow[]>([]);
   const [sov, setSov] = useState<SoVRow[]>([]);
@@ -152,7 +152,7 @@ export default function Keywords() {
     <>
       <div className="flex items-center justify-between gap-2">
         <SectionDivider title="Keyword rankings" subtitle={`Tracked via Keyword.com${latest[0] ? ` · last updated ${latest[0].captured_at}` : ""}`} />
-        {realRole === "internal" && (
+        {isSuperAdmin && (
           <Button size="sm" variant="outline" onClick={handleSync} disabled={syncing}>
             {syncing ? <Loader2 className="size-4 animate-spin mr-1.5" /> : <RefreshCw className="size-4 mr-1.5" />}
             Sync now
@@ -178,7 +178,7 @@ export default function Keywords() {
           <div className="text-muted-foreground text-sm py-8 text-center">Loading…</div>
         ) : filtered.length === 0 ? (
           <div className="text-muted-foreground text-sm py-8 text-center">
-            No keyword data yet. {realRole === "internal" && "Connect Keyword.com from Clients Admin and click Sync now."}
+            No keyword data yet. {isSuperAdmin && "Connect Keyword.com from Clients Admin and click Sync now."}
           </div>
         ) : (
           <div className="overflow-x-auto">

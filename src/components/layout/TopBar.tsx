@@ -11,7 +11,7 @@ import { DateRangePicker } from "./DateRangePicker";
 
 export function TopBar() {
   const { mode, label } = useScope();
-  const { realRole, isOwner, impersonateBob, toggleBob } = usePreviewMode();
+  const { isSuperAdmin, isLocationOwner, previewingLocationOwner, togglePreviewLocationOwner } = usePreviewMode();
   const { range, compareMode, compareRange } = useDashboard();
 
   return (
@@ -35,17 +35,17 @@ export function TopBar() {
 
         <DateRangePicker />
 
-        {isOwner && (
+        {isSuperAdmin && (
           <div className="flex items-center gap-2 h-9 px-2 sm:px-3 rounded-md border border-amber-300 bg-amber-50">
             <UserCog className="size-3.5 text-amber-700" />
-            <Label htmlFor="view-as-bob-toggle" className="hidden sm:inline text-xs font-medium cursor-pointer select-none text-amber-900">
-              {impersonateBob ? "Viewing as Bob" : "View as Bob"}
+            <Label htmlFor="view-as-location-owner-toggle" className="hidden sm:inline text-xs font-medium cursor-pointer select-none text-amber-900">
+              {previewingLocationOwner ? "Viewing as Location Owner" : "View as Location Owner"}
             </Label>
-            <Switch id="view-as-bob-toggle" checked={impersonateBob} onCheckedChange={toggleBob} />
+            <Switch id="view-as-location-owner-toggle" checked={previewingLocationOwner} onCheckedChange={togglePreviewLocationOwner} />
           </div>
         )}
 
-        {realRole !== "internal" && (
+        {isLocationOwner && (
           <Badge variant="secondary" className="gap-1.5 h-9 px-2 sm:px-3 rounded-md">
             <Eye className="size-3.5" /> <span className="hidden sm:inline">Client View</span>
           </Badge>
