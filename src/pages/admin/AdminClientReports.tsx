@@ -24,6 +24,9 @@ const STORAGE_KEY = "adminClientReports.lastPropertyId";
 const VIEWER_PREVIEW_VALUE = {
   realRole: "location_owner" as const,
   effectiveRole: "location_owner" as const,
+  previewRole: "location_owner" as const,
+  setPreviewRole: () => {},
+  isPreviewing: false,
   previewingLocationOwner: false,
   togglePreviewLocationOwner: () => {},
   impersonatedUserId: null,
