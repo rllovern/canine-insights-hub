@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { usePreviewMode } from "@/contexts/PreviewModeContext";
 
 interface HealthRow {
   source: string;
@@ -83,6 +84,7 @@ function StatusPill({ status }: { status: Status }) {
 }
 
 export function ApiHealth() {
+  const { isSuperAdmin } = usePreviewMode();
   const [rows, setRows] = useState<HealthRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -200,7 +202,7 @@ export function ApiHealth() {
                             {r.last_error_message ?? "—"}
                           </td>
                           <td className="px-4 py-2 text-right">
-                            {r.is_connected && (
+                            {r.is_connected && isSuperAdmin && (
                               <Button size="sm" variant="outline" onClick={() => syncOne(r.source, r.property_id)} disabled={syncing === key}>
                                 {syncing === key
                                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
