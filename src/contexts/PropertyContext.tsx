@@ -37,10 +37,10 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     let query = supabase.from("properties").select("*").order("name");
 
-    // Internal previewing-as-viewer: filter client-side to assigned set
-    if (effectiveRole === "viewer") {
-      // When the owner is impersonating Bob, scope to Bob's access grants
-      // instead of the real user's. Otherwise use the real user's grants.
+    // Location Owner (real or previewed) — filter client-side to assigned set.
+    if (effectiveRole === "location_owner") {
+      // Super Admin previewing → scope to Bob's access grants.
+      // Real Location Owner → their own grants.
       const accessUserId = impersonatedUserId ?? user.id;
       const { data: access } = await supabase
         .from("viewer_property_access")
