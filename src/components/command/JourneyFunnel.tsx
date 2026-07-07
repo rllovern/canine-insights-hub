@@ -318,7 +318,7 @@ function DeltaBadge({ d, invert }: { d: import("@/lib/metrics").SafeDelta; inver
     return (
       <span className={cn("inline-flex items-center text-[10.5px] font-semibold gap-0.5", positive ? "text-emerald-600" : "text-rose-600")}>
         {d.abs >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-        {d.abs >= 0 ? "+" : ""}{d.abs.toFixed(1)} <span className="text-slate-400 font-normal">low n</span>
+        {d.abs >= 0 ? "+" : ""}{d.abs.toFixed(1)}
       </span>
     );
   }
