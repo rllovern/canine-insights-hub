@@ -74,15 +74,15 @@ const App = () => (
                     />
                     <Route
                       path="/admin/pipeline-mapping"
-                      element={<RequireAuth requireStaff><AdminPipelineMapping /></RequireAuth>}
+                      element={<RequireAuth requireSuperAdmin><AdminPipelineMapping /></RequireAuth>}
                     />
                     <Route
                       path="/admin/sla-settings"
-                      element={<RequireAuth requireStaff><AdminSlaSettings /></RequireAuth>}
+                      element={<RequireAuth requireSuperAdmin><AdminSlaSettings /></RequireAuth>}
                     />
                     <Route
                       path="/admin/data-sources"
-                      element={<RequireAuth requireStaff><AdminDataSources /></RequireAuth>}
+                      element={<RequireAuth requireSuperAdmin><AdminDataSources /></RequireAuth>}
                     />
                     <Route
                       path="/admin/users"
@@ -90,7 +90,7 @@ const App = () => (
                     />
                     <Route
                       path="/admin/settings"
-                      element={<RequireAuth requireStaff><AdminSettings /></RequireAuth>}
+                      element={<RequireAuth requireSuperAdmin><AdminSettings /></RequireAuth>}
                     />
                   </Route>
 
