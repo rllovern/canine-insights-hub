@@ -18,7 +18,7 @@ function pct(num: number, den: number) {
   return `${((num / den) * 100).toFixed(1)}%`;
 }
 
-const EMPTY_TOTALS: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0 };
+const EMPTY_TOTALS: Totals = { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0, sales: 0 };
 
 export function JourneyFunnel({
   t,
@@ -39,8 +39,9 @@ export function JourneyFunnel({
   t = t ?? EMPTY_TOTALS;
   prior = prior ?? EMPTY_TOTALS;
   const isAds = mode === "ads";
-  const qualityCount = t.good + t.projected;
-  const priorQualityCount = prior.good + prior.projected;
+  // Display-facing "sales" comes from the Google Sheet import (t.sales).
+  const qualityCount = t.good + t.sales;
+  const priorQualityCount = prior.good + prior.sales;
   const cpgl = qualityCount ? t.spend / qualityCount : 0;
   const priorCpgl = priorQualityCount ? prior.spend / priorQualityCount : 0;
   const cpl = t.totalLeads ? t.spend / t.totalLeads : 0;
@@ -78,7 +79,7 @@ export function JourneyFunnel({
         <Connector />
         <Stage s={{ label: isAds ? "PPC Records" : "Records", src: isAds ? "daily_metrics.record_count · Google PPC" : "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
         <Connector />
-        <QualifiedStage good={t.good} projected={t.projected} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
+        <QualifiedStage good={t.good} projected={t.sales} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
@@ -103,7 +104,7 @@ export function JourneyFunnel({
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
           tier={tier === "low-sample" ? null : tier}
         />
-        <LeadMix bad={t.bad} good={t.good} projected={t.projected} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
+        <LeadMix bad={t.bad} good={t.good} projected={t.sales} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
       </div>
 
       {isAds && (
