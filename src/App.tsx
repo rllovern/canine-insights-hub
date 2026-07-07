@@ -51,11 +51,11 @@ const App = () => (
                   <Route path="/report/:token" element={<PublicReport />} />
                   <Route
                     path="/admin/client-reports"
-                    element={<RequireAuth requireRealRole="internal"><AdminClientReports /></RequireAuth>}
+                    element={<RequireAuth requireStaff><AdminClientReports /></RequireAuth>}
                   />
                   <Route
                     path="/admin/client-reports/:propertyId"
-                    element={<RequireAuth requireRealRole="internal"><AdminClientReports /></RequireAuth>}
+                    element={<RequireAuth requireStaff><AdminClientReports /></RequireAuth>}
                   />
 
                   <Route element={<RequireAuth><AppShell /></RequireAuth>}>
@@ -70,27 +70,27 @@ const App = () => (
                     <Route path="/lead-performance" element={<ViewerBlock><LeadPerformance /></ViewerBlock>} />
                     <Route
                       path="/admin/properties"
-                      element={<RequireAuth requireRealRole="internal"><AdminProperties /></RequireAuth>}
+                      element={<RequireAuth requireStaff><AdminProperties /></RequireAuth>}
                     />
                     <Route
                       path="/admin/pipeline-mapping"
-                      element={<RequireAuth requireRealRole="internal"><AdminPipelineMapping /></RequireAuth>}
+                      element={<RequireAuth requireStaff><AdminPipelineMapping /></RequireAuth>}
                     />
                     <Route
                       path="/admin/sla-settings"
-                      element={<RequireAuth requireRealRole="internal"><AdminSlaSettings /></RequireAuth>}
+                      element={<RequireAuth requireStaff><AdminSlaSettings /></RequireAuth>}
                     />
                     <Route
                       path="/admin/data-sources"
-                      element={<RequireAuth requireRealRole="internal"><AdminDataSources /></RequireAuth>}
+                      element={<RequireAuth requireStaff><AdminDataSources /></RequireAuth>}
                     />
                     <Route
                       path="/admin/users"
-                      element={<RequireAuth requireRealRole="internal"><AdminUsers /></RequireAuth>}
+                      element={<RequireAuth requireSuperAdmin><AdminUsers /></RequireAuth>}
                     />
                     <Route
                       path="/admin/settings"
-                      element={<RequireAuth requireRealRole="internal"><AdminSettings /></RequireAuth>}
+                      element={<RequireAuth requireStaff><AdminSettings /></RequireAuth>}
                     />
                   </Route>
 
