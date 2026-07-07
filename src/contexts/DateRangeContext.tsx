@@ -1,17 +1,15 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { DateRange } from "@/lib/types";
-import { getPresetRange, priorPeriod, sameSliceLastMonth, PresetKey } from "@/lib/dateRange";
+import { getPresetRange, priorPeriod, PresetKey } from "@/lib/dateRange";
 
 export type RangePreset = PresetKey | "custom";
 export type CompareMode = "off" | "previous" | "custom";
 
 /**
- * Compare range for "previous" mode. For "thisMonth" we mirror the same
- * calendar slice in the prior month (Jun 1–14 → May 1–14) instead of the
- * immediately preceding N days.
+ * Compare range for "previous" mode. Always the immediately preceding period
+ * of equal length — e.g. Jul 1–7 → Jun 24–30.
  */
-function defaultCompareFor(range: DateRange, preset: RangePreset): DateRange {
-  if (preset === "thisMonth") return sameSliceLastMonth(range);
+function defaultCompareFor(range: DateRange, _preset: RangePreset): DateRange {
   return priorPeriod(range);
 }
 
