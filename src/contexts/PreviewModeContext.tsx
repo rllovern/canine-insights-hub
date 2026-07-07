@@ -3,14 +3,23 @@ import { AppRole } from "@/lib/types";
 import { useAuth } from "./AuthContext";
 import { BOB_USER_ID } from "@/lib/owners";
 
+const PREVIEW_STORAGE_KEY = "preview.role";
+const VALID_PREVIEW_ROLES: AppRole[] = ["super_admin", "admin", "owner", "location_owner"];
+
 interface PreviewModeContextValue {
   /** The role actually granted by the database. */
   realRole: AppRole | null;
-  /** Role currently being previewed in the UI. Differs from realRole only when a Super Admin flips the preview toggle. */
+  /** Role currently being previewed in the UI. Differs from realRole only when a Super Admin picks a preview role. */
   effectiveRole: AppRole | null;
-  /** True when a Super Admin is previewing the Location Owner UX. */
+  /** The preview role selected by Super Admin (equal to realRole when not previewing). */
+  previewRole: AppRole | null;
+  /** Set the preview role. No-op unless the signed-in account is a Super Admin. */
+  setPreviewRole: (role: AppRole) => void;
+  /** True when the Super Admin is previewing any non–super-admin role. */
+  isPreviewing: boolean;
+  /** @deprecated retained for legacy consumers — true when previewing as Location Owner. */
   previewingLocationOwner: boolean;
-  /** Toggle preview between real role and Location Owner. Only Super Admin sees this control. */
+  /** @deprecated legacy toggle — now flips between super_admin and location_owner. */
   togglePreviewLocationOwner: () => void;
   /** Bob's auth.users id when a Super Admin is previewing, otherwise null. Used to scope property lists. */
   impersonatedUserId: string | null;
@@ -36,42 +45,64 @@ export const PreviewModeContext = createContext<PreviewModeContextValue | undefi
 
 export function PreviewModeProvider({ children }: { children: ReactNode }) {
   const { role } = useAuth();
-  const [previewingLocationOwner, setPreviewing] = useState<boolean>(() => {
-    try { return localStorage.getItem("preview.location_owner") === "1"; } catch { return false; }
+  const [storedPreviewRole, setStoredPreviewRole] = useState<AppRole | null>(() => {
+    try {
+      const raw = localStorage.getItem(PREVIEW_STORAGE_KEY);
+      if (raw && (VALID_PREVIEW_ROLES as string[]).includes(raw)) return raw as AppRole;
+      // migrate legacy toggle key
+      if (localStorage.getItem("preview.location_owner") === "1") return "location_owner";
+    } catch {}
+    return null;
   });
 
   const realRole: AppRole | null = role ?? null;
-  const isSuperAdmin = realRole === "super_admin";
-  const isStaff = realRole === "super_admin" || realRole === "admin";
-  const isAllPropertiesReader = isStaff || realRole === "owner";
+  const realIsSuperAdmin = realRole === "super_admin";
 
-  const activePreview = isSuperAdmin && previewingLocationOwner;
-  const effectiveRole: AppRole | null = activePreview ? "location_owner" : realRole;
+  // Only Super Admin can actually preview a different role.
+  const previewRole: AppRole | null = realIsSuperAdmin && storedPreviewRole ? storedPreviewRole : realRole;
+  const effectiveRole: AppRole | null = previewRole;
+  const isPreviewing = realIsSuperAdmin && !!storedPreviewRole && storedPreviewRole !== "super_admin";
+
+  const isSuperAdmin = effectiveRole === "super_admin";
+  const isStaff = effectiveRole === "super_admin" || effectiveRole === "admin";
+  const isAllPropertiesReader = isStaff || effectiveRole === "owner";
   const isLocationOwner = effectiveRole === "location_owner";
 
-  const togglePreviewLocationOwner = () => {
-    setPreviewing((p) => {
-      const next = !p;
-      try { localStorage.setItem("preview.location_owner", next ? "1" : "0"); } catch {}
-      return next;
-    });
+  const setPreviewRole = (next: AppRole) => {
+    if (!realIsSuperAdmin) return;
+    const clean: AppRole | null = next === "super_admin" ? null : next;
+    setStoredPreviewRole(clean);
+    try {
+      if (clean) localStorage.setItem(PREVIEW_STORAGE_KEY, clean);
+      else localStorage.removeItem(PREVIEW_STORAGE_KEY);
+      // clear legacy key
+      localStorage.removeItem("preview.location_owner");
+    } catch {}
   };
 
-  // Use Bob's account (already an owner with viewer_property_access rows) as the
-  // demo Location Owner. PropertyContext uses this to scope the preview.
-  const impersonatedUserId = activePreview ? BOB_USER_ID : null;
+  const previewingLocationOwner = isPreviewing && effectiveRole === "location_owner";
+  const togglePreviewLocationOwner = () => {
+    setPreviewRole(previewingLocationOwner ? "super_admin" : "location_owner");
+  };
+
+  // Use Bob's account as the demo Location Owner so property scoping works.
+  // Admin/Owner previews still show every property, so no impersonation needed.
+  const impersonatedUserId = previewingLocationOwner ? BOB_USER_ID : null;
 
   return (
     <PreviewModeContext.Provider
       value={{
         realRole, effectiveRole,
-        previewingLocationOwner: activePreview,
+        previewRole,
+        setPreviewRole,
+        isPreviewing,
+        previewingLocationOwner,
         togglePreviewLocationOwner,
         impersonatedUserId,
         isSuperAdmin, isStaff, isAllPropertiesReader, isLocationOwner,
         // legacy aliases
         isOwner: isSuperAdmin,
-        impersonateBob: activePreview,
+        impersonateBob: previewingLocationOwner,
         toggleBob: togglePreviewLocationOwner,
       }}
     >
