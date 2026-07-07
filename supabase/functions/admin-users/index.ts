@@ -43,6 +43,7 @@ Deno.serve(async (req) => {
     const users = (data.users ?? []).map((u) => ({
       id: u.id,
       email: u.email ?? null,
+      display_name: (u.user_metadata as Record<string, unknown> | null)?.display_name as string | null ?? null,
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at ?? null,
     }));
@@ -82,6 +83,72 @@ Deno.serve(async (req) => {
     }
 
     return json({ ok: true, user_id: newId });
+  }
+
+  if (action === "update") {
+    const user_id = (body.user_id as string | undefined)?.trim();
+    if (!user_id) return json({ error: "user_id required" }, 400);
+
+    const email = (body.email as string | undefined)?.trim().toLowerCase();
+    const password = body.password as string | undefined;
+    const display_name = (body.display_name as string | undefined)?.trim();
+    const role = body.role as Role | undefined;
+    const property_id = (body.property_id as string | undefined) || null;
+
+    if (role && !ROLES.includes(role)) return json({ error: "Invalid role" }, 400);
+    if (password && password.length < 8) return json({ error: "Password must be at least 8 characters" }, 400);
+    if (role === "location_owner" && !property_id) {
+      return json({ error: "Location Owner requires an assigned property" }, 400);
+    }
+
+    const attrs: Record<string, unknown> = {};
+    if (email) attrs.email = email;
+    if (password) attrs.password = password;
+    if (typeof display_name === "string") {
+      attrs.user_metadata = { display_name };
+    }
+    if (Object.keys(attrs).length > 0) {
+      const { error: uErr } = await admin.auth.admin.updateUserById(user_id, attrs);
+      if (uErr) return json({ error: uErr.message }, 400);
+    }
+
+    if (role) {
+      // Prevent a Super Admin from demoting themselves out of super_admin
+      if (user_id === caller.id && role !== "super_admin") {
+        return json({ error: "You cannot change your own role away from Super Admin" }, 400);
+      }
+      const del = await admin.from("user_roles").delete().eq("user_id", user_id);
+      if (del.error) return json({ error: del.error.message }, 500);
+      const ins = await admin.from("user_roles").insert({ user_id, role });
+      if (ins.error) return json({ error: ins.error.message }, 500);
+
+      // Reset location assignments when role changes; re-add for location_owner
+      await admin.from("viewer_property_access").delete().eq("user_id", user_id);
+      if (role === "location_owner" && property_id) {
+        const { error: aErr } = await admin
+          .from("viewer_property_access")
+          .insert({ user_id, property_id });
+        if (aErr) return json({ error: aErr.message }, 500);
+      }
+    } else if (property_id) {
+      // Role unchanged but property re-assignment provided (location_owner case)
+      await admin.from("viewer_property_access").delete().eq("user_id", user_id);
+      const { error: aErr } = await admin
+        .from("viewer_property_access")
+        .insert({ user_id, property_id });
+      if (aErr) return json({ error: aErr.message }, 500);
+    }
+
+    return json({ ok: true });
+  }
+
+  if (action === "delete") {
+    const user_id = (body.user_id as string | undefined)?.trim();
+    if (!user_id) return json({ error: "user_id required" }, 400);
+    if (user_id === caller.id) return json({ error: "You cannot delete your own account" }, 400);
+    const { error: dErr } = await admin.auth.admin.deleteUser(user_id);
+    if (dErr) return json({ error: dErr.message }, 400);
+    return json({ ok: true });
   }
 
   return json({ error: "Unknown action" }, 400);
