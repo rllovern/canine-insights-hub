@@ -1,6 +1,6 @@
 // Super Admin-only endpoint to list app users with emails and to create
 // new users with a role (and optional assigned location for location_owner).
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
