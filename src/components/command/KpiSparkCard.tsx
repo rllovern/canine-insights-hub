@@ -56,7 +56,7 @@ export function KpiSparkCard({
     deltaNode = (
       <span className={cn("inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold", positive ? "text-emerald-600" : "text-rose-600")}>
         {d.abs >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-        {d.abs >= 0 ? "+" : ""}{fmt(Math.abs(d.abs))} <span className="font-normal text-slate-400 ml-0.5">low n</span>
+        {d.abs >= 0 ? "+" : ""}{fmt(Math.abs(d.abs))}
       </span>
     );
   } else {
