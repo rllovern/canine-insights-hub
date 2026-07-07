@@ -125,7 +125,7 @@ export default function Command() {
           />
           {ownerView ? (
             <KpiSparkCard
-              label={isAds ? "PPC AI-Projected" : "AI-Projected Sale (count)"}
+              label={isAds ? "PPC Sales" : "Sales (count)"}
               value={fmtNumber(active.appointments)}
               current={active.appointments} prior={activePrior.appointments}
               series={series("projected_sale")}

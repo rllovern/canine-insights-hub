@@ -68,8 +68,8 @@ export function JourneyFunnel({
       </div>
       <p className="text-[11px] text-slate-500 mt-0.5">
         {isAds
-          ? "PPC Spend → PPC Records → PPC Qualified (good + AI-projected)"
-          : "Ad Spend → Records → Qualified (good + AI-projected)"}
+          ? "PPC Spend → PPC Records → PPC Qualified (good + sales)"
+          : "Ad Spend → Records → Qualified (good + sales)"}
       </p>
 
       {/* Single horizontal row: three stages on one baseline, long connector arrows. */}
@@ -152,7 +152,7 @@ function LeadMix({
   benchmarkLabel: string;
   benchmarkRate: string;
 }) {
-  // Benchmark: at least 20% of total leads must be "good" (excluding AI-projected).
+  // Benchmark: at least 20% of total leads must be "good" (excluding sales).
   const goodShare = total > 0 ? good / total : 0;
   const judged = total > 0;
   const pass = goodShare >= 0.2;
@@ -172,7 +172,7 @@ function LeadMix({
         <div className="tabular-nums">
           <span className="text-rose-600">{bad} bad</span> ·{" "}
           <span className="text-purple-600">{good} good</span> ·{" "}
-          <span className="text-amber-600">{projected} AI-projected</span>
+          <span className="text-amber-600">{projected} sales</span>
         </div>
         {judged && (
           <div className={cn("mt-1 font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
@@ -205,14 +205,14 @@ function QualifiedStage({ good, projected, bad, qualityRatePct, hasBase, leadsCo
         </div>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-snug">
-        <div className="font-semibold">Qualified leads (good + AI-projected)</div>
+        <div className="font-semibold">Qualified leads (good + sales)</div>
         <div className="mt-1 tabular-nums">
           <span className="text-purple-600 font-medium">{good} good</span>
           <span className="text-slate-400"> · </span>
-          <span className="text-amber-600 font-medium">{projected} AI-projected</span>
+          <span className="text-amber-600 font-medium">{projected} sales</span>
         </div>
         <div className="text-slate-400 text-[10px] mt-0.5">Source: CTM scored + CTM transcript projection</div>
-        <div className="mt-1">Good and AI-projected are parallel quality outcomes, not a sequence. Both count toward quality rate.</div>
+        <div className="mt-1">Good and sales are parallel quality outcomes, not a sequence. Both count toward quality rate.</div>
       </TooltipContent>
     </Tooltip>
   );

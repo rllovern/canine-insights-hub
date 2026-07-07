@@ -4,7 +4,7 @@
  * `public.lead_quality_rollup`. Every page reads through this module; no
  * surface re-derives total leads or quality rate locally.
  *
- * Three mutually-exclusive real-lead tiers (bad, good, AI-projected).
+ * Three mutually-exclusive real-lead tiers (bad, good, sales).
  * `projected` is NEVER inside `good`, NEVER subtracted, NEVER a forecast.
  */
 
@@ -17,10 +17,10 @@ export type LeadCounts = {
   verified?: number;
 };
 
-/** Total Leads = bad + good + AI-projected. Three exclusive tiers. */
+/** Total Leads = bad + good + sales. Three exclusive tiers. */
 export const totalLeads = (c: LeadCounts) => c.bad + c.good + c.projected;
 
-/** Quality numerator = good + AI-projected (both are quality outcomes). */
+/** Quality numerator = good + sales (both are quality outcomes). */
 export const qualityNumerator = (c: LeadCounts) => c.good + c.projected;
 
 /** Quality rate = (good + projected) ÷ total. Ratio-of-sums when aggregating. */
@@ -56,7 +56,7 @@ export function qualityTier(rate: number, base: number): QualityTier {
 }
 
 /** Canonical UI label for the projected-sale tier. Never "expected sales". */
-export const PROJECTED_LABEL = "AI-projected sale";
+export const PROJECTED_LABEL = "Sales";
 
 /** Tailwind color helpers so every page styles the same tier the same way. */
 export const TIER_TEXT: Record<QualityTier, string> = {
