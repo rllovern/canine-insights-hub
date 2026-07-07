@@ -36,8 +36,15 @@ export default function AdminUsers() {
     load();
   }, []);
 
-  const internals = roleRows.filter((r) => r.role === "internal");
-  const viewers = roleRows.filter((r) => r.role === "viewer");
+  const staff = roleRows.filter((r) => r.role === "super_admin" || r.role === "admin");
+  const owners = roleRows.filter((r) => r.role === "owner");
+  const locationOwners = roleRows.filter((r) => r.role === "location_owner");
+  const roleLabel: Record<string, string> = {
+    super_admin: "Super Admin",
+    admin: "Admin",
+    owner: "Owner",
+    location_owner: "Location Owner",
+  };
 
   const toggleAccess = async (user_id: string, property_id: string, on: boolean) => {
     if (on) {
@@ -64,7 +71,7 @@ export default function AdminUsers() {
     <div className="mx-auto max-w-7xl space-y-8 p-6">
       <PageHeader
         title="Users"
-        description="Internal teammates have full access. Viewers see only their assigned properties."
+        description="Super Admin and Admin manage the app. Owners see every location. Location Owners see only their assigned property."
       />
 
       {loading ? (
@@ -72,16 +79,21 @@ export default function AdminUsers() {
       ) : (
         <>
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold">Internal users ({internals.length})</h2>
-            {internals.length === 0 ? (
-              <EmptyState title="No internal users" description="Share the invite code so teammates can self-register." />
+            <h2 className="text-sm font-semibold">Internal staff ({staff.length})</h2>
+            {staff.length === 0 ? (
+              <EmptyState title="No staff yet" description="Assign Super Admin or Admin roles here once other users sign up." />
             ) : (
               <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                 <ul className="divide-y divide-border">
-                  {internals.map((u) => (
+                  {staff.map((u) => (
                     <li key={u.user_id} className="flex items-center justify-between px-4 py-2.5 text-sm">
                       <span className="font-mono text-xs text-muted-foreground">{u.user_id}</span>
-                      {u.user_id === me?.id && <span className="text-[11px] text-primary">you</span>}
+                      <span className="flex items-center gap-2 text-[11px]">
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 font-semibold text-foreground">
+                          {roleLabel[u.role] ?? u.role}
+                        </span>
+                        {u.user_id === me?.id && <span className="text-primary">you</span>}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -90,16 +102,34 @@ export default function AdminUsers() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold">Viewers ({viewers.length})</h2>
-            {viewers.length === 0 ? (
+            <h2 className="text-sm font-semibold">Owners ({owners.length})</h2>
+            {owners.length === 0 ? (
+              <EmptyState title="No owners yet" description="Owners get full read access to every location." />
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <ul className="divide-y divide-border">
+                  {owners.map((u) => (
+                    <li key={u.user_id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                      <span className="font-mono text-xs text-muted-foreground">{u.user_id}</span>
+                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-semibold">Owner</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold">Location Owners ({locationOwners.length})</h2>
+            {locationOwners.length === 0 ? (
               <EmptyState
-                title="No viewers yet"
-                description="Viewer accounts must be created by an internal user. (Onboarding flow ships in a later phase.)"
+                title="No location owners yet"
+                description="Location Owner accounts must be created by a Super Admin. (Onboarding flow ships in a later phase.)"
               />
             ) : (
               <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                 <ul className="divide-y divide-border">
-                  {viewers.map((u) => (
+                  {locationOwners.map((u) => (
                     <li key={u.user_id} className="px-4 py-3">
                       <div className="mb-2 font-mono text-xs text-muted-foreground">{u.user_id}</div>
                       <div className="flex flex-wrap gap-3">
