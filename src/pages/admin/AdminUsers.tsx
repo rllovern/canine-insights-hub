@@ -338,6 +338,7 @@ export default function AdminUsers() {
                           {roleLabel[u.role] ?? u.role}
                         </span>
                         {u.user_id === me?.id && <span className="text-primary">you</span>}
+                        {editButton(u)}
                       </span>
                     </li>
                   ))}
@@ -356,7 +357,10 @@ export default function AdminUsers() {
                   {owners.map((u) => (
                     <li key={u.user_id} className="flex items-center justify-between px-4 py-2.5 text-sm">
                       {renderIdentity(u.user_id)}
-                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-semibold">Owner</span>
+                      <span className="flex items-center gap-2">
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-semibold">Owner</span>
+                        {editButton(u)}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -399,6 +403,7 @@ export default function AdminUsers() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {editButton(u)}
                         </div>
                       </li>
                     );
@@ -409,6 +414,125 @@ export default function AdminUsers() {
           </section>
         </>
       )}
+
+      <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit user</DialogTitle>
+            <DialogDescription>
+              Update this user's email, name, password, role, or assigned location.
+            </DialogDescription>
+          </DialogHeader>
+          {editTarget && (
+            <form onSubmit={saveEdit} className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="edit-name" className="text-xs">Display name</Label>
+                <Input
+                  id="edit-name"
+                  value={editForm.display_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, display_name: e.target.value }))}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-email" className="text-xs">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-password" className="text-xs">
+                  New password <span className="text-muted-foreground">(leave blank to keep current)</span>
+                </Label>
+                <Input
+                  id="edit-password"
+                  type="text"
+                  autoComplete="new-password"
+                  value={editForm.password}
+                  onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="Min 8 characters"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Role</Label>
+                <Select
+                  value={editForm.role}
+                  onValueChange={(v) => setEditForm((f) => ({ ...f, role: v as AppRole }))}
+                  disabled={editTarget.user_id === me?.id}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="owner">Owner</SelectItem>
+                    <SelectItem value="location_owner">Location Owner</SelectItem>
+                  </SelectContent>
+                </Select>
+                {editTarget.user_id === me?.id && (
+                  <p className="text-[10px] text-muted-foreground">You cannot change your own role.</p>
+                )}
+              </div>
+              {editForm.role === "location_owner" && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Assigned location</Label>
+                  <Select
+                    value={editForm.property_id}
+                    onValueChange={(v) => setEditForm((f) => ({ ...f, property_id: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a location…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {properties.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={editTarget.user_id === me?.id}
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  Delete user
+                </Button>
+                <div className="flex gap-2">
+                  <Button type="button" variant="ghost" onClick={() => setEditTarget(null)}>Cancel</Button>
+                  <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+                </div>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the user account, their role, and any location assignment. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); deleteUser(); }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting…" : "Delete user"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
