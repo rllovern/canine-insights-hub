@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Property, PropertyDataSource } from "@/lib/types";
 import { toast } from "sonner";
+import { usePreviewMode } from "@/contexts/PreviewModeContext";
 
 interface Props {
   property: Property;
@@ -20,6 +21,7 @@ interface Props {
 interface ScopeResult { label: string; path: string; ok: boolean; status: number; message: string; }
 
 export function GHLConnectionDialog({ property, source, onChanged, trigger, open: ctlOpen, onOpenChange: setCtlOpen }: Props) {
+  const { isSuperAdmin } = usePreviewMode();
   const [uOpen, setUOpen] = useState(false);
   const open = ctlOpen ?? uOpen;
   const setOpen = setCtlOpen ?? setUOpen;
@@ -168,23 +170,28 @@ export function GHLConnectionDialog({ property, source, onChanged, trigger, open
           )}
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
+          {!isSuperAdmin && (
+            <div className="mr-auto text-[11px] text-muted-foreground">
+              Read-only. Only a Super Admin can save, sync, or disconnect this integration.
+            </div>
+          )}
           {isConnected && (
             <>
-              <Button variant="outline" onClick={handleDisconnect} disabled={disconnecting}>
+              <Button variant="outline" onClick={handleDisconnect} disabled={disconnecting || !isSuperAdmin}>
                 {disconnecting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Unplug className="mr-1.5 h-4 w-4" />}
                 Disconnect
               </Button>
-              <Button variant="outline" onClick={handleTest} disabled={testing}>
+              <Button variant="outline" onClick={handleTest} disabled={testing || !isSuperAdmin}>
                 {testing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-1.5 h-4 w-4" />}
                 Test access
               </Button>
-              <Button variant="outline" onClick={handleSync} disabled={syncing}>
+              <Button variant="outline" onClick={handleSync} disabled={syncing || !isSuperAdmin}>
                 {syncing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
                 Sync now
               </Button>
             </>
           )}
-          <Button onClick={handleSave} disabled={saving || !locationId.trim() || !token.trim()}>
+          <Button onClick={handleSave} disabled={saving || !locationId.trim() || !token.trim() || !isSuperAdmin}>
             {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />} Save
           </Button>
         </DialogFooter>
