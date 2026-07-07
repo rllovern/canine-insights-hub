@@ -100,6 +100,33 @@ async function fetchTabRows(spreadsheetId: string, tab: string): Promise<string[
   return (data.values ?? []) as string[][];
 }
 
+/** Batch-fetch multiple tabs in a single Sheets API call — avoids per-tab
+ * quota burn (429) when syncing many properties. Returns a map keyed by tab name. */
+async function batchFetchTabRows(
+  spreadsheetId: string,
+  tabs: string[],
+): Promise<Record<string, string[][]>> {
+  if (tabs.length === 0) return {};
+  const params = tabs
+    .map((t) => `ranges=${encodeURIComponent(`${t}!A1:Z10000`)}`)
+    .join("&");
+  const res = await gwFetch(`/spreadsheets/${spreadsheetId}/values:batchGet?${params}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`batchGet failed [${res.status}]: ${body}`);
+  }
+  const data = await res.json() as { valueRanges?: Array<{ range?: string; values?: string[][] }> };
+  const out: Record<string, string[][]> = {};
+  const ranges = data.valueRanges ?? [];
+  // Sheets returns valueRanges in request order — pair by index (range strings
+  // get quoted/escaped by the API, so index matching is more reliable).
+  ranges.forEach((vr, i) => {
+    const tab = tabs[i];
+    if (tab !== undefined) out[tab] = (vr.values ?? []) as string[][];
+  });
+  return out;
+}
+
 function headerIndex(header: string[]): Record<string, number> {
   const idx: Record<string, number> = {};
   const aliases: Record<string, string[]> = {
@@ -122,13 +149,11 @@ function headerIndex(header: string[]): Record<string, number> {
   return idx;
 }
 
-async function processTab(
+async function processRows(
   admin: ReturnType<typeof createClient>,
   propertyId: string,
-  spreadsheetId: string,
-  tab: string,
+  rows: string[][],
 ): Promise<{ imported: number; skipped: number }> {
-  const rows = await fetchTabRows(spreadsheetId, tab);
   if (rows.length < 2) return { imported: 0, skipped: 0 };
   const header = rows[0];
   const idx = headerIndex(header);
@@ -265,13 +290,45 @@ Deno.serve(async (req) => {
       .eq("is_active", true)
       .not("google_sheet_tab", "is", null);
 
+    const mapped = (props ?? []) as Array<{ id: string; name: string; google_sheet_tab: string }>;
+    const uniqueTabs = Array.from(new Set(mapped.map((p) => p.google_sheet_tab)));
+
+    // ONE batchGet call for every mapped tab — avoids the per-tab 429s we
+    // used to hit when properties>quota/min. Retry once on 429 (5s wait).
+    let tabRows: Record<string, string[][]> = {};
+    let batchError: string | null = null;
+    try {
+      tabRows = await batchFetchTabRows(spreadsheetId, uniqueTabs);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/\[429\]/.test(msg)) {
+        await new Promise((r) => setTimeout(r, 5000));
+        try { tabRows = await batchFetchTabRows(spreadsheetId, uniqueTabs); }
+        catch (e2) { batchError = e2 instanceof Error ? e2.message : String(e2); }
+      } else {
+        batchError = msg;
+      }
+    }
+
     const results: Array<{ property_id: string; name: string; tab: string; imported: number; skipped: number; error?: string }> = [];
     let totalImported = 0;
-    let anyError: string | null = null;
-    for (const p of props ?? []) {
-      const tab = (p as { google_sheet_tab: string }).google_sheet_tab;
+    let anyError: string | null = batchError;
+
+    for (const p of mapped) {
+      const tab = p.google_sheet_tab;
+      if (batchError) {
+        results.push({ property_id: p.id, name: p.name, tab, imported: 0, skipped: 0, error: batchError });
+        continue;
+      }
+      const rows = tabRows[tab];
+      if (rows === undefined) {
+        const msg = `Tab "${tab}" not found in spreadsheet`;
+        results.push({ property_id: p.id, name: p.name, tab, imported: 0, skipped: 0, error: msg });
+        anyError = msg;
+        continue;
+      }
       try {
-        const r = await processTab(admin, p.id, spreadsheetId, tab);
+        const r = await processRows(admin, p.id, rows);
         results.push({ property_id: p.id, name: p.name, tab, ...r });
         totalImported += r.imported;
       } catch (e) {
