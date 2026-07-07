@@ -2,3 +2,6 @@ project_id = "yptgdovnvmpgwcvfdnrq"
 
 [functions.seed-bob]
 verify_jwt = false
+
+[functions.admin-users]
+verify_jwt = false
