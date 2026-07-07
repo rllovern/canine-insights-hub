@@ -86,18 +86,15 @@ export default function BudgetPacing() {
   const range = useMemo(() => monthRange(month), [month]);
 
   const scopedPropertyIds = propertyIds;
-  const applyPropertyScope = <T extends { in: (column: string, values: string[]) => T }>(query: T) => {
-    if (scopedPropertyIds === null) return query;
-    return query.in("property_id", scopedPropertyIds);
-  };
 
   const reloadRows = async () => {
     if (scopedPropertyIds !== null && scopedPropertyIds.length === 0) {
       setRows([]);
       return;
     }
-    const query = supabase.from("budget_accounts").select("*").order("sort_order").order("created_at");
-    const { data } = await applyPropertyScope(query);
+    let query = supabase.from("budget_accounts").select("*").order("sort_order").order("created_at");
+    if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
+    const { data } = await query;
     setRows((data ?? []) as BudgetRow[]);
   };
 
@@ -119,12 +116,13 @@ export default function BudgetPacing() {
       last5From.setDate(last5From.getDate() - 4);
       const fromISO = toISO(range.from < last5From ? range.from : last5From);
       const toIso = toISO(range.to);
-      const query = supabase
+      let query = supabase
         .from("daily_metrics")
         .select("property_id, date, campaign, cost")
         .gte("date", fromISO)
         .lte("date", toIso);
-      const { data } = await applyPropertyScope(query);
+      if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
+      const { data } = await query;
       setMetrics((data ?? []) as MetricRow[]);
     })();
   }, [month, range.from, range.to, scopedPropertyIds]);
@@ -135,8 +133,9 @@ export default function BudgetPacing() {
         setBudgets([]);
         return;
       }
-      const query = supabase.from("campaign_budgets").select("property_id, campaign, daily_budget, status");
-      const { data } = await applyPropertyScope(query);
+      let query = supabase.from("campaign_budgets").select("property_id, campaign, daily_budget, status");
+      if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
+      const { data } = await query;
       setBudgets((data ?? []) as BudgetSnap[]);
     })();
   }, [scopedPropertyIds]);
@@ -147,8 +146,9 @@ export default function BudgetPacing() {
         setLabels([]);
         return;
       }
-      const query = supabase.from("campaign_labels").select("property_id, campaign, label_name");
-      const { data } = await applyPropertyScope(query);
+      let query = supabase.from("campaign_labels").select("property_id, campaign, label_name");
+      if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
+      const { data } = await query;
       setLabels((data ?? []) as LabelRow[]);
     })();
   }, [scopedPropertyIds]);
@@ -242,11 +242,13 @@ export default function BudgetPacing() {
         if (!error) ok++;
       } catch {}
     }
-    const budgetQuery = supabase.from("campaign_budgets").select("property_id, campaign, daily_budget, status");
-    const { data } = await applyPropertyScope(budgetQuery);
+    let budgetQuery = supabase.from("campaign_budgets").select("property_id, campaign, daily_budget, status");
+    if (scopedPropertyIds !== null) budgetQuery = budgetQuery.in("property_id", scopedPropertyIds);
+    const { data } = await budgetQuery;
     setBudgets((data ?? []) as BudgetSnap[]);
-    const labelQuery = supabase.from("campaign_labels").select("property_id, campaign, label_name");
-    const { data: lbl } = await applyPropertyScope(labelQuery);
+    let labelQuery = supabase.from("campaign_labels").select("property_id, campaign, label_name");
+    if (scopedPropertyIds !== null) labelQuery = labelQuery.in("property_id", scopedPropertyIds);
+    const { data: lbl } = await labelQuery;
     setLabels((lbl ?? []) as LabelRow[]);
     setSyncing(false);
     toast({ title: "Synced", description: `Refreshed budgets for ${ok}/${propsWithGoogle.length} accounts.` });
