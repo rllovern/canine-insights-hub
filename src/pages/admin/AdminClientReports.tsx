@@ -19,15 +19,22 @@ import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "adminClientReports.lastPropertyId";
 
-// Force the inner subtree to render as a viewer so the report is pixel-identical
-// to what the client sees at /report/:token.
+// Force the inner subtree to render as a Location Owner so the report is
+// pixel-identical to what the client sees at /report/:token.
 const VIEWER_PREVIEW_VALUE = {
-  realRole: "viewer" as const,
-  effectiveRole: "viewer" as const,
+  realRole: "location_owner" as const,
+  effectiveRole: "location_owner" as const,
+  previewingLocationOwner: false,
+  togglePreviewLocationOwner: () => {},
+  impersonatedUserId: null,
+  isSuperAdmin: false,
+  isStaff: false,
+  isAllPropertiesReader: false,
+  isLocationOwner: true,
+  // legacy aliases
+  isOwner: false,
   impersonateBob: false,
   toggleBob: () => {},
-  impersonatedUserId: null,
-  isOwner: false,
 };
 
 export default function AdminClientReports() {
