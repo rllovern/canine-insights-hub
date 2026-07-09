@@ -1,43 +1,26 @@
-## Problem
+Why Winchester only shows 1:
 
-`fetchVerifiedSalesByDate` currently counts every `ghl_opportunities` row where `status='won'`. In GHL, multiple downstream stages (e.g. "In Training", "Finished Training") are configured as won stages, so an opportunity that was sold months ago and progressed through training this month inflates the current-month count.
+- The current Verified Sale logic was tightened to count only opportunities in stages named exactly `Sold`.
+- Winchester has only 1 July won opportunity currently in an exact `Sold` stage.
+- Most Winchester wins are in stages named `SOLD ->` and `Sold to HQ`, so they are excluded by the exact-stage filter.
+- In the backend data for Winchester July, I see 17 won opportunities: 12 in `SOLD ->`, 4 in `Sold to HQ`, and 1 in `Sold`. That explains why the app shows 1 while GHL shows the broader Won/Sold total.
 
-NoVA July 2026: app shows 57, GHL shows 29. Breakdown by stage:
+Plan to fix:
 
-```text
-Trainers / Sold                27   ← real sales
-Trainers / In Training         15   ← already sold earlier
-Trainers / Finished Training    8   ← already sold earlier
-Sales    / Sold to Winchester   5   ← exclude per user
-Sales    / Sold                 1   ← real sale
-Sales    / Jotform Submitted    1   ← misconfigured stage
-```
+1. Update Verified Sales logic so it matches GHL’s Won total instead of exact stage names.
+   - Count opportunities where `status = won`.
+   - Bucket by `won_at` date.
+   - Remove the exact `Sold` stage-name filter that is excluding Winchester’s won opportunities.
 
-Expected after fix: 28 (matches GHL's ~29).
+2. Keep Call Tracking unchanged.
+   - Call Tracking will continue using its existing metric source, per the previous scope decision.
 
-## Fix
+3. Verify the affected properties after the change.
+   - Winchester should no longer show only 1; it should reflect the GHL Won/Sold count available in the synced data.
+   - NoVA should be rechecked because this reverts the stage-name restriction that reduced its inflated count. If NoVA still needs a different interpretation than GHL Won, we should handle that with property-specific sale-stage rules instead of one global exact-name filter.
 
-Change `fetchVerifiedSalesByDate` in `src/lib/verified-sales.ts` to additionally filter by stage name. A sale is any won opportunity whose **stage name = 'Sold'** (case-insensitive, exact match — excludes "Sold to Winchester" and any non-'Sold' won stages like "In Training").
+Technical notes:
 
-### Implementation
-
-1. Fetch the set of `ghl_stage_id`s where `name ILIKE 'sold'` (exact) from `ghl_pipeline_stages`, scoped to the requested `propertyIds` (or all if null).
-2. Query `ghl_opportunities` with `status='won'`, `won_at` in range, `property_id` in scope, **and** `stage_id IN (soldStageIds)`.
-3. Bucket by `won_at::date` as today.
-
-Both `fetchVerifiedSalesByDate` callers (`useVerifiedSalesTotal`, `useVerifiedSalesByDate`, and `useCommandData` via Command page) inherit the fix automatically. Call Tracking is unaffected (still reads `daily_metrics.verified_sale`).
-
-### Edge cases
-
-- If a property has no stage named exactly "Sold", it returns 0 sales — surface this later if it becomes an issue (NoVA and current known properties have "Sold" stages).
-- No schema change required.
-
-## Verification
-
-- Re-run the NoVA July window: expect 28 (27 + 1).
-- Spot check one other property/month against GHL.
-- Confirm Call Tracking totals unchanged.
-
-## Follow-ups (not in this change)
-
-- Admin UI to map "which stage(s) count as a sale" per pipeline, for properties where "Sold" isn't the exact stage name or where multiple sale stages exist.
+- File to update: `src/lib/verified-sales.ts`.
+- No database schema change is required for the simple GHL-Won matching fix.
+- If different locations need different definitions of “Verified Sale,” the durable follow-up would be a property-level sale-stage mapping table/admin setting, but the immediate fix is to match GHL’s Won status as the source of truth.
