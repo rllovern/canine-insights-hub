@@ -154,7 +154,7 @@ export default function CallTracking() {
         <ChartCard title="Total Records" subtitle="Calls and forms">
           <SingleLineChart data={series} dataKey="record_count" label="Records" color="hsl(var(--chart-1))" fmt={fmtNumber} prevKey="record_count_prev" showCompare={showCompare} />
         </ChartCard>
-        <ChartCard title="Calls by Source" subtitle="Breakdown by ad source">
+        <ChartCard title="Records by Source" subtitle="Calls and forms">
           <MultiLineChart data={callsBySource.series} sources={callsBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
         </ChartCard>
       </Row>
