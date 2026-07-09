@@ -151,8 +151,8 @@ export default function CallTracking() {
         subtitle="Total volume and per-source breakdowns of calls, leads, and conversions"
       />
       <Row>
-        <ChartCard title="Total Calls" subtitle="All sources, daily">
-          <SingleLineChart data={series} dataKey="record_count" label="Calls" color="hsl(var(--chart-1))" fmt={fmtNumber} prevKey="record_count_prev" showCompare={showCompare} />
+        <ChartCard title="Total Records" subtitle="Calls and forms">
+          <SingleLineChart data={series} dataKey="record_count" label="Records" color="hsl(var(--chart-1))" fmt={fmtNumber} prevKey="record_count_prev" showCompare={showCompare} />
         </ChartCard>
         <ChartCard title="Calls by Source" subtitle="Breakdown by ad source">
           <MultiLineChart data={callsBySource.series} sources={callsBySource.sources} fmt={fmtNumber} showCompare={showCompare} />
