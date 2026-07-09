@@ -1,6 +1,7 @@
-// Verified Sale reads from `sheet_sales` (Google Sheets import), NOT from
-// daily_metrics.verified_sale. Call Tracking is the only place that keeps
-// reading daily_metrics.verified_sale.
+// Verified Sale reads from `ghl_opportunities` — a sale is any opportunity
+// with status = 'won', bucketed by `won_at` (the timestamp GHL records when
+// the opportunity transitioned to won). Call Tracking is the only place that
+// keeps reading daily_metrics.verified_sale.
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -11,16 +12,19 @@ export async function fetchVerifiedSalesByDate(
 ): Promise<Record<string, number>> {
   if (propertyIds && propertyIds.length === 0) return {};
   let q = supabase
-    .from("sheet_sales")
-    .select("sale_date")
-    .gte("sale_date", from)
-    .lte("sale_date", to);
+    .from("ghl_opportunities")
+    .select("won_at")
+    .eq("status", "won")
+    .gte("won_at", `${from}T00:00:00.000Z`)
+    .lte("won_at", `${to}T23:59:59.999Z`);
   if (propertyIds) q = q.in("property_id", propertyIds);
   const { data, error } = await q;
   if (error) return {};
   const out: Record<string, number> = {};
-  for (const r of (data ?? []) as { sale_date: string }[]) {
-    out[r.sale_date] = (out[r.sale_date] ?? 0) + 1;
+  for (const r of (data ?? []) as { won_at: string | null }[]) {
+    if (!r.won_at) continue;
+    const day = r.won_at.slice(0, 10);
+    out[day] = (out[day] ?? 0) + 1;
   }
   return out;
 }
