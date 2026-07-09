@@ -1,47 +1,43 @@
-## Switch Verified Sales to GHL (won opportunities)
+## Problem
 
-Great news: your `ghl_opportunities` table already stores a `won_at` timestamp, populated for all 1,274 current won rows. We don't need to touch stage history or add a new sync — the transition date is already there.
+`fetchVerifiedSalesByDate` currently counts every `ghl_opportunities` row where `status='won'`. In GHL, multiple downstream stages (e.g. "In Training", "Finished Training") are configured as won stages, so an opportunity that was sold months ago and progressed through training this month inflates the current-month count.
 
-### Change
+NoVA July 2026: app shows 57, GHL shows 29. Breakdown by stage:
 
-Rewrite `fetchVerifiedSalesByDate` in `src/lib/verified-sales.ts` so it reads from `ghl_opportunities` instead of `sheet_sales`:
-
-- Filter `status = 'won'` and `won_at` between the requested `from`/`to` (converted to timestamptz day bounds).
-- Group by the calendar date of `won_at` and return `Record<date, count>`.
-- Scope by `property_id` (same as today).
-
-### Ripple effects (no logic change, just the source swap)
-
-Every caller of `fetchVerifiedSalesByDate` / `useVerifiedSalesTotal` / `useVerifiedSalesByDate` automatically switches to GHL. That covers:
-
-- Command page (`useCommandData` — both Business and Ads modes)
-- Any KPI/chart currently pulling "Sales" via those helpers
-
-**Call Tracking is unaffected** — it reads `daily_metrics.verified_sale` directly, per the comment already in `verified-sales.ts`.
-
-### What we're NOT changing
-
-- `sheet_sales` table and `sync-sheet-sales` edge function stay in place (archival), but no UI reads from them anymore.
-- `daily_metrics.verified_sale` remains the Call Tracking source.
-- No schema migration required.
-
-### Technical detail
-
-```ts
-// New fetchVerifiedSalesByDate body (sketch)
-let q = supabase
-  .from("ghl_opportunities")
-  .select("won_at")
-  .eq("status", "won")
-  .gte("won_at", `${from}T00:00:00.000Z`)
-  .lte("won_at", `${to}T23:59:59.999Z`);
-if (propertyIds) q = q.in("property_id", propertyIds);
-// bucket by won_at::date in JS
+```text
+Trainers / Sold                27   ← real sales
+Trainers / In Training         15   ← already sold earlier
+Trainers / Finished Training    8   ← already sold earlier
+Sales    / Sold to Winchester   5   ← exclude per user
+Sales    / Sold                 1   ← real sale
+Sales    / Jotform Submitted    1   ← misconfigured stage
 ```
 
-Timezone note: `won_at` is timestamptz. Bucketing by UTC calendar date is the simplest and matches how `sheet_sales.sale_date` was treated. If you want local-timezone bucketing later, we can layer that on.
+Expected after fix: 28 (matches GHL's ~29).
 
-### Verification
+## Fix
 
-- Compare Command-page "Sales" totals for a recent range against a direct count of `ghl_opportunities` where `status='won'` in that window.
-- Confirm Call Tracking numbers are unchanged.
+Change `fetchVerifiedSalesByDate` in `src/lib/verified-sales.ts` to additionally filter by stage name. A sale is any won opportunity whose **stage name = 'Sold'** (case-insensitive, exact match — excludes "Sold to Winchester" and any non-'Sold' won stages like "In Training").
+
+### Implementation
+
+1. Fetch the set of `ghl_stage_id`s where `name ILIKE 'sold'` (exact) from `ghl_pipeline_stages`, scoped to the requested `propertyIds` (or all if null).
+2. Query `ghl_opportunities` with `status='won'`, `won_at` in range, `property_id` in scope, **and** `stage_id IN (soldStageIds)`.
+3. Bucket by `won_at::date` as today.
+
+Both `fetchVerifiedSalesByDate` callers (`useVerifiedSalesTotal`, `useVerifiedSalesByDate`, and `useCommandData` via Command page) inherit the fix automatically. Call Tracking is unaffected (still reads `daily_metrics.verified_sale`).
+
+### Edge cases
+
+- If a property has no stage named exactly "Sold", it returns 0 sales — surface this later if it becomes an issue (NoVA and current known properties have "Sold" stages).
+- No schema change required.
+
+## Verification
+
+- Re-run the NoVA July window: expect 28 (27 + 1).
+- Spot check one other property/month against GHL.
+- Confirm Call Tracking totals unchanged.
+
+## Follow-ups (not in this change)
+
+- Admin UI to map "which stage(s) count as a sale" per pipeline, for properties where "Sold" isn't the exact stage name or where multiple sale stages exist.
