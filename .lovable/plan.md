@@ -1,26 +1,50 @@
-Why Winchester only shows 1:
+Findings:
 
-- The current Verified Sale logic was tightened to count only opportunities in stages named exactly `Sold`.
-- Winchester has only 1 July won opportunity currently in an exact `Sold` stage.
-- Most Winchester wins are in stages named `SOLD ->` and `Sold to HQ`, so they are excluded by the exact-stage filter.
-- In the backend data for Winchester July, I see 17 won opportunities: 12 in `SOLD ->`, 4 in `Sold to HQ`, and 1 in `Sold`. That explains why the app shows 1 while GHL shows the broader Won/Sold total.
+- Winchester is close because its synced `won_at` date currently matches GHL’s status-change date for the last 30 days: 55 here vs about 57 in GHL.
+- NoVA is inflated because the app is currently using the opportunity `updatedAt` timestamp as `won_at`.
+- In GHL, an opportunity can remain `won` while still being updated later as it moves through stages like `In Training` or `Finished Training`.
+- That means the app is counting some already-won opportunities again in the current window when they were merely updated, not newly marked won.
+- In NoVA’s synced last-30-day data:
+  - Current app logic: 174 won opportunities.
+  - GHL-style status-change date: about 105–108, depending on exact timezone/window cutoff.
+  - GHL UI reported by you: 109.
+- The remaining small gap is likely date-window/timezone cutoff or a sync freshness difference, not the same stage inflation issue.
 
-Plan to fix:
+Plan:
 
-1. Update Verified Sales logic so it matches GHL’s Won total instead of exact stage names.
-   - Count opportunities where `status = won`.
-   - Bucket by `won_at` date.
-   - Remove the exact `Sold` stage-name filter that is excluding Winchester’s won opportunities.
+1. Change the GHL sync mapping for sales dates.
+   - For won opportunities, store `won_at` from GHL’s `lastStatusChangeAt` first.
+   - Fall back to `lastStageChangeAt` or `updatedAt` only if GHL does not provide `lastStatusChangeAt`.
+   - For lost opportunities, apply the same rule to `lost_at` so loss timing is consistent too.
 
-2. Keep Call Tracking unchanged.
-   - Call Tracking will continue using its existing metric source, per the previous scope decision.
+2. Backfill existing synced opportunities.
+   - Update existing won/lost opportunity rows from the raw GHL payload’s `lastStatusChangeAt` where available.
+   - This will correct NoVA historical last-30-day counts without waiting for every opportunity to be resynced.
 
-3. Verify the affected properties after the change.
-   - Winchester should no longer show only 1; it should reflect the GHL Won/Sold count available in the synced data.
-   - NoVA should be rechecked because this reverts the stage-name restriction that reduced its inflated count. If NoVA still needs a different interpretation than GHL Won, we should handle that with property-specific sale-stage rules instead of one global exact-name filter.
+3. Keep Verified Sales source aligned to GHL status.
+   - Continue counting opportunities where `status = won`.
+   - Continue bucketing by corrected `won_at`.
+   - Do not use stage-name filters globally, because Winchester and NoVA use different stage naming patterns.
+
+4. Deploy the updated sync function.
+   - Future GHL syncs will preserve the correct “marked won” date instead of replacing it with later update dates.
+
+5. Run a reconciliation check for all active locations.
+   - Compare each location’s Verified Sales count using corrected `won_at` for the selected last-30-day window.
+   - Break discrepancies down by likely reason:
+     - date/timezone cutoff,
+     - data not synced yet,
+     - missing `lastStatusChangeAt` fallback used,
+     - duplicate opportunities/contact-level duplicates,
+     - pagination/sync cap.
+
+6. Report the post-fix counts.
+   - Specifically recheck Winchester and NoVA.
+   - If any location still does not match GHL after the corrected date source, we’ll have a clear discrepancy table showing why and what rule/data issue needs to be handled next.
 
 Technical notes:
 
-- File to update: `src/lib/verified-sales.ts`.
-- No database schema change is required for the simple GHL-Won matching fix.
-- If different locations need different definitions of “Verified Sale,” the durable follow-up would be a property-level sale-stage mapping table/admin setting, but the immediate fix is to match GHL’s Won status as the source of truth.
+- Update `supabase/functions/sync-ghl/index.ts` opportunity mapping.
+- Update existing opportunity rows in the backend database with a safe data update.
+- No new table is required for this fix.
+- If GHL UI uses a different date preset than the app’s “Last 30 days,” exact matches require both tools to use the same start/end dates and timezone.
