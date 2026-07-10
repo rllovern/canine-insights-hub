@@ -9,8 +9,6 @@ import {
   Tooltip,
   CartesianGrid,
   ReferenceLine,
-  Label,
-  LabelList,
 } from "recharts";
 import { format } from "date-fns";
 import { Info } from "lucide-react";
@@ -53,51 +51,12 @@ export function RevenueRunway({ data, actualTotal, target, forecast, asOfDate, i
     forecast.forecastMethod === "ctm_future_good_lead_pace" &&
     forecast.projectedFinish != null;
 
-  // Day X of Y + calendar pace comparison
-  const elapsed = forecast.remainingDays >= 0 ? targetPeriodDays - forecast.remainingDays : 0;
-  const dayOfPeriod = asOfDate ? Math.max(1, Math.min(targetPeriodDays, elapsed)) : 0;
-  const calendarPacePct = asOfDate && targetPeriodDays > 0 ? dayOfPeriod / targetPeriodDays : null;
-  const paceDeltaPts =
-    percentToTarget != null && calendarPacePct != null
-      ? Math.round((percentToTarget - calendarPacePct) * 100)
-      : null;
-  const percentCaption = targetIsZero
-    ? "No prior-period Good Leads"
-    : asOfDate && dayOfPeriod > 0
-      ? `Day ${dayOfPeriod} of ${targetPeriodDays}`
-      : undefined;
-  const paceLine =
-    paceDeltaPts == null
-      ? undefined
-      : paceDeltaPts === 0
-        ? "on calendar pace"
-        : paceDeltaPts > 0
-          ? `${paceDeltaPts} pts ahead of pace`
-          : `${Math.abs(paceDeltaPts)} pts behind pace`;
-
-  // Shortfall / surplus vs target for the projected-finish tile
-  const shortfallCaption: string | undefined = (() => {
-    if (!showProjection || t == null || t === 0) return forecastCaption(forecast);
-    const gap = (forecast.projectedFinish as number) - t;
-    if (Math.abs(gap) < 1) return "on target";
-    return gap >= 0
-      ? `${currency.format(gap)} above target`
-      : `${currency.format(Math.abs(gap))} below target`;
-  })();
-
-  // Endpoint labels
-  const lastActualPoint = [...data].reverse().find((d) => d.actual != null);
-  const lastTargetPoint = hasTarget ? data[data.length - 1] : null;
-  const lastProjectionPoint = showProjection
-    ? [...data].reverse().find((d) => d.projection != null)
-    : null;
-
   return (
     <div className="w-full">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
         <MethodChip label={
           forecast.forecastMethod === "ctm_future_good_lead_pace"
-            ? "Forecast based on Good Lead pace"
+            ? "Forecast: CTM Good Lead pace"
             : "Forecast unavailable"
         } />
         <TargetInfo target={target} />
@@ -110,7 +69,7 @@ export function RevenueRunway({ data, actualTotal, target, forecast, asOfDate, i
       <div className="mb-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Actual" value={currency.format(actualTotal)} tone="primary" />
         <Stat
-          label={isCustomRange ? "Revenue Target" : "Monthly Target"}
+          label="Target"
           value={t == null ? "—" : currency.format(t)}
           tone="muted"
           caption={targetCaption(target)}
@@ -118,15 +77,11 @@ export function RevenueRunway({ data, actualTotal, target, forecast, asOfDate, i
         <Stat
           label="Projected finish"
           value={showProjection ? currency.format(forecast.projectedFinish as number) : "—"}
-          tone={
-            showProjection && t != null && t > 0
-              ? (forecast.projectedFinish as number) >= t ? "up" : "down"
-              : "muted"
-          }
-          caption={shortfallCaption}
+          tone="muted"
+          caption={forecastCaption(forecast)}
         />
         <Stat
-          label="% of target"
+          label="% to target"
           value={percentDisplay}
           tone={
             t == null || t === 0
@@ -135,13 +90,12 @@ export function RevenueRunway({ data, actualTotal, target, forecast, asOfDate, i
                 ? "up"
                 : "down"
           }
-          caption={percentCaption}
-          subCaption={paceLine}
+          caption={targetIsZero ? "No prior-period Good Leads" : undefined}
         />
       </div>
 
       <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={data} margin={{ top: 16, right: 96, left: 0, bottom: 0 }}>
+        <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="runway-fill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.55} />
@@ -191,56 +145,19 @@ export function RevenueRunway({ data, actualTotal, target, forecast, asOfDate, i
             connectNulls={false}
             animationDuration={900}
             isAnimationActive
-          >
-            {lastActualPoint && (
-              <LabelList
-                dataKey="actual"
-                position="top"
-                content={(props: any) => {
-                  const { x, y, value, index } = props;
-                  if (value == null) return null;
-                  const actualIdx = data.findIndex((d) => d === lastActualPoint);
-                  if (index !== actualIdx) return null;
-                  return (
-                    <g>
-                      <circle cx={x} cy={y} r={3.5} fill="hsl(var(--primary))" stroke="hsl(var(--card))" strokeWidth={1.5} />
-                      <text x={x + 6} y={y - 8} fill="hsl(var(--primary))" fontSize={11} fontWeight={600}>
-                        Actual {fmt(Number(value))}
-                      </text>
-                    </g>
-                  );
-                }}
-              />
-            )}
-          </Area>
+          />
           {hasTarget && (
             <Line
               type="monotone"
               dataKey="target"
               name="Target pace"
               stroke="hsl(var(--muted-foreground))"
-              strokeOpacity={0.45}
-              strokeDasharray="6 6"
-              strokeWidth={1.25}
+              strokeDasharray="5 5"
+              strokeWidth={1.5}
               dot={false}
               isAnimationActive
               animationDuration={900}
-            >
-              {lastTargetPoint && t != null && (
-                <LabelList
-                  dataKey="target"
-                  content={(props: any) => {
-                    const { x, y, value, index } = props;
-                    if (value == null || index !== data.length - 1) return null;
-                    return (
-                      <text x={x + 6} y={y + 4} fill="hsl(var(--muted-foreground))" fontSize={11} fontWeight={500}>
-                        Target {fmt(Number(value))}
-                      </text>
-                    );
-                  }}
-                />
-              )}
-            </Line>
+            />
           )}
           {showProjection && (
             <Line
@@ -248,50 +165,22 @@ export function RevenueRunway({ data, actualTotal, target, forecast, asOfDate, i
               dataKey="projection"
               name="Projected finish"
               stroke="hsl(var(--primary))"
-              strokeOpacity={0.9}
-              strokeDasharray="2 6"
-              strokeWidth={2.25}
+              strokeOpacity={0.6}
+              strokeDasharray="2 4"
+              strokeWidth={2}
               dot={false}
               connectNulls={false}
               isAnimationActive
               animationDuration={900}
-            >
-              {lastProjectionPoint && (
-                <LabelList
-                  dataKey="projection"
-                  content={(props: any) => {
-                    const { x, y, value, index } = props;
-                    if (value == null) return null;
-                    const projIdx = data.lastIndexOf(lastProjectionPoint);
-                    if (index !== projIdx) return null;
-                    return (
-                      <g>
-                        <circle cx={x} cy={y} r={3.5} fill="hsl(var(--primary))" fillOpacity={0.9} stroke="hsl(var(--card))" strokeWidth={1.5} />
-                        <text x={x + 6} y={y - 6} fill="hsl(var(--primary))" fontSize={11} fontWeight={600} opacity={0.9}>
-                          Projected {fmt(Number(value))}
-                        </text>
-                      </g>
-                    );
-                  }}
-                />
-              )}
-            </Line>
+            />
           )}
           {asOfDate && forecast.remainingDays > 0 && (
             <ReferenceLine
               x={format(asOfDate, "yyyy-MM-dd")}
               stroke="hsl(var(--muted-foreground))"
               strokeDasharray="2 3"
-              strokeOpacity={0.7}
-            >
-              <Label
-                value="Today"
-                position="top"
-                fill="hsl(var(--muted-foreground))"
-                fontSize={10}
-                offset={6}
-              />
-            </ReferenceLine>
+              strokeOpacity={0.6}
+            />
           )}
         </ComposedChart>
       </ResponsiveContainer>
@@ -299,13 +188,9 @@ export function RevenueRunway({ data, actualTotal, target, forecast, asOfDate, i
   );
 }
 
-function Stat({ label, value, tone, caption, subCaption }: { label: string; value: string; tone: "primary" | "muted" | "up" | "down"; caption?: string; subCaption?: string }) {
+function Stat({ label, value, tone, caption }: { label: string; value: string; tone: "primary" | "muted" | "up" | "down"; caption?: string }) {
   const color =
     tone === "primary" ? "text-foreground" :
-    tone === "up" ? "text-emerald-500" :
-    tone === "down" ? "text-rose-500" :
-    "text-muted-foreground";
-  const subColor =
     tone === "up" ? "text-emerald-500" :
     tone === "down" ? "text-rose-500" :
     "text-muted-foreground";
@@ -319,7 +204,6 @@ function Stat({ label, value, tone, caption, subCaption }: { label: string; valu
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className={`text-lg font-semibold tabular-nums ${color}`}>{value}</div>
       {caption && <div className="text-[10px] text-muted-foreground mt-0.5">{caption}</div>}
-      {subCaption && <div className={`text-[10px] mt-0.5 font-medium ${subColor}`}>{subCaption}</div>}
     </motion.div>
   );
 }

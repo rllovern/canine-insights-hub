@@ -167,7 +167,7 @@ function insightText(stats: DayStat[], metric: HeatmapMetric): string | null {
   const topSum = sorted.slice(0, topN).reduce((a, b) => a + b, 0);
   const pct = Math.round((topSum / total) * 100);
   if (pct >= 50 && stats.length >= 5) {
-    return `${pct}% of ${metric === "wins" ? "wins" : "revenue"} came from just ${topN} day${topN === 1 ? "" : "s"}.`;
+    return `${pct}% of this period's ${metric === "wins" ? "won deals" : "revenue"} came from ${topN} day${topN === 1 ? "" : "s"}.`;
   }
 
   // Best weekday
@@ -211,12 +211,12 @@ function Legend({ thresholds }: { thresholds: Thresholds }) {
 function SummaryRow({ stats, metric }: { stats: DayStat[]; metric: HeatmapMetric }) {
   const s = summarize(stats, metric);
   const totalStr = metric === "wins" ? `${s.total} won deals` : `${currency.format(s.total)} closed`;
-  const activeStr = `Active days: ${s.activeCount} of ${s.days}`;
+  const activeStr = metric === "wins"
+    ? `${s.activeCount} of ${s.days} active days`
+    : `${s.activeCount} of ${s.days} revenue days`;
   const bestStr = s.best
-    ? (metric === "wins"
-        ? `Best day: ${format(s.best.date, "MMM d")} · ${s.best.count} ${s.best.count === 1 ? "win" : "wins"}`
-        : `Best day: ${format(s.best.date, "MMM d")} · ${compactMoney(s.best.revenue)}`)
-    : "Best day: —";
+    ? `Best: ${format(s.best.date, "MMM d")} · ${fmtMetric(metric, metric === "wins" ? s.best.count : s.best.revenue)}${metric === "wins" ? "" : ""}`
+    : "Best: —";
   const avgStr = metric === "wins"
     ? `Avg: ${s.avg.toFixed(1)}/day`
     : `Avg: ${compactMoney(s.avg)}/day`;
