@@ -24,6 +24,7 @@ import AdminSlaSettings from "./pages/admin/AdminSlaSettings";
 import AdminDataSources from "./pages/admin/AdminDataSources";
 import AdminGoogleSheets from "./pages/admin/AdminGoogleSheets";
 import LeadPerformance from "./pages/LeadPerformance";
+import SaleRecords from "./pages/SaleRecords";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PreviewModeProvider } from "./contexts/PreviewModeContext";
 import { PropertyProvider } from "./contexts/PropertyContext";
@@ -69,6 +70,7 @@ const App = () => (
                     <Route path="/reports" element={<ViewerBlock><Reports /></ViewerBlock>} />
                     <Route path="/budget" element={<BudgetPacing />} />
                     <Route path="/lead-performance" element={<ViewerBlock><LeadPerformance /></ViewerBlock>} />
+                    <Route path="/sales" element={<SaleRecords />} />
                     <Route
                       path="/admin/properties"
                       element={<RequireAuth requireStaff><AdminProperties /></RequireAuth>}
