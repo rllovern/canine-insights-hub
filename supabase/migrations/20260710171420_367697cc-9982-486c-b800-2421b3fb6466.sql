@@ -1,0 +1,1 @@
+ALTER TABLE public.property_settings ADD COLUMN IF NOT EXISTS good_lead_close_rate numeric NOT NULL DEFAULT 0.30 CHECK (good_lead_close_rate >= 0 AND good_lead_close_rate <= 1);
