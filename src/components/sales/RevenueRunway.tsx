@@ -12,6 +12,8 @@ import {
   LabelList,
 } from "recharts";
 import { eachDayOfInterval, format, differenceInCalendarDays } from "date-fns";
+import { Info } from "lucide-react";
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface RunwayMetrics {
   fullPeriodTarget: number;
@@ -26,6 +28,11 @@ export interface RunwayMetrics {
   remainingDays: number;
   periodDays: number;
   isPast: boolean;
+  availableGoodLeads: number;
+  projectedAdditionalWins: number;
+  expectedAdditionalRevenue: number;
+  avgDealValue: number;
+  closeRate: number;
 }
 
 interface Props {
@@ -33,6 +40,9 @@ interface Props {
   periodEnd: Date;
   byDayRevenue: Record<string, number>;
   fullPeriodTarget: number | null;
+  availableGoodLeads: number;
+  avgDealValue: number;
+  closeRate: number;
   onMetrics?: (m: RunwayMetrics) => void;
 }
 
@@ -62,7 +72,7 @@ function useCountUp(value: number, duration = 600) {
   return n;
 }
 
-export function RevenueRunway({ periodStart, periodEnd, byDayRevenue, fullPeriodTarget, onMetrics }: Props) {
+export function RevenueRunway({ periodStart, periodEnd, byDayRevenue, fullPeriodTarget, availableGoodLeads, avgDealValue, closeRate, onMetrics }: Props) {
   const iso = (d: Date) => format(d, "yyyy-MM-dd");
   const today = new Date(); today.setHours(23, 59, 59, 999);
   const currentDate = today < periodEnd ? today : periodEnd;
@@ -73,6 +83,9 @@ export function RevenueRunway({ periodStart, periodEnd, byDayRevenue, fullPeriod
   const elapsedDays = Math.max(1, differenceInCalendarDays(currentDate, periodStart) + 1);
   const remainingDays = Math.max(0, differenceInCalendarDays(periodEnd, currentDate));
   const isPast = currentDate >= periodEnd;
+
+  const expectedAdditionalRevenue = Math.max(0, availableGoodLeads * closeRate * avgDealValue);
+  const projectedAdditionalWins = Math.max(0, availableGoodLeads * closeRate);
 
   const { chartData, actualToDate } = useMemo(() => {
     let cum = 0;
@@ -94,25 +107,27 @@ export function RevenueRunway({ periodStart, periodEnd, byDayRevenue, fullPeriod
         projected: null,
       });
     }
-    // Projected series: starts at the final actual point, straight line to the projected finish.
-    if (!isPast && actualToDate >= 0 && remainingDays > 0) {
-      const pace = actualToDate / elapsedDays;
+    // Projected series: starts at the last actual point and ends exactly at the
+    // pipeline-backed projected finish, distributed evenly across remaining
+    // days. This is a visual shape; the endpoint is what matters.
+    if (!isPast && remainingDays > 0) {
       const startIdx = rows.findIndex((r) => r.date === todayKey);
       if (startIdx >= 0) {
+        const perDay = expectedAdditionalRevenue / remainingDays;
         for (let i = startIdx; i < rows.length; i++) {
           const step = i - startIdx;
-          rows[i].projected = actualToDate + pace * step;
+          rows[i].projected = actualToDate + perDay * step;
         }
       }
     }
     return { chartData: rows, actualToDate };
-  }, [days, byDayRevenue, fullPeriodTarget, currentDate, periodDays, elapsedDays, remainingDays, isPast, todayKey]);
+  }, [days, byDayRevenue, fullPeriodTarget, currentDate, periodDays, remainingDays, isPast, todayKey, expectedAdditionalRevenue]);
 
   const metrics: RunwayMetrics = useMemo(() => {
     const target = fullPeriodTarget ?? 0;
     const targetPaceToDate = target * (elapsedDays / periodDays);
     const currentDailyPace = actualToDate / elapsedDays;
-    const projectedFinish = actualToDate + currentDailyPace * remainingDays;
+    const projectedFinish = actualToDate + expectedAdditionalRevenue;
     const remainingRevenue = Math.max(0, target - actualToDate);
     const requiredDailyPace = remainingDays > 0 ? remainingRevenue / remainingDays : 0;
     return {
@@ -128,8 +143,13 @@ export function RevenueRunway({ periodStart, periodEnd, byDayRevenue, fullPeriod
       remainingDays,
       periodDays,
       isPast,
+      availableGoodLeads,
+      projectedAdditionalWins,
+      expectedAdditionalRevenue,
+      avgDealValue,
+      closeRate,
     };
-  }, [actualToDate, elapsedDays, remainingDays, periodDays, isPast, fullPeriodTarget]);
+  }, [actualToDate, elapsedDays, remainingDays, periodDays, isPast, fullPeriodTarget, availableGoodLeads, projectedAdditionalWins, expectedAdditionalRevenue, avgDealValue, closeRate]);
 
   useEffect(() => { onMetrics?.(metrics); }, [metrics, onMetrics]);
 
@@ -174,7 +194,17 @@ export function RevenueRunway({ periodStart, periodEnd, byDayRevenue, fullPeriod
         />
         <Kpi
           label="Projected finish"
-          value={hasTarget && !isPast ? currency.format(animProj) : hasTarget ? currency.format(metrics.actualToDate) : "—"}
+          value={!isPast ? currency.format(animProj) : currency.format(metrics.actualToDate)}
+          info={
+            <>
+              <div className="font-medium mb-1">Projected finish</div>
+              <div>Closed revenue plus the probability-weighted value of currently available good leads. Good leads use a {(closeRate * 100).toFixed(0)}% default close rate (configurable per organization). Closed, lost, disqualified, duplicate, spam, and inactive leads are excluded.</div>
+              <div className="mt-2 tabular-nums">
+                {currency.format(actualToDate)} closed<br />
+                + {currency.format(expectedAdditionalRevenue)} expected from {availableGoodLeads} good leads at {(closeRate * 100).toFixed(0)}%
+              </div>
+            </>
+          }
         />
       </div>
       {hasTarget && (
@@ -287,11 +317,22 @@ export function RevenueRunway({ periodStart, periodEnd, byDayRevenue, fullPeriod
           )}
         </ComposedChart>
       </ResponsiveContainer>
+
+      {/* Forecast inputs */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground tabular-nums border-t border-border pt-3">
+        <span><span className="text-foreground font-medium">{availableGoodLeads}</span> available good leads</span>
+        <span aria-hidden>·</span>
+        <span><span className="text-foreground font-medium">{(closeRate * 100).toFixed(0)}%</span> assumed close rate</span>
+        <span aria-hidden>·</span>
+        <span><span className="text-foreground font-medium">{Math.round(projectedAdditionalWins)}</span> projected wins</span>
+        <span aria-hidden>·</span>
+        <span><span className="text-foreground font-medium">{currency.format(avgDealValue)}</span> average deal value</span>
+      </div>
     </div>
   );
 }
 
-function Kpi({ label, value, tone = "muted" }: { label: string; value: string; tone?: "primary" | "muted" | "up" | "down" }) {
+function Kpi({ label, value, tone = "muted", info }: { label: string; value: string; tone?: "primary" | "muted" | "up" | "down"; info?: React.ReactNode }) {
   const color =
     tone === "primary" ? "text-foreground" :
     tone === "up" ? "text-emerald-500" :
@@ -299,7 +340,21 @@ function Kpi({ label, value, tone = "muted" }: { label: string; value: string; t
     "text-foreground";
   return (
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        {label}
+        {info && (
+          <TooltipProvider delayDuration={100}>
+            <UITooltip>
+              <TooltipTrigger asChild>
+                <button type="button" className="inline-flex text-muted-foreground/70 hover:text-foreground" aria-label="More info">
+                  <Info className="size-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-xs leading-relaxed">{info}</TooltipContent>
+            </UITooltip>
+          </TooltipProvider>
+        )}
+      </div>
       <div className={`text-lg font-semibold tabular-nums ${color}`}>{value}</div>
     </div>
   );

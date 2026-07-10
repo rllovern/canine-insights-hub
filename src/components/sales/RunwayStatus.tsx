@@ -3,22 +3,21 @@ import type { RunwayMetrics } from "./RevenueRunway";
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 function statusSentence(m: RunwayMetrics): string {
-  if (m.fullPeriodTarget <= 0) return "Set a revenue target to see runway insights.";
-  if (m.actualToDate === 0 && m.elapsedDays <= 1) return "Waiting on the first sale of the period.";
-  const projPctOfGoal = (m.projectedFinish / m.fullPeriodTarget) * 100;
-  if (m.isPast) {
-    return `Closed ${projPctOfGoal.toFixed(0)}% of the 90-day pace target for this period.`;
+  if (m.actualToDate === 0 && m.elapsedDays <= 1 && m.availableGoodLeads === 0) {
+    return "Waiting on the first sale of the period.";
   }
-  const varPct = Math.abs(m.variance / (m.targetPaceToDate || 1)) * 100;
-  const projDelta = (projPctOfGoal - 100);
-  if (m.variance >= 0 && projPctOfGoal >= 100) {
-    return `Revenue is ${currency.format(m.variance)} ahead of pace and is projected to finish ${projDelta.toFixed(1)}% above target.`;
-  }
-  if (m.variance >= 0 && projPctOfGoal < 100) {
-    return `Revenue is currently ahead of pace, but the projected finish falls short of the target by ${Math.abs(projDelta).toFixed(1)}%.`;
-  }
-  return `Revenue is ${currency.format(Math.abs(m.variance))} behind pace; hitting the target requires ${currency.format(m.requiredDailyPace)}/day for the remaining ${m.remainingDays} day${m.remainingDays === 1 ? "" : "s"}.`;
-  void varPct; // reserved for future copy variant
+  const paceClause = m.fullPeriodTarget > 0
+    ? (m.variance >= 0
+        ? `Revenue is ${currency.format(m.variance)} ahead of pace.`
+        : `Revenue is ${currency.format(Math.abs(m.variance))} behind pace.`)
+    : null;
+  const forecastClause = `Based on ${m.availableGoodLeads} available good lead${m.availableGoodLeads === 1 ? "" : "s"}, a ${(m.closeRate * 100).toFixed(0)}% assumed close rate, and a ${currency.format(m.avgDealValue)} average deal value, revenue is projected to finish at ${currency.format(m.projectedFinish)}.`;
+  const targetClause = m.fullPeriodTarget > 0
+    ? (m.projectedFinish >= m.fullPeriodTarget
+        ? `That is ${currency.format(m.projectedFinish - m.fullPeriodTarget)} above the ${currency.format(m.fullPeriodTarget)} target.`
+        : `That is ${currency.format(m.fullPeriodTarget - m.projectedFinish)} below the ${currency.format(m.fullPeriodTarget)} target.`)
+    : null;
+  return [paceClause, forecastClause, targetClause].filter(Boolean).join(" ");
 }
 
 export function RunwayStatus({ metrics }: { metrics: RunwayMetrics | null }) {
@@ -31,7 +30,7 @@ export function RunwayStatus({ metrics }: { metrics: RunwayMetrics | null }) {
     { label: "Remaining", value: currency.format(metrics.remainingRevenue) },
     { label: "Days left", value: String(metrics.remainingDays) },
     { label: "Required / day", value: currency.format(metrics.requiredDailyPace) },
-    { label: "Current / day", value: currency.format(metrics.currentDailyPace) },
+    { label: "Expected additional", value: currency.format(metrics.expectedAdditionalRevenue) },
   ];
   return (
     <div className="space-y-3">
