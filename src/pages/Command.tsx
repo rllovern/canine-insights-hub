@@ -1,7 +1,7 @@
 // NOTE: This page intentionally locks to a light palette to match the
 // approved PerformX Executive Overview spec. Dark-mode parity is a follow-up.
 import { format } from "date-fns";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -123,29 +123,31 @@ export default function Command() {
             formatValue={fmtNumber}
             sourceTable={isAds ? "daily_metrics.good_leads where ad_source = 'Google PPC'" : "daily_metrics.good_leads"}
           />
-          {ownerView ? (
-            <KpiSparkCard
-              label={isAds ? "PPC Sales" : "Sales (count)"}
-              value={fmtNumber(active.sales)}
-              current={active.sales} prior={activePrior.sales}
-              series={series("verified_sale")}
-              compareLabel={cmpLabel}
-              tip={TIPS.appointments}
-              formatValue={fmtNumber}
-              sourceTable="sheet_sales (Google Sheets import — not ad-attributed, so PPC and Business show the same total)"
-            />
-          ) : (
-            <KpiSparkCard
-              label={isAds ? "PPC Verified Sale" : "Verified Sale"}
-              value={fmtNumber(active.revenue)}
-              current={active.revenue} prior={activePrior.revenue}
-              series={series("verified_sale")}
-              compareLabel={cmpLabel}
-              tip={TIPS.appointments}
-              formatValue={fmtNumber}
-              sourceTable={isAds ? "daily_metrics.verified_sale where ad_source = 'Google PPC'" : "daily_metrics.verified_sale"}
-            />
-          )}
+          <Link to="/sales" className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+            {ownerView ? (
+              <KpiSparkCard
+                label={isAds ? "PPC Sales" : "Sales (count)"}
+                value={fmtNumber(active.sales)}
+                current={active.sales} prior={activePrior.sales}
+                series={series("verified_sale")}
+                compareLabel={cmpLabel}
+                tip={TIPS.appointments}
+                formatValue={fmtNumber}
+                sourceTable="sheet_sales (Google Sheets import — not ad-attributed, so PPC and Business show the same total)"
+              />
+            ) : (
+              <KpiSparkCard
+                label={isAds ? "PPC Verified Sale" : "Verified Sale"}
+                value={fmtNumber(active.revenue)}
+                current={active.revenue} prior={activePrior.revenue}
+                series={series("verified_sale")}
+                compareLabel={cmpLabel}
+                tip={TIPS.appointments}
+                formatValue={fmtNumber}
+                sourceTable={isAds ? "daily_metrics.verified_sale where ad_source = 'Google PPC'" : "daily_metrics.verified_sale"}
+              />
+            )}
+          </Link>
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown, Database, Sheet } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown, Database, Sheet, Receipt } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
@@ -23,6 +23,8 @@ type NavItem = {
 const COMMAND_ITEM: NavItem = { key: "command", to: "/command", label: "Command", icon: LayoutDashboard };
 
 const BUDGET_ITEM: NavItem = { key: "budget", to: "/budget", label: "Budget Pacing", icon: Wallet };
+
+const SALES_ITEM: NavItem = { key: "sales", to: "/sales", label: "Sale Records", icon: Receipt };
 
 const MONITOR_ITEMS: NavItem[] = [
   { key: "dashboard", to: "/dashboard", label: "PPC Overview", icon: BarChart3 },
@@ -275,6 +277,7 @@ export function Sidebar() {
         <GroupLabel>EXECUTIVE VIEW</GroupLabel>
         {renderItem(COMMAND_ITEM)}
         {isMinimal && renderItem(BUDGET_ITEM)}
+        {renderItem(SALES_ITEM)}
 
         {showRichNav && monitorItems.length > 0 && (
           <>
