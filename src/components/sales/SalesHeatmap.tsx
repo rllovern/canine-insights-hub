@@ -128,7 +128,7 @@ function useAggregate(from: Date, to: Date, rows: SaleRecord[]) {
       const key = format(d, "yyyy-MM-dd");
       map.set(key, { date: d, key, count: 0, revenue: 0, records: [] });
     }
-    for (const r of rows) {
+    for (const r of rows ?? []) {
       if (!r.won_at) continue;
       const key = r.won_at.slice(0, 10);
       const s = map.get(key);
