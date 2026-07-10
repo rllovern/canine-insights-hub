@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { useProperties } from "@/contexts/PropertyContext";
-import { useSaleRecords, useRevenueRunRate, deriveTargetPeriod, type SaleRecord } from "@/lib/verified-sales";
+import { useSaleRecords, useRevenueRunRate, deriveTargetPeriod, useAvailableGoodLeads, useAvgDealValue, useGoodLeadCloseRate, type SaleRecord } from "@/lib/verified-sales";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { SalesHeatmap, type HeatmapMetric } from "@/components/sales/SalesHeatmap";
 import { RevenueRunway, type RunwayMetrics } from "@/components/sales/RevenueRunway";
@@ -89,6 +89,14 @@ export default function SaleRecords() {
   const fullPeriodTarget = runRate && runRate > 0 ? runRate * periodDays : null;
   const [runwayMetrics, setRunwayMetrics] = useState<RunwayMetrics | null>(null);
 
+  const fromPeriod = toIsoDay(periodStart);
+  const toPeriodRaw = toIsoDay(periodEnd);
+  const todayIso = toIsoDay(new Date());
+  const toEligible = toPeriodRaw < todayIso ? toPeriodRaw : todayIso;
+  const { data: availableGoodLeads = 0 } = useAvailableGoodLeads(propertyIds, fromPeriod, toEligible);
+  const { data: avgDealValue = 0 } = useAvgDealValue(propertyIds);
+  const { data: closeRate = 0.3 } = useGoodLeadCloseRate(propertyIds);
+
   const download = () => {
     const csv = toCsv(rows, propertyName, showProperty);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -143,6 +151,9 @@ export default function SaleRecords() {
                 periodEnd={periodEnd}
                 byDayRevenue={byDayRevenue}
                 fullPeriodTarget={fullPeriodTarget}
+                availableGoodLeads={availableGoodLeads}
+                avgDealValue={avgDealValue}
+                closeRate={closeRate}
                 onMetrics={setRunwayMetrics}
               />
             )}
