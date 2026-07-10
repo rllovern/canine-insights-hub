@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { format, eachDayOfInterval } from "date-fns";
+import { format } from "date-fns";
 import { Download } from "lucide-react";
 import { PageHeader } from "@/components/data/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { useProperties } from "@/contexts/PropertyContext";
-import { useSaleRecords, useRevenueRunRate, type SaleRecord } from "@/lib/verified-sales";
+import {
+  useSaleRecords,
+  useRevenueTarget,
+  useRevenueForecast,
+  buildRunwaySeries,
+  type SaleRecord,
+} from "@/lib/verified-sales";
+import { resolveTargetPeriod } from "@/lib/dateRange";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { SalesHeatmap, type HeatmapMetric } from "@/components/sales/SalesHeatmap";
 import { RevenueRunway } from "@/components/sales/RevenueRunway";
@@ -51,7 +58,7 @@ function toCsv(rows: SaleRecord[], propertyName: (id: string) => string, showPro
 
 export default function SaleRecords() {
   const { propertyIds, label } = useScope();
-  const { range } = useDateRange();
+  const { range, rangePreset } = useDateRange();
   const { properties } = useProperties();
 
   const from = toIsoDay(range.from);
@@ -68,37 +75,69 @@ export default function SaleRecords() {
   const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
   const [heatmapMetric, setHeatmapMetric] = useState<HeatmapMetric>("wins");
 
-  const { runway } = useMemo(() => {
-    const byDay: Record<string, { count: number; revenue: number }> = {};
+  const targetPeriod = useMemo(
+    () => resolveTargetPeriod(rangePreset, range, new Date()),
+    [rangePreset, range],
+  );
+  const allPropertyCount = properties.length;
+
+  // Daily revenue map keyed by yyyy-MM-dd for the runway series.
+  const actualByDay = useMemo(() => {
+    const out: Record<string, number> = {};
     for (const r of rows) {
       if (!r.won_at) continue;
       const day = r.won_at.slice(0, 10);
-      const s = byDay[day] ?? { count: 0, revenue: 0 };
-      s.count += 1;
-      s.revenue += r.amount ?? 0;
-      byDay[day] = s;
+      out[day] = (out[day] ?? 0) + (r.amount ?? 0);
     }
-    const days = eachDayOfInterval({ start: range.from, end: range.to });
-    let cum = 0;
-    const runway = days.map((d) => {
-      const key = format(d, "yyyy-MM-dd");
-      cum += byDay[key]?.revenue ?? 0;
-      return { date: key, actual: cum, target: null as number | null };
-    });
-    return { runway };
-  }, [rows, range.from, range.to]);
+    return out;
+  }, [rows]);
 
-  const { data: runRate } = useRevenueRunRate(propertyIds);
-  const targetTotal = useMemo(() => {
-    if (!runRate || runRate <= 0 || runway.length === 0) return null;
-    return runRate * runway.length;
-  }, [runRate, runway.length]);
+  // Closed revenue to date over [targetPeriodStart, asOfDate]. Same source
+  // the runway "actual" series uses (invariant: latestActual === closedToDate).
+  const closedRevenueToDate = useMemo(() => {
+    if (!targetPeriod.asOfDate) return 0;
+    const startKey = toIsoDay(targetPeriod.targetPeriodStart);
+    const endKey = toIsoDay(targetPeriod.asOfDate);
+    let sum = 0;
+    for (const [day, v] of Object.entries(actualByDay)) {
+      if (day >= startKey && day <= endKey) sum += v;
+    }
+    return sum;
+  }, [actualByDay, targetPeriod.asOfDate, targetPeriod.targetPeriodStart]);
 
-  const runwayData = useMemo(() => {
-    if (!targetTotal || runway.length === 0) return runway;
-    const step = targetTotal / (runway.length - 1 || 1);
-    return runway.map((p, i) => ({ ...p, target: Math.round(step * i) }));
-  }, [runway, targetTotal]);
+  const targetRes = useRevenueTarget(propertyIds, allPropertyCount, {
+    targetPeriodStart: targetPeriod.targetPeriodStart,
+    targetPeriodEnd: targetPeriod.targetPeriodEnd,
+    targetPeriodDays: targetPeriod.targetPeriodDays,
+  });
+  const forecastRes = useRevenueForecast(
+    propertyIds,
+    allPropertyCount,
+    {
+      targetPeriodStart: targetPeriod.targetPeriodStart,
+      targetPeriodEnd: targetPeriod.targetPeriodEnd,
+      asOfDate: targetPeriod.asOfDate,
+      elapsedDays: targetPeriod.elapsedDays,
+      remainingDays: targetPeriod.remainingDays,
+    },
+    closedRevenueToDate,
+  );
+
+  const runwayData = useMemo(
+    () =>
+      buildRunwaySeries({
+        targetPeriodStart: targetPeriod.targetPeriodStart,
+        targetPeriodDays: targetPeriod.targetPeriodDays,
+        elapsedDays: targetPeriod.elapsedDays,
+        remainingDays: targetPeriod.remainingDays,
+        actualByDay,
+        target: targetRes.target,
+        closedRevenueToDate,
+        projectedFutureRevenue: forecastRes.projectedFutureRevenue,
+        hasForecast: forecastRes.forecastMethod === "ctm_future_good_lead_pace",
+      }),
+    [targetPeriod, actualByDay, targetRes.target, closedRevenueToDate, forecastRes.projectedFutureRevenue, forecastRes.forecastMethod],
+  );
 
   const download = () => {
     const csv = toCsv(rows, propertyName, showProperty);
@@ -123,7 +162,7 @@ export default function SaleRecords() {
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         <ChartCard
           title="Sales Cadence"
           subtitle={`${heatmapMetric === "wins" ? "Daily won deals" : "Daily closed revenue"} · ${format(range.from, "MMM d")} – ${format(range.to, "MMM d, yyyy")}`}
@@ -143,16 +182,20 @@ export default function SaleRecords() {
 
         <ChartCard
           title="Revenue Runway"
-          subtitle={targetTotal ? "Cumulative revenue vs. 90-day pace target" : "Cumulative revenue"}
+          subtitle={`${format(targetPeriod.targetPeriodStart, "MMM d")} – ${format(targetPeriod.targetPeriodEnd, "MMM d, yyyy")} · Fixed target from prior 30d CTM Good Leads`}
         >
-          {isLoading ? (
-            <Skeleton className="h-[280px] w-full" />
-          ) : total === 0 ? (
-            <div className="h-[220px] flex items-center justify-center text-sm text-muted-foreground">
-              No revenue in range.
-            </div>
+          {isLoading || targetRes.isLoading ? (
+            <Skeleton className="h-[300px] w-full" />
           ) : (
-            <RevenueRunway data={runwayData} actualTotal={total} targetTotal={targetTotal} />
+            <RevenueRunway
+              data={runwayData}
+              actualTotal={closedRevenueToDate}
+              target={targetRes}
+              forecast={forecastRes}
+              asOfDate={targetPeriod.asOfDate}
+              isCustomRange={targetPeriod.isCustomRange}
+              targetPeriodDays={targetPeriod.targetPeriodDays}
+            />
           )}
         </ChartCard>
       </div>

@@ -342,10 +342,10 @@ function MonthGrid({ month, from, to, byKey, metric, onOpen, thresholds, showTit
       {showTitle && (
         <div className="mb-2 text-sm font-semibold text-foreground">{format(month, "MMMM yyyy")}</div>
       )}
-      <div className="grid grid-cols-7 gap-2 text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
+      <div className="grid grid-cols-7 gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
         {WEEKDAY_LABELS.map((w) => <div key={w} className="px-1">{w}</div>)}
       </div>
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1.5">
         {days.map((d, i) => {
           const inMonth = d.getMonth() === monthNum;
           const inRange = isWithinInterval(d, { start: from, end: to });
@@ -356,7 +356,7 @@ function MonthGrid({ month, from, to, byKey, metric, onOpen, thresholds, showTit
             return (
               <div
                 key={i}
-                className="aspect-square rounded-lg border border-dashed border-border/50 bg-muted/10 text-muted-foreground/40 p-2 text-xs"
+                className="min-h-[64px] rounded-md border border-dashed border-border/50 bg-muted/10 text-muted-foreground/40 p-1.5 text-[11px]"
               >
                 {inMonth ? format(d, "d") : ""}
               </div>
@@ -378,17 +378,17 @@ function MonthGrid({ month, from, to, byKey, metric, onOpen, thresholds, showTit
                 stat={stat}
                 metric={metric}
                 onOpen={onOpen}
-                className={`aspect-square rounded-lg p-2 flex flex-col justify-between ${
+                className={`min-h-[64px] rounded-md p-1.5 flex flex-col justify-between ${
                   isZero
                     ? "border border-border bg-muted/20"
                     : `${BUCKET_BG[b]} ${b >= 3 ? "" : "border border-border/40"}`
                 }`}
               >
-                <div className={`text-xs font-medium ${b >= 3 && !isZero ? BUCKET_TEXT[b] : "text-muted-foreground"}`}>
+                <div className={`text-sm font-medium leading-none ${b >= 3 && !isZero ? BUCKET_TEXT[b] : "text-muted-foreground"}`}>
                   {format(d, "d")}
                 </div>
                 <div className={`text-right font-semibold tabular-nums leading-tight ${
-                  isZero ? "text-muted-foreground/60 text-xs" : `${BUCKET_TEXT[b]} text-sm`
+                  isZero ? "text-muted-foreground/60 text-[11px]" : `${BUCKET_TEXT[b]} text-xs`
                 }`}>
                   {isZero ? "0" : (
                     <>

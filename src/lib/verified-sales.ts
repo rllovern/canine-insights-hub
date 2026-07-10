@@ -153,23 +153,402 @@ export function useSaleRecords(
   });
 }
 
-/**
- * Trailing 90-day daily revenue run-rate for the given scope, used to derive
- * a pace target on the Revenue Runway chart. Returns dollars-per-day.
- */
-export function useRevenueRunRate(propertyIds: string[] | null, enabled = true) {
+// ─── Revenue Runway: CTM Good Lead + avg-deal-value hooks ────────────────
+//
+// Fixed target = prior-30-day CTM Good Lead baseline × 30% × avg-deal-value.
+// Forecast     = closedRevenueToDate + (current-period Good Lead pace ×
+//                remainingDays × 30% × avg-deal-value).
+// Target and forecast fail independently.
+
+const BENCHMARK_CLOSE_RATE = 0.3;
+
+export type CtmCoverageStatus = "ok" | "confirmed_zero" | "partial_coverage" | "missing_data";
+export type DealValueStatus = "verified_90d" | "expanded_180d" | "no_deal_value";
+
+export interface CtmCoverage {
+  total: number;
+  dailyAvg: number;
+  coveredDays: number;
+  expectedDays: number;
+  coveredPropertyDays: number;
+  expectedPropertyDays: number;
+  status: CtmCoverageStatus;
+}
+
+function isoDay(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysUtc(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+async function fetchCtmCoverage(
+  propertyIds: string[] | null,
+  allPropertyCount: number,
+  fromDay: string,
+  toDay: string,
+  expectedDays: number,
+): Promise<CtmCoverage> {
+  const scopeCount = propertyIds ? propertyIds.length : allPropertyCount;
+  const empty: CtmCoverage = {
+    total: 0,
+    dailyAvg: 0,
+    coveredDays: 0,
+    expectedDays,
+    coveredPropertyDays: 0,
+    expectedPropertyDays: expectedDays * scopeCount,
+    status: "missing_data",
+  };
+  if (scopeCount === 0 || expectedDays <= 0) return empty;
+
+  let q = supabase
+    .from("daily_metrics")
+    .select("property_id, date, good_leads")
+    .gte("date", fromDay)
+    .lte("date", toDay);
+  if (propertyIds) q = q.in("property_id", propertyIds);
+  const { data, error } = await q;
+  if (error || !data) return empty;
+
+  let total = 0;
+  const dayKeys = new Set<string>();
+  const pairKeys = new Set<string>();
+  for (const r of data as Array<{ property_id: string; date: string; good_leads: number | null }>) {
+    total += r.good_leads ?? 0;
+    dayKeys.add(r.date);
+    pairKeys.add(`${r.property_id}:${r.date}`);
+  }
+  const coveredPropertyDays = pairKeys.size;
+  const expectedPropertyDays = expectedDays * scopeCount;
+  let status: CtmCoverageStatus;
+  if (coveredPropertyDays === 0) status = "missing_data";
+  else if (coveredPropertyDays < expectedPropertyDays) status = "partial_coverage";
+  else if (total === 0) status = "confirmed_zero";
+  else status = "ok";
+
+  return {
+    total,
+    dailyAvg: total / expectedDays,
+    coveredDays: dayKeys.size,
+    expectedDays,
+    coveredPropertyDays,
+    expectedPropertyDays,
+    status,
+  };
+}
+
+export function useCtmGoodLeadBaseline(
+  propertyIds: string[] | null,
+  allPropertyCount: number,
+  targetPeriodStart: Date | null,
+  enabled = true,
+) {
+  const from = targetPeriodStart ? isoDay(addDaysUtc(targetPeriodStart, -30)) : null;
+  const to = targetPeriodStart ? isoDay(addDaysUtc(targetPeriodStart, -1)) : null;
   return useQuery({
-    enabled,
-    queryKey: ["revenue-run-rate-90d", propertyIds?.join(",") ?? "all"],
-    queryFn: async () => {
-      const end = new Date();
-      const start = new Date();
-      start.setDate(end.getDate() - 90);
-      const iso = (d: Date) => d.toISOString().slice(0, 10);
-      const rows = await fetchSaleRecords(propertyIds, iso(start), iso(end));
-      const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
-      return total / 90;
+    enabled: enabled && !!from && !!to,
+    queryKey: ["ctm-good-lead-baseline", propertyIds?.join(",") ?? "all", allPropertyCount, from, to],
+    queryFn: () => fetchCtmCoverage(propertyIds, allPropertyCount, from!, to!, 30),
+  });
+}
+
+export function useCtmGoodLeadsToDate(
+  propertyIds: string[] | null,
+  allPropertyCount: number,
+  targetPeriodStart: Date | null,
+  asOfDate: Date | null,
+  enabled = true,
+) {
+  const from = targetPeriodStart ? isoDay(targetPeriodStart) : null;
+  const to = asOfDate ? isoDay(asOfDate) : null;
+  const expectedDays = from && to
+    ? Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1)
+    : 0;
+  return useQuery({
+    // Skip entirely when the period hasn't started (asOfDate == null).
+    enabled: enabled && !!from && !!to && expectedDays > 0,
+    queryKey: ["ctm-good-leads-to-date", propertyIds?.join(",") ?? "all", allPropertyCount, from, to],
+    queryFn: () => fetchCtmCoverage(propertyIds, allPropertyCount, from!, to!, expectedDays),
+  });
+}
+
+export interface AvgDealValue {
+  value: number | null;
+  sampleSize: number;
+  status: DealValueStatus;
+}
+
+async function fetchWonDealMean(
+  propertyIds: string[] | null,
+  fromIso: string,
+  toIso: string,
+): Promise<{ mean: number; n: number }> {
+  if (propertyIds && propertyIds.length === 0) return { mean: 0, n: 0 };
+  let q = supabase
+    .from("ghl_opportunities")
+    .select("monetary_value, raw")
+    .eq("status", "won")
+    .not("won_at", "is", null)
+    .gt("monetary_value", 0)
+    .gte("won_at", fromIso)
+    .lte("won_at", toIso);
+  if (propertyIds) q = q.in("property_id", propertyIds);
+  const { data, error } = await q;
+  if (error || !data) return { mean: 0, n: 0 };
+  let sum = 0;
+  let n = 0;
+  for (const r of data as Array<{ monetary_value: number | string | null; raw: Record<string, unknown> | null }>) {
+    // Explicit exclusions only — never invent filters that aren't reliably tracked.
+    const raw = r.raw ?? {};
+    if (raw["refunded"]) continue;
+    if (raw["cancelled"]) continue;
+    if (raw["duplicate_group_id"]) continue;
+    const v = r.monetary_value == null ? 0 : Number(r.monetary_value);
+    if (!Number.isFinite(v) || v <= 0) continue;
+    sum += v;
+    n += 1;
+  }
+  return { mean: n > 0 ? sum / n : 0, n };
+}
+
+export function useAvgDealValue(
+  propertyIds: string[] | null,
+  anchorDate: Date | null,
+  enabled = true,
+) {
+  const anchor = anchorDate ? isoDay(anchorDate) : null;
+  return useQuery({
+    enabled: enabled && !!anchor,
+    queryKey: ["avg-deal-value", propertyIds?.join(",") ?? "all", anchor],
+    queryFn: async (): Promise<AvgDealValue> => {
+      const end = new Date(anchor!);
+      end.setDate(end.getDate() - 1);
+      const endIso = end.toISOString();
+      const start90 = new Date(end);
+      start90.setDate(end.getDate() - 89);
+      const s90 = await fetchWonDealMean(propertyIds, start90.toISOString(), endIso);
+      if (s90.n >= 20) return { value: s90.mean, sampleSize: s90.n, status: "verified_90d" };
+      const start180 = new Date(end);
+      start180.setDate(end.getDate() - 179);
+      const s180 = await fetchWonDealMean(propertyIds, start180.toISOString(), endIso);
+      if (s180.n >= 20) return { value: s180.mean, sampleSize: s180.n, status: "expanded_180d" };
+      return { value: null, sampleSize: s180.n, status: "no_deal_value" };
     },
     staleTime: 5 * 60 * 1000,
   });
+}
+
+export type TargetDataStatus =
+  | "verified_90d"
+  | "expanded_180d"
+  | "no_good_lead_baseline"
+  | "no_deal_value";
+
+export interface RevenueTargetResult {
+  target: number | null;
+  benchmarkCloseRate: number;
+  targetPeriodDays: number;
+  baselineCtmGoodLeads30d: number;
+  baselineDailyCtmGoodLeads: number;
+  baselineCoverage: CtmCoverage | null;
+  expectedCtmGoodLeadsForPeriod: number;
+  avgDealValue: number | null;
+  avgDealSampleSize: number;
+  targetDataStatus: TargetDataStatus;
+  isLoading: boolean;
+}
+
+export function useRevenueTarget(
+  propertyIds: string[] | null,
+  allPropertyCount: number,
+  period: { targetPeriodStart: Date; targetPeriodEnd: Date; targetPeriodDays: number },
+): RevenueTargetResult {
+  const baseline = useCtmGoodLeadBaseline(propertyIds, allPropertyCount, period.targetPeriodStart);
+  const dv = useAvgDealValue(propertyIds, period.targetPeriodStart);
+  const isLoading = baseline.isLoading || dv.isLoading;
+
+  const cov = baseline.data ?? null;
+  const dvVal = dv.data?.value ?? null;
+  const dvStatus = dv.data?.status ?? "no_deal_value";
+
+  const baselineOk = cov && (cov.status === "ok" || cov.status === "confirmed_zero");
+  const baselineDaily = baselineOk ? cov!.total / 30 : 0;
+  const expected = baselineDaily * period.targetPeriodDays;
+
+  let target: number | null = null;
+  let status: TargetDataStatus;
+  if (!baselineOk) {
+    status = "no_good_lead_baseline";
+  } else if (dvVal == null) {
+    status = "no_deal_value";
+  } else {
+    status = dvStatus === "expanded_180d" ? "expanded_180d" : "verified_90d";
+    target = expected * BENCHMARK_CLOSE_RATE * dvVal;
+  }
+
+  return {
+    target,
+    benchmarkCloseRate: BENCHMARK_CLOSE_RATE,
+    targetPeriodDays: period.targetPeriodDays,
+    baselineCtmGoodLeads30d: cov?.total ?? 0,
+    baselineDailyCtmGoodLeads: baselineDaily,
+    baselineCoverage: cov,
+    expectedCtmGoodLeadsForPeriod: expected,
+    avgDealValue: dvVal,
+    avgDealSampleSize: dv.data?.sampleSize ?? 0,
+    targetDataStatus: status,
+    isLoading,
+  };
+}
+
+export type ForecastDataStatus =
+  | "verified_90d"
+  | "expanded_180d"
+  | "no_deal_value"
+  | "no_elapsed_period"
+  | "missing_current_ctm"
+  | "unavailable";
+
+export interface RevenueForecastResult {
+  projectedFinish: number | null;
+  forecastMethod: "ctm_future_good_lead_pace" | "unavailable";
+  closedRevenueToDate: number;
+  ctmGoodLeadsToDate: number;
+  currentPeriodCoverage: CtmCoverage | null;
+  elapsedDays: number;
+  remainingDays: number;
+  currentGoodLeadDailyRate: number;
+  projectedFutureGoodLeads: number;
+  projectedFutureWins: number;
+  projectedFutureRevenue: number;
+  benchmarkCloseRate: number;
+  avgDealValue: number | null;
+  forecastDataStatus: ForecastDataStatus;
+  isLoading: boolean;
+}
+
+export function useRevenueForecast(
+  propertyIds: string[] | null,
+  allPropertyCount: number,
+  period: { targetPeriodStart: Date; targetPeriodEnd: Date; asOfDate: Date | null; elapsedDays: number; remainingDays: number },
+  closedRevenueToDate: number,
+): RevenueForecastResult {
+  const current = useCtmGoodLeadsToDate(
+    propertyIds,
+    allPropertyCount,
+    period.targetPeriodStart,
+    period.asOfDate,
+  );
+  const dv = useAvgDealValue(propertyIds, period.targetPeriodStart);
+  const isLoading = current.isLoading || dv.isLoading;
+
+  const cov = current.data ?? null;
+  const dvVal = dv.data?.value ?? null;
+  const dvStatus = dv.data?.status ?? "no_deal_value";
+
+  const base = {
+    closedRevenueToDate,
+    ctmGoodLeadsToDate: cov?.total ?? 0,
+    currentPeriodCoverage: cov,
+    elapsedDays: period.elapsedDays,
+    remainingDays: period.remainingDays,
+    benchmarkCloseRate: BENCHMARK_CLOSE_RATE,
+    avgDealValue: dvVal,
+    currentGoodLeadDailyRate: 0,
+    projectedFutureGoodLeads: 0,
+    projectedFutureWins: 0,
+    projectedFutureRevenue: 0,
+  };
+
+  if (period.asOfDate == null || period.elapsedDays <= 0) {
+    return {
+      ...base,
+      projectedFinish: null,
+      forecastMethod: "unavailable",
+      forecastDataStatus: "no_elapsed_period",
+      isLoading,
+    };
+  }
+  if (dvVal == null) {
+    return { ...base, projectedFinish: null, forecastMethod: "unavailable", forecastDataStatus: "no_deal_value", isLoading };
+  }
+  const covOk = cov && (cov.status === "ok" || cov.status === "confirmed_zero");
+  if (!covOk) {
+    return { ...base, projectedFinish: null, forecastMethod: "unavailable", forecastDataStatus: "missing_current_ctm", isLoading };
+  }
+
+  const rate = cov!.total / period.elapsedDays;
+  const futureGL = rate * period.remainingDays;
+  const futureWins = futureGL * BENCHMARK_CLOSE_RATE;
+  const futureRev = futureWins * dvVal;
+  const projectedFinish = Math.max(closedRevenueToDate, closedRevenueToDate + futureRev);
+  const status: ForecastDataStatus = dvStatus === "expanded_180d" ? "expanded_180d" : "verified_90d";
+
+  return {
+    ...base,
+    currentGoodLeadDailyRate: rate,
+    projectedFutureGoodLeads: futureGL,
+    projectedFutureWins: futureWins,
+    projectedFutureRevenue: futureRev,
+    projectedFinish,
+    forecastMethod: "ctm_future_good_lead_pace",
+    forecastDataStatus: status,
+    isLoading,
+  };
+}
+
+// ─── Pure series builder (used by chart + tests) ─────────────────────────
+export interface RunwaySeriesPoint {
+  date: string;
+  actual: number | null;
+  target: number | null;
+  projection: number | null;
+}
+
+export function buildRunwaySeries(args: {
+  targetPeriodStart: Date;
+  targetPeriodDays: number;
+  elapsedDays: number;
+  remainingDays: number;
+  actualByDay: Record<string, number>; // daily revenue keyed by yyyy-MM-dd
+  target: number | null;
+  closedRevenueToDate: number;
+  projectedFutureRevenue: number;
+  hasForecast: boolean;
+}): RunwaySeriesPoint[] {
+  const {
+    targetPeriodStart, targetPeriodDays, elapsedDays, remainingDays,
+    actualByDay, target, closedRevenueToDate, projectedFutureRevenue, hasForecast,
+  } = args;
+  const out: RunwaySeriesPoint[] = [];
+  let cum = 0;
+  for (let i = 0; i < targetPeriodDays; i++) {
+    const d = new Date(targetPeriodStart);
+    d.setDate(d.getDate() + i);
+    const key = isoDay(d);
+    let actual: number | null = null;
+    if (i < elapsedDays) {
+      cum += actualByDay[key] ?? 0;
+      actual = cum;
+    }
+    const targetVal = target == null ? null : target * ((i + 1) / targetPeriodDays);
+
+    let projection: number | null = null;
+    if (hasForecast && elapsedDays > 0 && remainingDays > 0) {
+      if (i === elapsedDays - 1) {
+        projection = closedRevenueToDate;
+      } else if (i >= elapsedDays) {
+        const progress = (i - (elapsedDays - 1)) / remainingDays;
+        projection = closedRevenueToDate + projectedFutureRevenue * progress;
+      }
+    }
+    out.push({ date: key, actual, target: targetVal, projection });
+  }
+  return out;
 }
