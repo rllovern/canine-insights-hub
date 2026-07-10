@@ -173,3 +173,17 @@ export function useRevenueRunRate(propertyIds: string[] | null, enabled = true) 
     staleTime: 5 * 60 * 1000,
   });
 }
+
+/**
+ * The Revenue Runway target period. For `thisMonth` we extend the runway to
+ * the last day of the current calendar month so the projection line has room
+ * to render. For every other preset we use the visible range as-is.
+ */
+export function deriveTargetPeriod(range: { from: Date; to: Date }, preset: string): { periodStart: Date; periodEnd: Date } {
+  if (preset === "thisMonth") {
+    const start = new Date(range.from.getFullYear(), range.from.getMonth(), 1, 0, 0, 0, 0);
+    const end = new Date(range.from.getFullYear(), range.from.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { periodStart: start, periodEnd: end };
+  }
+  return { periodStart: range.from, periodEnd: range.to };
+}
