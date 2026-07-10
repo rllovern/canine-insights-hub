@@ -1,103 +1,109 @@
-## Rebuild: Revenue Runway
+## Goal
 
-Turn the current chart into an actual runway — actual to date, target pace across the full period, projected finish extending into the future — with plain-language KPIs and no dead whitespace.
+Replace the straight-line daily-pace forecast in Revenue Runway with a pipeline-backed forecast driven by currently available good leads, an assumed close rate (default 30%, org-configurable), and a trailing 90-day average deal value.
 
-### Assumption (target period)
-There is no configured revenue goal in the database, and the selected date range already clips `to` at today for presets like "This month". So the runway derives its own **target period** from the active preset instead of reusing `range.to` verbatim:
+## Data reality (what's actually available)
 
-| Selected preset | Runway target period |
-|---|---|
-| Today / Yesterday / thisWeek / lastWeek | The full 7-day week containing the range |
-| last7 / last14 / last30 | Rolling window of that length ending on `range.to` |
-| thisMonth | 1st → last day of the current calendar month |
-| lastMonth | Full prior month (period entirely in the past) |
-| allTime / custom | Uses `range.from` → `range.to` as-is |
+- `daily_metrics.good_leads` is an aggregated daily count (from call scoring), not per-opportunity records. There is no per-lead `expectedDealValue` in this system today.
+- `ghl_opportunities` gives us won deals with `monetary_value` and `won_at` — that's what powers `useRevenueRunRate` today.
+- There is no existing "open opportunity" concept keyed to the good-lead count.
 
-`currentDate` = min(today, `periodEnd`). Everything to the left of it is actual; everything to the right is projected.
+Consequences:
+- **Tier 1 (per-lead opportunity value)**: not available yet. Ship the fallback path.
+- **Tier 3 (org-wide average deal value)**: use trailing 90-day won revenue ÷ won deal count.
+- **Service-specific averages (Tier 2)**: out of scope for v1.
+- **Eligible good leads**: sum of `good_leads` over the eligibility window, minus wins already counted as closed revenue in the same period (dedup so a good lead that already closed isn't double-counted).
 
-**Goal amount**: trailing-90-day daily revenue run-rate (already fetched by `useRevenueRunRate`) × days in the target period. Labeled explicitly as a 90-day pace goal so it doesn't look like a hand-set target.
+The plan documents this limitation clearly in the UI ("based on aggregated good-lead counts; per-opportunity values coming later").
 
-### Sync with Sales Cadence (fixes #1, #9, #10)
-- Actual series starts at the first day of the target period (Jul 1) and ends at `currentDate` (Jul 10). No Jun 30 phantom baseline — the y-axis just starts at 0.
-- All KPI numbers on both cards use the same day-set as the Cadence heatmap for the shared window.
-- Timezone: keep the current `won_at.slice(0,10)` day bucketing; no change.
-
-### Chart series (fixes #4, #5, #11)
-Three explicit series, plotted on one axis (Recharts `ComposedChart`):
-1. **Actual cumulative revenue** — solid 2.4px `--primary` line, subtle 15% gradient fill only under the actual segment (not extended into the future). Highest emphasis.
-2. **Target pace** — dashed 1.5px `--muted-foreground` line spanning the full period, linear from $0 to full-period goal.
-3. **Projected finish** — dotted 2px `--primary` line at 60% opacity, starts exactly at the final actual point, ends at `actual + currentDailyPace × remainingDays`. Rendered only when `today < periodEnd`.
-
-**Endpoint labels** (direct, not a legend) — small chips anchored to the right end of each visible series inside the chart body: `Actual $38,360`, `Target pace $37,608`, `Projected $115K`. If two labels would overlap within ~14px, stack them vertically.
-
-**Reference marks**:
-- Vertical dashed marker at `currentDate` with a small "Today" tag on top.
-- Vertical tick at `periodEnd` labeled with the period-end date.
-
-### KPI row (fixes #3, #6, #7, #8)
-Replace the four current tiles with plain-language labels:
-
-`Closed revenue $38,360` · `Target pace today $37,608` · `Ahead of pace +$752` (green ▲ / red ▼) · `Projected finish $115,080`
-
-Secondary line under the row (small, muted): `102% of target pace · 90-day target: $115,000 · Day 10 of 31`.
-
-### Runway status block (fixes #7, #12)
-New compact block below the chart, replacing the current empty whitespace:
-
-`$76,640 remaining · 21 days left · $3,650/day required · $3,836/day current pace`
-
-Followed by one dynamically-composed status sentence, e.g.:
-- Ahead + projected above goal: *"Revenue is $752 ahead of pace and is projected to finish 2.1% above the 90-day target."*
-- Ahead + projected below goal: *"Revenue is currently ahead of pace, but the projected finish falls short of the 90-day target by 4%."*
-- Behind + catchable: *"Revenue is $2,180 behind pace; hitting the target requires $4,050/day for the remaining 21 days."*
-- Period fully in past: *"Closed 96% of the trailing-90d pace target for this period."*
-
-Sentence generator lives inside `RevenueRunway.tsx`.
-
-### Card height & layout (fixes #3, #4, #14)
-Per the user's recommended composition, split the right column into two stacked cards so nothing is padded to match the calendar:
+## New forecast formula (v1)
 
 ```
-┌──────────────────────────┬──────────────────────────┐
-│                          │ Revenue Runway           │
-│ Sales Cadence            │ (chart + KPIs)           │
-│                          ├──────────────────────────┤
-│ Monthly calendar         │ Runway status            │
-│                          │ (remaining / req / proj) │
-└──────────────────────────┴──────────────────────────┘
+availableGoodLeads   = sum(daily_metrics.good_leads over eligibility window, scoped by filters)
+                       − wonDealsInPeriod   (dedup against closedRevenue)
+avgDealValue         = trailing90dWonRevenue / trailing90dWonCount
+closeRate            = org setting (default 0.30)
+
+projectedAdditionalWins    = availableGoodLeads × closeRate
+expectedAdditionalRevenue  = projectedAdditionalWins × avgDealValue
+projectedFinish            = closedRevenueToDate + expectedAdditionalRevenue
 ```
 
-- **Revenue Runway card** — height determined by content (~440–500px on desktop). Chart body reserved height **260px** (up from 180). KPI row above, endpoint-labeled chart middle, status block below.
-- **Runway Status card** — a shorter sibling under it with the operational metrics and forecast sentence. Renders even when there's no revenue yet (shows "Waiting on first sale of the period").
-- No forced equal-height with the left card. `ChartCard` doesn't enforce a height, so the change is entirely in `SaleRecords.tsx` layout (`grid-cols-2` with `lg:items-start` and stacking on the right).
+Eligibility window (v1):
+- Good leads counted in `daily_metrics` between `periodStart` and `min(today, periodEnd)`.
+- No lead-age cutoff in v1 (the daily aggregate has no per-lead activity signal). Documented as a v2 refinement.
 
-### Tooltip (fixes #13)
-- Past dates: `Revenue closed that day · Cumulative revenue · Target pace · Variance to pace`.
-- Future dates: header prefixed with `Projected` and only projected + target-pace lines shown.
-- Actual and projected never appear on the same tooltip line without their labels.
+Deduplication:
+- Subtract won deals in the same period from `availableGoodLeads` so closed-won good leads don't inflate the open forecast.
 
-### Data model (calculated once, memoized)
+## Configurable close rate
+
+New `property_settings` (existing table) key: `good_lead_close_rate` (numeric 0–1, default 0.30). One row per property; scope aggregate uses the min/avg across selected properties (v1: simple average, weighted by good-lead volume).
+
+- Migration: no new table. Read via a small helper `useGoodLeadCloseRate(propertyIds)` that pulls `property_settings` rows and defaults missing ones to `0.30`.
+- Admin UI to edit the rate is out of scope for this task (call out as follow-up).
+
+## Files to change
+
+**`src/lib/verified-sales.ts`**
+- Add `useAvgDealValue(propertyIds)` — trailing 90d won revenue / won count from `ghl_opportunities`.
+- Add `useAvailableGoodLeads(propertyIds, from, to)` — sums `daily_metrics.good_leads` filtered by scope, then subtracts wins in the same range.
+- Add `useGoodLeadCloseRate(propertyIds)` — reads `property_settings`, defaults 0.30.
+
+**`src/components/sales/RevenueRunway.tsx` (rewrite the forecast section)**
+- New props: `availableGoodLeads`, `avgDealValue`, `closeRate`.
+- Compute `expectedAdditionalRevenue`, `projectedFinish`, `projectedAdditionalWins` from those inputs (not from `currentDailyPace`).
+- `currentDailyPace` stays only as an informational metric — never used to draw the projected line or the projected-finish KPI.
+- Chart:
+  - `actual` series unchanged.
+  - `target pace` unchanged.
+  - `projected` series: starts at the last actual point, ends exactly at `projectedFinish` on `periodEnd`, evenly distributed across remaining days (v1). Endpoint label reads `Projected {projectedFinish}`.
+- KPI row:
+  - Closed revenue
+  - Target pace today
+  - Ahead/Behind pace
+  - Projected finish — with an info icon whose tooltip explains the formula
+- New compact "forecast inputs" row below the chart:
+  `{N} available good leads · {rate}% assumed close rate · {wins} projected wins · {avgDeal} average deal value`
+- Extend `RunwayMetrics` to include: `availableGoodLeads`, `projectedAdditionalWins`, `expectedAdditionalRevenue`, `avgDealValue`, `closeRate`.
+
+**`src/components/sales/RunwayStatus.tsx`**
+- Rewrite the status sentence to use the pipeline-backed projection:
+  > "Revenue is $461 behind pace. Based on 40 available good leads, a 30% assumed close rate, and a $3,800 average deal value, revenue is projected to finish at $83,960 — $36,385 below the $120,345 target."
+- Remove any language claiming the current daily pace will produce the forecast.
+
+**`src/pages/SaleRecords.tsx`**
+- Wire the new hooks (`useAvailableGoodLeads`, `useAvgDealValue`, `useGoodLeadCloseRate`) and pass results into `<RevenueRunway />`.
+
+## Tooltip / methodology copy
+
+Info icon next to "Projected Finish":
+> Projected finish = revenue already closed + (available good leads × close rate × average deal value). Available good leads exclude deals already won in this period. Average deal value is the trailing 90-day won-revenue average. The close rate defaults to 30% and can be adjusted per organization.
+
+Projected endpoint tooltip:
 ```
-fullPeriodTarget        = runRate90d * periodDays
-elapsedDays             = min(today, periodEnd) - periodStart + 1
-remainingDays           = max(0, periodEnd - today)
-actualRevenueToDate     = sum(byDay from start to currentDate)
-targetPaceToDate        = fullPeriodTarget * elapsedDays / periodDays
-varianceToPace          = actualRevenueToDate - targetPaceToDate
-currentDailyPace        = actualRevenueToDate / elapsedDays
-projectedPeriodFinish   = actualRevenueToDate + currentDailyPace * remainingDays
-remainingRevenue        = max(0, fullPeriodTarget - actualRevenueToDate)
-requiredDailyPace       = remainingDays > 0 ? remainingRevenue / remainingDays : 0
+Projected finish: $83,960
+Closed revenue:   $38,360
+Available good leads: 40
+Assumed close rate:   30%
+Projected additional wins: 12
+Average deal value:   $3,800
+Expected additional revenue: $45,600
 ```
 
-### Files touched
-- `src/components/sales/RevenueRunway.tsx` — full rewrite. Accepts `periodStart`, `periodEnd`, `byDayRevenue: Record<string,number>`, `fullPeriodTarget`, and renders KPI row + chart + endpoint labels + reference lines. Internally handles projection series and status sentence.
-- `src/components/sales/RunwayStatus.tsx` — new small component for the stacked "Runway Status" card (metrics grid + sentence).
-- `src/lib/verified-sales.ts` — new helper `deriveTargetPeriod(range, preset)` that returns `{ periodStart, periodEnd }` per the table above; export from module.
-- `src/pages/SaleRecords.tsx` — compute per-day revenue for the *target period* window (fetch is already scoped by `useSaleRecords`; extend to the target period when it exceeds `range.to`, which only happens for `thisMonth`). Restructure grid so the right column stacks Runway + Runway Status; drop the fixed skeleton height on the runway card.
-- `src/contexts/DateRangeContext` — no change (target period is derived, preset already available via `rangePreset`).
+## Out of scope (call out as follow-ups)
 
-### Out of scope
-- Configurable / user-editable revenue goals (still derived from trailing-90d run rate).
-- Timezone controls, revenue-definition switcher, filter surface (already inherited from the page).
-- Changes to Sales Cadence, table, or CSV export.
+- Per-opportunity expected value (Tier 1) and service-specific averages (Tier 2) — require schema for open pipeline value.
+- Lead-age exclusion / probability decay — needs per-lead activity, not the daily aggregate.
+- Admin UI to edit `good_lead_close_rate`.
+- Trailing actual close-rate comparison ("Forecast 30% · Actual 27%").
+- Filters beyond property scope (owner/team/salesperson) — the app's current scope is property-based; extending to owner/team requires new context.
+
+## Acceptance
+
+- Projected Finish equals `closedRevenue + availableGoodLeads × closeRate × avgDealValue`.
+- Chart's projected endpoint matches that number exactly.
+- Won deals in the period are subtracted from `availableGoodLeads` so nothing is double-counted.
+- Close rate reads from `property_settings.good_lead_close_rate` and defaults to 30%.
+- Forecast inputs row and methodology tooltip render the exact numbers used.
+- No UI copy claims daily-pace extrapolation is the forecast.
