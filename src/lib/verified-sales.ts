@@ -152,3 +152,24 @@ export function useSaleRecords(
     queryFn: () => fetchSaleRecords(propertyIds, from, to),
   });
 }
+
+/**
+ * Trailing 90-day daily revenue run-rate for the given scope, used to derive
+ * a pace target on the Revenue Runway chart. Returns dollars-per-day.
+ */
+export function useRevenueRunRate(propertyIds: string[] | null, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ["revenue-run-rate-90d", propertyIds?.join(",") ?? "all"],
+    queryFn: async () => {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(end.getDate() - 90);
+      const iso = (d: Date) => d.toISOString().slice(0, 10);
+      const rows = await fetchSaleRecords(propertyIds, iso(start), iso(end));
+      const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
+      return total / 90;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
