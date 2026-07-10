@@ -58,3 +58,97 @@ export function useVerifiedSalesByDate(
     queryFn: () => fetchVerifiedSalesByDate(propertyIds, from, to),
   });
 }
+
+export interface SaleRecord {
+  opportunity_id: string;
+  property_id: string;
+  contact_id: string | null;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  created_at: string | null;
+  won_at: string | null;
+  amount: number | null;
+}
+
+export async function fetchSaleRecords(
+  propertyIds: string[] | null,
+  from: string,
+  to: string,
+): Promise<SaleRecord[]> {
+  if (propertyIds && propertyIds.length === 0) return [];
+
+  let q = supabase
+    .from("ghl_opportunities")
+    .select("id, property_id, contact_id, ghl_created_at, won_at, monetary_value, raw")
+    .eq("status", "won")
+    .gte("won_at", `${from}T00:00:00.000Z`)
+    .lte("won_at", `${to}T23:59:59.999Z`)
+    .order("won_at", { ascending: false });
+  if (propertyIds) q = q.in("property_id", propertyIds);
+
+  const { data: opps, error } = await q;
+  if (error || !opps) return [];
+
+  // Hydrate contact info in batches, scoped by property_id for RLS safety.
+  const byProp = new Map<string, Set<string>>();
+  for (const o of opps as Array<{ property_id: string; contact_id: string | null }>) {
+    if (!o.contact_id) continue;
+    if (!byProp.has(o.property_id)) byProp.set(o.property_id, new Set());
+    byProp.get(o.property_id)!.add(o.contact_id);
+  }
+
+  const contactMap = new Map<string, { first_name: string | null; last_name: string | null; email: string | null; phone: string | null }>();
+  await Promise.all(
+    Array.from(byProp.entries()).map(async ([pid, ids]) => {
+      const idList = Array.from(ids);
+      if (idList.length === 0) return;
+      const { data } = await supabase
+        .from("ghl_contacts")
+        .select("ghl_contact_id, first_name, last_name, email, phone")
+        .eq("property_id", pid)
+        .in("ghl_contact_id", idList);
+      for (const c of (data ?? []) as Array<{ ghl_contact_id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null }>) {
+        contactMap.set(`${pid}:${c.ghl_contact_id}`, c);
+      }
+    }),
+  );
+
+  return (opps as Array<{
+    id: string;
+    property_id: string;
+    contact_id: string | null;
+    ghl_created_at: string | null;
+    won_at: string | null;
+    monetary_value: number | string | null;
+    raw: Record<string, unknown> | null;
+  }>).map((o) => {
+    const c = o.contact_id ? contactMap.get(`${o.property_id}:${o.contact_id}`) : undefined;
+    const nameParts = [c?.first_name, c?.last_name].filter(Boolean);
+    const rawName = typeof o.raw?.["name"] === "string" ? (o.raw!["name"] as string) : null;
+    return {
+      opportunity_id: o.id,
+      property_id: o.property_id,
+      contact_id: o.contact_id,
+      name: nameParts.length ? nameParts.join(" ") : rawName,
+      phone: c?.phone ?? null,
+      email: c?.email ?? null,
+      created_at: o.ghl_created_at,
+      won_at: o.won_at,
+      amount: o.monetary_value == null ? null : Number(o.monetary_value),
+    };
+  });
+}
+
+export function useSaleRecords(
+  propertyIds: string[] | null,
+  from: string,
+  to: string,
+  enabled = true,
+) {
+  return useQuery({
+    enabled,
+    queryKey: ["sale-records", propertyIds?.join(",") ?? "all", from, to],
+    queryFn: () => fetchSaleRecords(propertyIds, from, to),
+  });
+}
