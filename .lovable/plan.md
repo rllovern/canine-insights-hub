@@ -1,117 +1,103 @@
-## Rebuild: Sales Cadence heatmap
+## Rebuild: Revenue Runway
 
-Replace the current GitHub-style grid with a layout-adaptive, product-focused visualization that fills the card and reads as intentional at every date range.
+Turn the current chart into an actual runway — actual to date, target pace across the full period, projected finish extending into the future — with plain-language KPIs and no dead whitespace.
 
-### Data reality (scope guardrail)
-The page's only source is `useSaleRecords` → `ghl_opportunities` (won) joined to `ghl_contacts`. Fields available per record: name, phone, email, `created_at`, `won_at`, `amount`. That means:
-- **Metric switcher** ships with two real metrics: **Won deals** and **Closed revenue**. The other metrics listed (appointments booked, qualified leads, proposals sent) are not in the current dataset and are **not** included in this rebuild.
-- **Drill-down** shows the actual won opportunities for that day (name, email, phone, amount, time won) — not salesperson/lead source/close time, since those aren't available.
-- **"Missing/unsynced" state** is only rendered for days that fall before the earliest ingested `won_at` for the scope; otherwise a real day with no wins is a true zero.
+### Assumption (target period)
+There is no configured revenue goal in the database, and the selected date range already clips `to` at today for presets like "This month". So the runway derives its own **target period** from the active preset instead of reusing `range.to` verbatim:
 
-### Layout mode by range length
-`range.to − range.from + 1` in days drives the mode:
-- **7–31 days → Month view** (7-col calendar, large cells with number + metric).
-- **32–120 days → Rolling weeks view** (contribution grid, cells sized to fill width).
-- **>120 days → Annual compact view** (contribution grid with month bands).
-- **<7 days** (e.g. Today, Yesterday) → Month view of the containing calendar month, with only in-range days interactive; other days rendered as faint out-of-range.
+| Selected preset | Runway target period |
+|---|---|
+| Today / Yesterday / thisWeek / lastWeek | The full 7-day week containing the range |
+| last7 / last14 / last30 | Rolling window of that length ending on `range.to` |
+| thisMonth | 1st → last day of the current calendar month |
+| lastMonth | Full prior month (period entirely in the past) |
+| allTime / custom | Uses `range.from` → `range.to` as-is |
 
-Selection is a pure function of the date range; no user toggle.
+`currentDate` = min(today, `periodEnd`). Everything to the left of it is actual; everything to the right is projected.
 
-### Metric switcher
-Compact segmented control in the card header: **Won deals** (default) / **Closed revenue**. Selected metric drives cell intensity, primary cell text, legend thresholds, header summary, and insight copy.
+**Goal amount**: trailing-90-day daily revenue run-rate (already fetched by `useRevenueRunRate`) × days in the target period. Labeled explicitly as a 90-day pace goal so it doesn't look like a hand-set target.
 
-### Month view (7–31 days)
-- 7 columns (Sun→Sat), 4–6 rows, cells are large squares that fill card width (`cellSize = floor((cardWidth − padding) / 7)`, clamped 72–128px).
-- Each in-range cell:
-  - Top-left: date number (e.g. `14`).
-  - Center/bottom: primary metric (`3 deals` or `$18.5K`).
-  - Background intensity from the metric (see Intensity).
-  - Rounded (`rounded-lg`), border for zero state, hover ring in `--primary`, visible focus ring, `role="button"`, `tabIndex=0`, `aria-label` per spec.
-- Out-of-range calendar days (from the same month, before/after range): rendered faint and non-interactive so the week structure is preserved.
-- Missing-data days: diagonal-hatch background + "unavailable" text.
-- Card min-height 360px on desktop; grows to fit content.
+### Sync with Sales Cadence (fixes #1, #9, #10)
+- Actual series starts at the first day of the target period (Jul 1) and ends at `currentDate` (Jul 10). No Jun 30 phantom baseline — the y-axis just starts at 0.
+- All KPI numbers on both cards use the same day-set as the Cadence heatmap for the shared window.
+- Timezone: keep the current `won_at.slice(0,10)` day bucketing; no change.
 
-### Rolling weeks view (32–120 days)
-- Columns = weeks, rows = weekdays; weekday labels on the left, month labels above the first column of each new month.
-- Cell size computed from container width, clamped **12–24px** so short-of-annual ranges render larger cells rather than a tiny grid.
-- Vertically centered inside the card. Card height 240–300px.
-- Hover/focus/click states identical to month view; primary text hidden inside cells (numbers would be illegible) — day + metric shown in tooltip/drawer.
+### Chart series (fixes #4, #5, #11)
+Three explicit series, plotted on one axis (Recharts `ComposedChart`):
+1. **Actual cumulative revenue** — solid 2.4px `--primary` line, subtle 15% gradient fill only under the actual segment (not extended into the future). Highest emphasis.
+2. **Target pace** — dashed 1.5px `--muted-foreground` line spanning the full period, linear from $0 to full-period goal.
+3. **Projected finish** — dotted 2px `--primary` line at 60% opacity, starts exactly at the final actual point, ends at `actual + currentDailyPace × remainingDays`. Rendered only when `today < periodEnd`.
 
-### Annual compact view (>120 days)
-- Standard contribution grid with 10–14px cells, month bands, weekday labels. Card height 260–320px.
-- Same interaction model.
+**Endpoint labels** (direct, not a legend) — small chips anchored to the right end of each visible series inside the chart body: `Actual $38,360`, `Target pace $37,608`, `Projected $115K`. If two labels would overlap within ~14px, stack them vertically.
 
-### Cell states (all views)
-1. **In-range, has value** — filled with intensity bucket.
-2. **In-range, zero** — neutral surface cell with a thin border and a visible `0`.
-3. **Missing/unsynced** — diagonal-hatch (SVG pattern) with `Unavailable` label. Applied only when the day is before `min(won_at)` for the scope.
-4. **Out of range** — very faint disabled cell, no interaction. In month view this happens for edge-of-month padding days; in the other views it doesn't occur.
+**Reference marks**:
+- Vertical dashed marker at `currentDate` with a small "Today" tag on top.
+- Vertical tick at `periodEnd` labeled with the period-end date.
 
-### Intensity buckets
-- **Won deals** — fixed business thresholds: `0`, `1`, `2`, `3–4`, `5+`.
-- **Closed revenue** — quantiles over nonzero days in the current range: `0`, `>0–p25`, `p25–p50`, `p50–p75`, `>p75`. Fallback to fixed `<$5K / $5–10K / $10–20K / $20K+` when fewer than 4 nonzero days exist.
-- Colors: 5-step ramp built from `--primary` opacities (`0.08 → 0.25 → 0.45 → 0.7 → 1.0`), semantic tokens only.
-- Thresholds are computed once per render and passed to both the legend and tooltip so they always agree.
+### KPI row (fixes #3, #6, #7, #8)
+Replace the four current tiles with plain-language labels:
 
-### Header summary (single inline row, inside the card)
-Above the grid, one row of compact stats — no extra dashboard cards.
+`Closed revenue $38,360` · `Target pace today $37,608` · `Ahead of pace +$752` (green ▲ / red ▼) · `Projected finish $115,080`
 
-Won deals mode:
-`24 won deals · 7 of 10 active days · Best: Jul 7 · 5 · Avg: 2.4/day`
+Secondary line under the row (small, muted): `102% of target pace · 90-day target: $115,000 · Day 10 of 31`.
 
-Revenue mode:
-`$146,500 closed · 7 of 10 revenue days · Best: Jul 7 · $32K · Avg: $14,650/day`
+### Runway status block (fixes #7, #12)
+New compact block below the chart, replacing the current empty whitespace:
 
-### Legend
-Explicit thresholds derived from the intensity function, prefixed with the metric name:
+`$76,640 remaining · 21 days left · $3,650/day required · $3,836/day current pace`
 
-`Won deals per day:  0  ·  1  ·  2  ·  3–4  ·  5+`
-`Closed revenue per day:  $0  ·  <$5K  ·  $5–10K  ·  $10–20K  ·  $20K+` (or quantile edges when used)
+Followed by one dynamically-composed status sentence, e.g.:
+- Ahead + projected above goal: *"Revenue is $752 ahead of pace and is projected to finish 2.1% above the 90-day target."*
+- Ahead + projected below goal: *"Revenue is currently ahead of pace, but the projected finish falls short of the 90-day target by 4%."*
+- Behind + catchable: *"Revenue is $2,180 behind pace; hitting the target requires $4,050/day for the remaining 21 days."*
+- Period fully in past: *"Closed 96% of the trailing-90d pace target for this period."*
 
-### Tooltip
-Radix `HoverCard` on cells. Selected metric first, then supporting data available from the dataset:
+Sentence generator lives inside `RevenueRunway.tsx`.
+
+### Card height & layout (fixes #3, #4, #14)
+Per the user's recommended composition, split the right column into two stacked cards so nothing is padded to match the calendar:
 
 ```
-Tuesday, Jul 7
-Won deals: 5
-Closed revenue: $32,000
-Average deal value: $6,400
+┌──────────────────────────┬──────────────────────────┐
+│                          │ Revenue Runway           │
+│ Sales Cadence            │ (chart + KPIs)           │
+│                          ├──────────────────────────┤
+│ Monthly calendar         │ Runway status            │
+│                          │ (remaining / req / proj) │
+└──────────────────────────┴──────────────────────────┘
 ```
 
-No fake fields (no qualified-leads / appointments / close-rate lines, since we don't have the data).
+- **Revenue Runway card** — height determined by content (~440–500px on desktop). Chart body reserved height **260px** (up from 180). KPI row above, endpoint-labeled chart middle, status block below.
+- **Runway Status card** — a shorter sibling under it with the operational metrics and forecast sentence. Renders even when there's no revenue yet (shows "Waiting on first sale of the period").
+- No forced equal-height with the left card. `ChartCard` doesn't enforce a height, so the change is entirely in `SaleRecords.tsx` layout (`grid-cols-2` with `lg:items-start` and stacking on the right).
 
-### Day drill-down
-Click (or Enter/Space) opens a right-side drawer (shadcn `Sheet`) containing:
-- Date header + weekday
-- Totals: won deals count, closed revenue, average deal value
-- "% vs. same weekday average" over the visible range
-- Table of the day's won opportunities: Name, Email, Phone, Time won, Amount
-- Empty state when zero deals (with the same weekday-comparison line)
+### Tooltip (fixes #13)
+- Past dates: `Revenue closed that day · Cumulative revenue · Target pace · Variance to pace`.
+- Future dates: header prefixed with `Projected` and only projected + target-pace lines shown.
+- Actual and projected never appear on the same tooltip line without their labels.
 
-### Insight footer
-One line under the legend, generated from the current data + metric:
-- "42% of this period's won deals occurred on 3 days." (concentration)
-- "Tuesday was the strongest closing day, averaging 3.8 wins."
-- "4 of the last 10 days produced no won deals."
-Pick the highest-signal one via a small ranker (concentration > best weekday > drought), single line only.
-
-### Responsive
-- **Desktop**: as specified above.
-- **Tablet**: summary row wraps to 2 rows; keep 7 columns in month view; shrink font before shrinking cells.
-- **Mobile**:
-  - Month view keeps 7 columns; cells show date number + primary metric only, secondary details move to tooltip/drawer.
-  - Rolling-weeks view collapses to a 4-week rolling window with a "See full range" affordance that opens the drawer-based full grid.
-  - Annual view collapses to a monthly-totals bar strip (12 bars) — never a squeezed annual grid.
+### Data model (calculated once, memoized)
+```
+fullPeriodTarget        = runRate90d * periodDays
+elapsedDays             = min(today, periodEnd) - periodStart + 1
+remainingDays           = max(0, periodEnd - today)
+actualRevenueToDate     = sum(byDay from start to currentDate)
+targetPaceToDate        = fullPeriodTarget * elapsedDays / periodDays
+varianceToPace          = actualRevenueToDate - targetPaceToDate
+currentDailyPace        = actualRevenueToDate / elapsedDays
+projectedPeriodFinish   = actualRevenueToDate + currentDailyPace * remainingDays
+remainingRevenue        = max(0, fullPeriodTarget - actualRevenueToDate)
+requiredDailyPace       = remainingDays > 0 ? remainingRevenue / remainingDays : 0
+```
 
 ### Files touched
-- `src/components/sales/SalesHeatmap.tsx` — full rewrite. Exports `SalesHeatmap` with props `{ from, to, rows, metric, onMetricChange }`. Internally selects Month / RollingWeeks / Annual sub-components, computes intensity thresholds, header stats, insight text.
-- `src/components/sales/SalesHeatmapCell.tsx` — new. Shared cell primitive (states, tooltip trigger, focus/click handlers).
-- `src/components/sales/SalesDayDrawer.tsx` — new. `Sheet`-based drill-down for a single day; consumes the day's `SaleRecord[]`.
-- `src/pages/SaleRecords.tsx` — pass the raw `rows` and controlled `metric` state into `SalesHeatmap`; remove the fixed `Skeleton` height so the card can adapt. Keep the existing `ChartCard` wrapper but drop its fixed inner height.
-- `src/components/dashboard/ChartCard.tsx` — no change; the min-height comes from the heatmap component itself.
+- `src/components/sales/RevenueRunway.tsx` — full rewrite. Accepts `periodStart`, `periodEnd`, `byDayRevenue: Record<string,number>`, `fullPeriodTarget`, and renders KPI row + chart + endpoint labels + reference lines. Internally handles projection series and status sentence.
+- `src/components/sales/RunwayStatus.tsx` — new small component for the stacked "Runway Status" card (metrics grid + sentence).
+- `src/lib/verified-sales.ts` — new helper `deriveTargetPeriod(range, preset)` that returns `{ periodStart, periodEnd }` per the table above; export from module.
+- `src/pages/SaleRecords.tsx` — compute per-day revenue for the *target period* window (fetch is already scoped by `useSaleRecords`; extend to the target period when it exceeds `range.to`, which only happens for `thisMonth`). Restructure grid so the right column stacks Runway + Runway Status; drop the fixed skeleton height on the runway card.
+- `src/contexts/DateRangeContext` — no change (target period is derived, preset already available via `rangePreset`).
 
-### Out of scope (explicit)
-- Appointments, qualified leads, proposals sent metrics (no data yet).
-- Salesperson / lead source / close-time fields in the drawer (no data yet).
-- Persisting the metric selection across sessions.
-- Changes to Revenue Runway (unaffected by this rebuild).
+### Out of scope
+- Configurable / user-editable revenue goals (still derived from trailing-90d run rate).
+- Timezone controls, revenue-definition switcher, filter surface (already inherited from the page).
+- Changes to Sales Cadence, table, or CSV export.
