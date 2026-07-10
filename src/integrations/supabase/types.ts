@@ -1638,18 +1638,21 @@ export type Database = {
       property_settings: {
         Row: {
           data_sources: Json
+          good_lead_close_rate: number
           property_id: string
           updated_at: string
           visible_metrics: Json
         }
         Insert: {
           data_sources?: Json
+          good_lead_close_rate?: number
           property_id: string
           updated_at?: string
           visible_metrics?: Json
         }
         Update: {
           data_sources?: Json
+          good_lead_close_rate?: number
           property_id?: string
           updated_at?: string
           visible_metrics?: Json
