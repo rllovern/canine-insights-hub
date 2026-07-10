@@ -167,7 +167,7 @@ function insightText(stats: DayStat[], metric: HeatmapMetric): string | null {
   const topSum = sorted.slice(0, topN).reduce((a, b) => a + b, 0);
   const pct = Math.round((topSum / total) * 100);
   if (pct >= 50 && stats.length >= 5) {
-    return `${pct}% of this period's ${metric === "wins" ? "won deals" : "revenue"} came from ${topN} day${topN === 1 ? "" : "s"}.`;
+    return `${pct}% of ${metric === "wins" ? "wins" : "revenue"} came from just ${topN} day${topN === 1 ? "" : "s"}.`;
   }
 
   // Best weekday
