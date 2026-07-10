@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { format } from "date-fns";
+import { format, eachDayOfInterval } from "date-fns";
 import { Download } from "lucide-react";
 import { PageHeader } from "@/components/data/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { useProperties } from "@/contexts/PropertyContext";
-import { useSaleRecords, type SaleRecord } from "@/lib/verified-sales";
+import { useSaleRecords, useRevenueRunRate, type SaleRecord } from "@/lib/verified-sales";
+import { ChartCard } from "@/components/dashboard/ChartCard";
+import { SalesHeatmap } from "@/components/sales/SalesHeatmap";
+import { RevenueRunway } from "@/components/sales/RevenueRunway";
 
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -64,6 +67,38 @@ export default function SaleRecords() {
   const showProperty = (propertyIds?.length ?? properties.length) !== 1;
   const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
 
+  const { byDay, runway } = useMemo(() => {
+    const byDay: Record<string, { count: number; revenue: number }> = {};
+    for (const r of rows) {
+      if (!r.won_at) continue;
+      const day = r.won_at.slice(0, 10);
+      const s = byDay[day] ?? { count: 0, revenue: 0 };
+      s.count += 1;
+      s.revenue += r.amount ?? 0;
+      byDay[day] = s;
+    }
+    const days = eachDayOfInterval({ start: range.from, end: range.to });
+    let cum = 0;
+    const runway = days.map((d) => {
+      const key = format(d, "yyyy-MM-dd");
+      cum += byDay[key]?.revenue ?? 0;
+      return { date: key, actual: cum, target: null as number | null };
+    });
+    return { byDay, runway };
+  }, [rows, range.from, range.to]);
+
+  const { data: runRate } = useRevenueRunRate(propertyIds);
+  const targetTotal = useMemo(() => {
+    if (!runRate || runRate <= 0 || runway.length === 0) return null;
+    return runRate * runway.length;
+  }, [runRate, runway.length]);
+
+  const runwayData = useMemo(() => {
+    if (!targetTotal || runway.length === 0) return runway;
+    const step = targetTotal / (runway.length - 1 || 1);
+    return runway.map((p, i) => ({ ...p, target: Math.round(step * i) }));
+  }, [runway, targetTotal]);
+
   const download = () => {
     const csv = toCsv(rows, propertyName, showProperty);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -86,6 +121,34 @@ export default function SaleRecords() {
           </Button>
         }
       />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard
+          title="Sales Cadence"
+          subtitle={`Daily won deals · ${format(range.from, "MMM d")} – ${format(range.to, "MMM d, yyyy")}`}
+        >
+          {isLoading ? (
+            <Skeleton className="h-[180px] w-full" />
+          ) : (
+            <SalesHeatmap from={range.from} to={range.to} byDay={byDay} />
+          )}
+        </ChartCard>
+
+        <ChartCard
+          title="Revenue Runway"
+          subtitle={targetTotal ? "Cumulative revenue vs. 90-day pace target" : "Cumulative revenue"}
+        >
+          {isLoading ? (
+            <Skeleton className="h-[280px] w-full" />
+          ) : total === 0 ? (
+            <div className="h-[220px] flex items-center justify-center text-sm text-muted-foreground">
+              No revenue in range.
+            </div>
+          ) : (
+            <RevenueRunway data={runwayData} actualTotal={total} targetTotal={targetTotal} />
+          )}
+        </ChartCard>
+      </div>
 
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
