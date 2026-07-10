@@ -134,3 +134,76 @@ export function formatRangeLabel(range: DateRange): string {
   }
   return `${fmt(range.from)} – ${fmt(range.to)}`;
 }
+
+// ─── Revenue Runway target period ────────────────────────────────────────
+// Resolves the fixed target period from the picker preset + selected range.
+// - "thisMonth" always resolves to the full calendar month containing today.
+// - "lastMonth" resolves to the full previous calendar month.
+// - Every other preset (and custom) uses range.from / range.to verbatim.
+// asOfDate = min(today, targetPeriodEnd) when today >= targetPeriodStart,
+// otherwise null (future period → no elapsed data).
+export interface TargetPeriod {
+  targetPeriodStart: Date;
+  targetPeriodEnd: Date;
+  asOfDate: Date | null;
+  targetPeriodDays: number;
+  elapsedDays: number;
+  remainingDays: number;
+  isCustomRange: boolean;
+  isFuture: boolean;
+}
+
+function diffCalendarDays(a: Date, b: Date): number {
+  const ms = startOfDay(a).getTime() - startOfDay(b).getTime();
+  return Math.round(ms / 86400000);
+}
+
+export function resolveTargetPeriod(
+  preset: string,
+  range: DateRange,
+  today: Date = new Date(),
+): TargetPeriod {
+  let targetPeriodStart: Date;
+  let targetPeriodEnd: Date;
+  let isCustomRange = false;
+
+  if (preset === "thisMonth") {
+    targetPeriodStart = startOfDay(startOfMonth(today));
+    targetPeriodEnd = endOfDay(endOfMonth(today));
+  } else if (preset === "lastMonth") {
+    const lm = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    targetPeriodStart = startOfDay(startOfMonth(lm));
+    targetPeriodEnd = endOfDay(endOfMonth(lm));
+  } else {
+    targetPeriodStart = startOfDay(range.from);
+    targetPeriodEnd = endOfDay(range.to);
+    isCustomRange = preset === "custom";
+  }
+
+  const targetPeriodDays = diffCalendarDays(targetPeriodEnd, targetPeriodStart) + 1;
+  const isFuture = startOfDay(today) < targetPeriodStart;
+
+  let asOfDate: Date | null;
+  let elapsedDays: number;
+  let remainingDays: number;
+  if (isFuture) {
+    asOfDate = null;
+    elapsedDays = 0;
+    remainingDays = targetPeriodDays;
+  } else {
+    asOfDate = today.getTime() < targetPeriodEnd.getTime() ? startOfDay(today) : startOfDay(targetPeriodEnd);
+    elapsedDays = diffCalendarDays(asOfDate, targetPeriodStart) + 1;
+    remainingDays = Math.max(diffCalendarDays(targetPeriodEnd, asOfDate), 0);
+  }
+
+  return {
+    targetPeriodStart,
+    targetPeriodEnd,
+    asOfDate,
+    targetPeriodDays,
+    elapsedDays,
+    remainingDays,
+    isCustomRange,
+    isFuture,
+  };
+}
