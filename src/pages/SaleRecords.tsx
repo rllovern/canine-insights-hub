@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { format, eachDayOfInterval } from "date-fns";
 import { Download } from "lucide-react";
 import { PageHeader } from "@/components/data/PageHeader";
@@ -9,7 +9,7 @@ import { useDateRange } from "@/contexts/DateRangeContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import { useSaleRecords, useRevenueRunRate, type SaleRecord } from "@/lib/verified-sales";
 import { ChartCard } from "@/components/dashboard/ChartCard";
-import { SalesHeatmap } from "@/components/sales/SalesHeatmap";
+import { SalesHeatmap, type HeatmapMetric } from "@/components/sales/SalesHeatmap";
 import { RevenueRunway } from "@/components/sales/RevenueRunway";
 
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -66,8 +66,9 @@ export default function SaleRecords() {
 
   const showProperty = (propertyIds?.length ?? properties.length) !== 1;
   const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
+  const [heatmapMetric, setHeatmapMetric] = useState<HeatmapMetric>("wins");
 
-  const { byDay, runway } = useMemo(() => {
+  const { runway } = useMemo(() => {
     const byDay: Record<string, { count: number; revenue: number }> = {};
     for (const r of rows) {
       if (!r.won_at) continue;
@@ -84,7 +85,7 @@ export default function SaleRecords() {
       cum += byDay[key]?.revenue ?? 0;
       return { date: key, actual: cum, target: null as number | null };
     });
-    return { byDay, runway };
+    return { runway };
   }, [rows, range.from, range.to]);
 
   const { data: runRate } = useRevenueRunRate(propertyIds);
@@ -125,12 +126,18 @@ export default function SaleRecords() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard
           title="Sales Cadence"
-          subtitle={`Daily won deals · ${format(range.from, "MMM d")} – ${format(range.to, "MMM d, yyyy")}`}
+          subtitle={`${heatmapMetric === "wins" ? "Daily won deals" : "Daily closed revenue"} · ${format(range.from, "MMM d")} – ${format(range.to, "MMM d, yyyy")}`}
         >
           {isLoading ? (
-            <Skeleton className="h-[180px] w-full" />
+            <Skeleton className="h-[320px] w-full" />
           ) : (
-            <SalesHeatmap from={range.from} to={range.to} byDay={byDay} />
+            <SalesHeatmap
+              from={range.from}
+              to={range.to}
+              rows={rows}
+              metric={heatmapMetric}
+              onMetricChange={setHeatmapMetric}
+            />
           )}
         </ChartCard>
 
