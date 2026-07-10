@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { format, eachDayOfInterval } from "date-fns";
+import { format } from "date-fns";
 import { Download } from "lucide-react";
 import { PageHeader } from "@/components/data/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { useProperties } from "@/contexts/PropertyContext";
-import { useSaleRecords, useRevenueRunRate, type SaleRecord } from "@/lib/verified-sales";
+import { useSaleRecords, useRevenueRunRate, deriveTargetPeriod, type SaleRecord } from "@/lib/verified-sales";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { SalesHeatmap, type HeatmapMetric } from "@/components/sales/SalesHeatmap";
-import { RevenueRunway } from "@/components/sales/RevenueRunway";
+import { RevenueRunway, type RunwayMetrics } from "@/components/sales/RevenueRunway";
+import { RunwayStatus } from "@/components/sales/RunwayStatus";
 
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -51,7 +52,7 @@ function toCsv(rows: SaleRecord[], propertyName: (id: string) => string, showPro
 
 export default function SaleRecords() {
   const { propertyIds, label } = useScope();
-  const { range } = useDateRange();
+  const { range, rangePreset } = useDateRange();
   const { properties } = useProperties();
 
   const from = toIsoDay(range.from);
@@ -68,37 +69,25 @@ export default function SaleRecords() {
   const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
   const [heatmapMetric, setHeatmapMetric] = useState<HeatmapMetric>("wins");
 
-  const { runway } = useMemo(() => {
-    const byDay: Record<string, { count: number; revenue: number }> = {};
+  const { periodStart, periodEnd } = useMemo(
+    () => deriveTargetPeriod(range, rangePreset),
+    [range, rangePreset],
+  );
+  const periodDays = Math.max(1, Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000) + 1);
+
+  const byDayRevenue = useMemo(() => {
+    const map: Record<string, number> = {};
     for (const r of rows) {
       if (!r.won_at) continue;
       const day = r.won_at.slice(0, 10);
-      const s = byDay[day] ?? { count: 0, revenue: 0 };
-      s.count += 1;
-      s.revenue += r.amount ?? 0;
-      byDay[day] = s;
+      map[day] = (map[day] ?? 0) + (r.amount ?? 0);
     }
-    const days = eachDayOfInterval({ start: range.from, end: range.to });
-    let cum = 0;
-    const runway = days.map((d) => {
-      const key = format(d, "yyyy-MM-dd");
-      cum += byDay[key]?.revenue ?? 0;
-      return { date: key, actual: cum, target: null as number | null };
-    });
-    return { runway };
-  }, [rows, range.from, range.to]);
+    return map;
+  }, [rows]);
 
   const { data: runRate } = useRevenueRunRate(propertyIds);
-  const targetTotal = useMemo(() => {
-    if (!runRate || runRate <= 0 || runway.length === 0) return null;
-    return runRate * runway.length;
-  }, [runRate, runway.length]);
-
-  const runwayData = useMemo(() => {
-    if (!targetTotal || runway.length === 0) return runway;
-    const step = targetTotal / (runway.length - 1 || 1);
-    return runway.map((p, i) => ({ ...p, target: Math.round(step * i) }));
-  }, [runway, targetTotal]);
+  const fullPeriodTarget = runRate && runRate > 0 ? runRate * periodDays : null;
+  const [runwayMetrics, setRunwayMetrics] = useState<RunwayMetrics | null>(null);
 
   const download = () => {
     const csv = toCsv(rows, propertyName, showProperty);
@@ -123,7 +112,7 @@ export default function SaleRecords() {
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">
         <ChartCard
           title="Sales Cadence"
           subtitle={`${heatmapMetric === "wins" ? "Daily won deals" : "Daily closed revenue"} · ${format(range.from, "MMM d")} – ${format(range.to, "MMM d, yyyy")}`}
@@ -141,20 +130,27 @@ export default function SaleRecords() {
           )}
         </ChartCard>
 
-        <ChartCard
-          title="Revenue Runway"
-          subtitle={targetTotal ? "Cumulative revenue vs. 90-day pace target" : "Cumulative revenue"}
-        >
-          {isLoading ? (
-            <Skeleton className="h-[280px] w-full" />
-          ) : total === 0 ? (
-            <div className="h-[220px] flex items-center justify-center text-sm text-muted-foreground">
-              No revenue in range.
-            </div>
-          ) : (
-            <RevenueRunway data={runwayData} actualTotal={total} targetTotal={targetTotal} />
-          )}
-        </ChartCard>
+        <div className="flex flex-col gap-4">
+          <ChartCard
+            title="Revenue Runway"
+            subtitle={`${format(periodStart, "MMM d")} – ${format(periodEnd, "MMM d, yyyy")} · ${fullPeriodTarget ? "90-day pace target" : "Cumulative revenue"}`}
+          >
+            {isLoading ? (
+              <Skeleton className="h-[320px] w-full" />
+            ) : (
+              <RevenueRunway
+                periodStart={periodStart}
+                periodEnd={periodEnd}
+                byDayRevenue={byDayRevenue}
+                fullPeriodTarget={fullPeriodTarget}
+                onMetrics={setRunwayMetrics}
+              />
+            )}
+          </ChartCard>
+          <ChartCard title="Runway Status" subtitle="Remaining target, required pace, and forecast">
+            <RunwayStatus metrics={runwayMetrics} />
+          </ChartCard>
+        </div>
       </div>
 
       <div className="rounded-lg border border-border bg-card overflow-hidden">
