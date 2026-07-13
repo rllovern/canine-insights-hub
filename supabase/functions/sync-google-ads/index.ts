@@ -52,7 +52,8 @@ Deno.serve(async (req) => {
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
   let authorized = false;
-  if (token && (token === SERVICE_KEY || (CRON_SECRET && token === CRON_SECRET))) {
+  const isPrivilegedInvocation = !!token && (token === SERVICE_KEY || (CRON_SECRET && token === CRON_SECRET));
+  if (isPrivilegedInvocation) {
     authorized = true;
   } else if (token) {
     const anon = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!);
@@ -71,12 +72,37 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
+  const startedAt = new Date().toISOString();
+  let propertyId: string | undefined;
+  const shouldSelfLog = !isPrivilegedInvocation;
+
+  const finish = async (status: "success" | "failure", body: Record<string, unknown>, httpStatus = 200, errMsg?: string) => {
+    if (shouldSelfLog) {
+      try {
+        await admin.from("sync_runs").insert({
+          property_id: propertyId ?? null,
+          source: "google_ads",
+          status,
+          error_message: errMsg ? errMsg.slice(0, 2000) : null,
+          started_at: startedAt,
+          finished_at: new Date().toISOString(),
+          trigger_source: "manual",
+          stats: body as never,
+        });
+      } catch { /* health logging must never block the sync response */ }
+    }
+    return new Response(JSON.stringify(body), {
+      status: httpStatus,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  };
+
   try {
     const body = await req.json().catch(() => ({}));
-    const propertyId: string | undefined = body?.property_id ?? body?.client_id;
+    propertyId = body?.property_id ?? body?.client_id;
     const { date_from, date_to } = body ?? {};
     if (!propertyId) {
-      return new Response(JSON.stringify({ error: "property_id required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return finish("failure", { error: "property_id required" }, 400, "property_id required");
     }
 
     const from = date_from ?? isoDaysAgo(7);
@@ -90,16 +116,16 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (connErr || !conn) {
-      return new Response(JSON.stringify({ error: "no google_ads connection for client" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return finish("failure", { error: "no google_ads connection for client" }, 404, connErr?.message ?? "no google_ads connection for client");
     }
     if (!conn.external_account_id) {
-      return new Response(JSON.stringify({ error: "connection missing customer id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return finish("failure", { error: "connection missing customer id" }, 400, "connection missing customer id");
     }
 
     // Fall back to agency MCC refresh token if this connection has none of its own.
     const effectiveRefreshToken = conn.refresh_token ?? Deno.env.get("GOOGLE_ADS_MCC_REFRESH_TOKEN");
     if (!effectiveRefreshToken) {
-      return new Response(JSON.stringify({ error: "no refresh token (per-client or MCC)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return finish("failure", { error: "no refresh token (per-client or MCC)" }, 400, "no refresh token (per-client or MCC)");
     }
 
     let accessToken: string;
@@ -107,7 +133,7 @@ Deno.serve(async (req) => {
       accessToken = await getAccessToken(effectiveRefreshToken);
     } catch (e) {
       await admin.from("property_data_sources").update({ status: "error", last_error: String(e) }).eq("id", conn.id);
-      return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return finish("failure", { error: String(e) }, 500, String(e));
     }
 
     const headers: Record<string, string> = {
@@ -131,7 +157,7 @@ Deno.serve(async (req) => {
       const labelJson = await labelRes.json();
       if (!labelRes.ok) {
         await admin.from("property_data_sources").update({ status: "error", last_error: JSON.stringify(labelJson).slice(0, 1000) }).eq("id", conn.id);
-        return new Response(JSON.stringify({ error: "google ads label query error", detail: labelJson }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return finish("failure", { error: "google ads label query error", detail: labelJson }, 502, JSON.stringify(labelJson));
       }
       const labelChunks = Array.isArray(labelJson) ? labelJson : [labelJson];
       const ids = new Set<string>();
@@ -148,7 +174,7 @@ Deno.serve(async (req) => {
           last_synced_at: new Date().toISOString(),
           last_error: `no campaigns found for label "${labelFilter}"`,
         }).eq("id", conn.id);
-        return new Response(JSON.stringify({ ok: true, written: 0, range: { from, to }, note: `no campaigns matched label ${labelFilter}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return finish("success", { ok: true, written: 0, range: { from, to }, note: `no campaigns matched label ${labelFilter}` });
       }
     }
 
@@ -169,7 +195,7 @@ Deno.serve(async (req) => {
     const adsJson = await adsRes.json();
     if (!adsRes.ok) {
       await admin.from("property_data_sources").update({ status: "error", last_error: JSON.stringify(adsJson).slice(0, 1000) }).eq("id", conn.id);
-      return new Response(JSON.stringify({ error: "google ads api error", detail: adsJson }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return finish("failure", { error: "google ads api error", detail: adsJson }, 502, JSON.stringify(adsJson));
     }
 
     // searchStream returns an array of result chunks
@@ -250,7 +276,7 @@ Deno.serve(async (req) => {
         .upsert(merged, { onConflict: "property_id,date,ad_source,campaign", count: "exact" });
       if (insErr) {
         await admin.from("property_data_sources").update({ status: "error", last_error: insErr.message }).eq("id", conn.id);
-        return new Response(JSON.stringify({ error: insErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return finish("failure", { error: insErr.message }, 500, insErr.message);
       }
       written = count ?? merged.length;
     }
@@ -331,8 +357,8 @@ Deno.serve(async (req) => {
       console.error("campaign_labels snapshot failed", e);
     }
 
-    return new Response(JSON.stringify({ ok: true, written, range: { from, to } }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return finish("success", { ok: true, written, range: { from, to } });
   } catch (e) {
-    return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return finish("failure", { error: String(e) }, 500, String(e));
   }
 });
