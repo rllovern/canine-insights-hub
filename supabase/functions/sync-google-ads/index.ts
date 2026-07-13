@@ -59,8 +59,12 @@ Deno.serve(async (req) => {
     const { data: userData } = await anon.auth.getUser(token);
     const uid = userData?.user?.id as string | undefined;
     if (uid) {
-      const { data: roleRow } = await admin.from("user_roles").select("role").eq("user_id", uid).eq("role", "internal").maybeSingle();
-      if (roleRow) authorized = true;
+      const { data: roleRows } = await admin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", uid)
+        .in("role", ["super_admin", "admin", "owner", "internal"]);
+      if (roleRows && roleRows.length > 0) authorized = true;
     }
   }
   if (!authorized) {
