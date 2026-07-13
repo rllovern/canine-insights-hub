@@ -89,11 +89,6 @@ export function SourceHealthPanel() {
   const ctm = aggregate(bySource.get("ctm") ?? []);
   const ghl = aggregate(bySource.get("ghl") ?? []);
   const match: Status = ctm === "healthy" && ghl === "healthy" ? "healthy" : "failing";
-  const retryingItems = [
-    gAds === "retrying" && "Google Ads",
-    ctm === "retrying" && "CTM",
-    ghl === "retrying" && "GHL",
-  ].filter(Boolean);
   const matchTip =
     ctm === "healthy" && ghl === "healthy"
       ? "CTM and GHL both healthy"
