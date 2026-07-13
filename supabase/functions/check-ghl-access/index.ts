@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-  const { data: isInternal } = await admin.rpc("has_role", { _user_id: user.id, _role: "internal" });
+  const { data: isInternal } = await admin.rpc("is_all_properties_reader", { _user_id: user.id });
   if (!isInternal) {
     return new Response(JSON.stringify({ error: "Forbidden" }), {
       status: 403,

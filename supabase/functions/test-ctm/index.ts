@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     const { data: claims } = await supabase.auth.getClaims(token);
     const userId = claims?.claims?.sub as string | undefined;
     if (!userId) return json({ error: "Unauthorized" }, 401);
-    const { data: isInternal } = await supabase.rpc("has_role", { _user_id: userId, _role: "internal" });
+    const { data: isInternal } = await supabase.rpc("is_all_properties_reader", { _user_id: userId });
     if (!isInternal) return json({ error: "Forbidden" }, 403);
 
     const { account_id, api_token, api_secret } = await req.json();
