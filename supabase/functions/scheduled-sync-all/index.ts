@@ -76,6 +76,9 @@ Deno.serve(async (req) => {
   // Total wall time per (property, source) capped at ~5 minutes.
   const ATTEMPT_WAITS_MS = [0, 30_000, 120_000];
   const PER_PAIR_TIMEOUT_MS = 5 * 60_000;
+  // Per-invoke hard timeout so a hung child function can't blow past the
+  // parent's platform wall-time limit and silently kill the outer loop.
+  const PER_INVOKE_TIMEOUT_MS = 90_000;
 
   async function invokeOnce(fnName: string, property_id: string) {
     const started_at = new Date().toISOString();
@@ -83,9 +86,16 @@ Deno.serve(async (req) => {
     let error_message: string | null = null;
     let rows_written: number | null = null;
     try {
-      const { data, error } = await admin.functions.invoke(fnName, {
+      const invokePromise = admin.functions.invoke(fnName, {
         body: { property_id, date_from, date_to },
       });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error(`invoke timeout after ${PER_INVOKE_TIMEOUT_MS}ms`)),
+          PER_INVOKE_TIMEOUT_MS,
+        );
+      });
+      const { data, error } = (await Promise.race([invokePromise, timeoutPromise])) as any;
       if (error) {
         status = "failure";
         error_message = String(error.message ?? error);
@@ -118,21 +128,48 @@ Deno.serve(async (req) => {
         await new Promise((r) => setTimeout(r, ATTEMPT_WAITS_MS[i]));
       }
       const attempt = i + 1;
+      // Insert a "running" placeholder first so a parent kill still leaves a
+      // trail (health panel + resync-failed can treat stale "running" rows as
+      // failures instead of the pair vanishing entirely).
+      const startedAt = new Date().toISOString();
+      const { data: pendingRow } = await admin
+        .from("sync_runs")
+        .insert({
+          property_id: row.property_id,
+          source: row.source,
+          status: "running",
+          started_at: startedAt,
+          attempt,
+          run_group_id,
+          trigger_source: "cron",
+        })
+        .select("id")
+        .maybeSingle();
+
       const r = await invokeOnce(fnName, row.property_id);
       attemptsRun++;
       lastStatus = r.status;
-      await admin.from("sync_runs").insert({
-        property_id: row.property_id,
-        source: row.source,
+
+      const updatePayload = {
         status: r.status,
         error_message: r.error_message ? r.error_message.slice(0, 2000) : null,
-        started_at: r.started_at,
         finished_at: new Date().toISOString(),
-        attempt,
-        run_group_id,
-        trigger_source: "cron",
         stats: { rows_written: r.rows_written, attempt, run_group_id } as never,
-      });
+      };
+      if (pendingRow?.id) {
+        await admin.from("sync_runs").update(updatePayload).eq("id", pendingRow.id);
+      } else {
+        // Fallback: placeholder insert failed for some reason — still record.
+        await admin.from("sync_runs").insert({
+          property_id: row.property_id,
+          source: row.source,
+          started_at: r.started_at,
+          attempt,
+          run_group_id,
+          trigger_source: "cron",
+          ...updatePayload,
+        });
+      }
       if (r.status === "success") break;
     }
 

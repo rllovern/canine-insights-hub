@@ -69,6 +69,8 @@ Deno.serve(async (req) => {
 
   const sixHoursAgo = new Date(Date.now() - 6 * 3_600_000).toISOString();
   const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+  const twentyFiveHoursAgo = new Date(Date.now() - 25 * 3_600_000).toISOString();
+  const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString();
 
   const candidates: { property_id: string; source: string }[] = [];
   for (const row of srcRows ?? []) {
@@ -83,11 +85,35 @@ Deno.serve(async (req) => {
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (!last || last.status !== "failure") continue;
-    // Only pick up failures aged 5m–6h (avoid racing an in-flight sync, avoid
-    // reviving very stale failures that the next 12h cron will handle).
-    if (last.started_at < sixHoursAgo) continue;
-    if (last.started_at > fiveMinAgo) continue;
+
+    // Three eligibility rules — a pair is a candidate if ANY match:
+    //  a) last row is a "failure" aged 5m–6h (original recovery path)
+    //  b) last row is "running" older than 10m — parent cron was killed mid-flight
+    //  c) no row exists, or last successful row is older than 25h — the pair
+    //     was silently skipped by the 6h cron loop and would otherwise never
+    //     self-heal.
+    let eligible = false;
+    if (last && last.status === "failure"
+        && last.started_at >= sixHoursAgo && last.started_at <= fiveMinAgo) {
+      eligible = true;
+    } else if (last && last.status === "running" && last.started_at < tenMinAgo) {
+      eligible = true;
+    } else {
+      const { data: lastSuccess } = await admin
+        .from("sync_runs")
+        .select("started_at")
+        .eq("property_id", property_id)
+        .eq("source", source)
+        .eq("status", "success")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!lastSuccess || lastSuccess.started_at < twentyFiveHoursAgo) {
+        // Don't race an in-flight run.
+        if (!last || last.started_at <= fiveMinAgo) eligible = true;
+      }
+    }
+    if (!eligible) continue;
 
     // Rate-limit: skip if we've already run 3+ resync cycles in the last 6h.
     const { count: recentResyncs } = await admin
