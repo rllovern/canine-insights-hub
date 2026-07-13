@@ -1,118 +1,85 @@
-## Revenue Runway — implementation safeguards added
 
-All prior decisions stand (CTM-only source, prior-30-day fixed target, 30% benchmark, prior-90/180 avg deal value, separate target/forecast statuses, coverage-aware zero-vs-missing, explicit target-period triple, inclusive-day indexing, tests). This revision only bolts on the four safeguards.
+## Root cause of the Winchester GHL failure
 
-### Safeguard 1 — % to target never divides by zero
+`supabase/functions/sync-ghl/index.ts` line 342 calls `POST /contacts/search`. GHL periodically returns `400 { message: "Error occurred while searching for contact" }` under load — it is not a payload problem (identical body succeeded 4 minutes later). The current `safe()` wrapper catches the error, writes it to `sync_runs`, and moves on. There is no retry, so a single blip surfaces as "Blocked" in the health panel and stays that way until the next 12h `scheduled-sync-all` tick.
 
-`RevenueRunway.tsx` computes:
+Nothing about Winchester's config is wrong. Fix = make transient failures self-heal.
 
-```ts
-const percentToTarget =
-  target == null || target === 0
-    ? null
-    : actual / target;
-```
+## Changes
 
-Tile rendering:
+### 1 — In-function retry for the flaky GHL search call
 
-```
-target == null  → value "—",  caption "Target unavailable"
-target === 0    → value "N/A", caption "No prior-period Good Leads"
-otherwise       → value `${Math.round(percentToTarget * 100)}%`
-```
+`supabase/functions/sync-ghl/index.ts`
 
-Never render `Infinity`, `0%` (as if it were a real ratio), or a huge percentage when `target === 0`.
-
-### Safeguard 2 — coverage measured over property-date pairs
-
-Both coverage hooks are updated. Note: `daily_metrics` has multiple rows per `(property_id, date)` (ad_source/campaign dimensions) and legitimately writes zero-activity days (verified in DB: rows exist for 2026-07-08/09/10 with `good_leads = 0, leads = 0, cost = 0`). So distinct `(property_id, date)` presence is a valid coverage proxy.
+Wrap the two `/contacts/search` calls (contacts pagination + tag refresh) in a small retry helper: up to 3 attempts, 500 ms → 1500 ms → 4500 ms backoff, retry only on HTTP `400/429/5xx`. On the final failure, throw the same error string so the existing `safe()` still records it. No behavior change on success.
 
 ```ts
-// Baseline window [targetPeriodStart - 30, targetPeriodStart - 1]
-expectedPropertyDays = 30 * selectedPropertyIds.length
-coveredPropertyDays  = SELECT count(DISTINCT (property_id, date))
-                       FROM daily_metrics
-                       WHERE property_id IN (...) AND date BETWEEN ... AND ...
-total = SUM(good_leads)  -- across all rows in window & scope
-
-status =
-  covered === 0                       ? "missing_data"
-  : covered <  expected               ? "partial_coverage"
-  : total   === 0                     ? "confirmed_zero"
-                                      : "ok"
-```
-
-Return shape:
-
-```ts
-{
-  total, dailyAvg,
-  coveredDays,             // DISTINCT date count (informational)
-  expectedDays,            // 30 (baseline) or elapsedDays (current)
-  coveredPropertyDays,     // DISTINCT (property_id, date)
-  expectedPropertyDays,    // expectedDays * selectedPropertyIds.length
-  status
+async function ghlFetchRetry(method, path, token, body, tries = 3) {
+  let last: unknown;
+  for (let i = 0; i < tries; i++) {
+    try { return await ghlFetch(method, path, token, body); }
+    catch (e) {
+      last = e;
+      const msg = String(e);
+      if (!/\b(400|408|429|5\d\d)\b/.test(msg)) throw e;
+      await new Promise(r => setTimeout(r, 500 * 3 ** i));
+    }
+  }
+  throw last;
 }
 ```
 
-Same shape for `useCtmGoodLeadsToDate` over `[targetPeriodStart, asOfDate]`.
+### 2 — Per-source retry in the orchestrator
 
-Single-property selections behave identically to the prior spec (expected = covered days when full).
+`supabase/functions/scheduled-sync-all/index.ts`
 
-If future data shows daily_metrics gaps for legitimate zero days (i.e. presence isn't guaranteed), we'll switch coverage to a dedicated ingestion marker; today it is guaranteed, so no schema change now.
+Today each `(property, source)` is invoked once. Change it to: on `status === "failure"`, sleep 30 s then invoke a second time; if still failing, sleep 2 min and try a third time. Only write **one** row to `sync_runs` per attempt — the last attempt determines the visible status, but each attempt still logs so we can see the pattern. Attempts share a `run_group_id` (uuid) recorded in `sync_runs.stats` so the UI can collapse them.
 
-### Safeguard 3 — future periods produce elapsedDays = 0, never negative
+Cap total wall time per property-source at 5 minutes so one stuck integration can't starve the rest of the cron run.
 
-`resolveTargetPeriod` returns:
+### 3 — Between-cron auto-recovery pass — new function `resync-failed`
 
-```ts
-if (today < targetPeriodStart) {
-  asOfDate      = null;
-  elapsedDays   = 0;
-  remainingDays = targetPeriodDays;
-} else {
-  asOfDate      = min(today, targetPeriodEnd);
-  elapsedDays   = differenceInCalendarDays(asOfDate, targetPeriodStart) + 1;
-  remainingDays = Math.max(differenceInCalendarDays(targetPeriodEnd, asOfDate), 0);
-}
+New file `supabase/functions/resync-failed/index.ts`. Runs every 15 minutes via `pg_cron` (`net.http_post` to its URL with the existing `CRON_SECRET` bearer already used by `scheduled-sync-all`). Logic:
+
+1. Read `property_data_sources` where `status = 'connected'`.
+2. For each `(property_id, source)`, find the most recent row in `sync_runs`. If it's a `failure` **and** no successful run for that pair has landed since it, and the failure is between 5 minutes and 6 hours old, invoke the matching sync function (same map as `scheduled-sync-all`).
+3. Apply the same 3-attempt retry as in change #2.
+4. Ignore pairs that have already been retried ≥ 3 times within the last 6 hours — new column below tracks this. That prevents a persistently broken integration (bad token, revoked GHL access) from hammering the API forever; those keep showing "Blocked" until the next 12h cron or a manual sync.
+
+### 4 — Schema addition — one migration
+
+- Add `sync_runs.attempt` `int not null default 1`
+- Add `sync_runs.run_group_id` `uuid` (nullable — old rows keep `null`)
+- Add `sync_runs.trigger_source` `text` (values: `cron`, `resync_failed`, `manual`, `unknown`; default `unknown`)
+- Index: `sync_runs(property_id, source, started_at desc)` — already exists implicitly through queries but confirm and add if missing so the recovery reader is fast.
+
+RLS/grants: `sync_runs` already has policies; only new columns are added so no policy changes needed. Grants already cover authenticated/service_role.
+
+### 5 — Cron schedule
+
+Insert (not migrate — contains the anon key) a new `cron.schedule` entry:
+
+```
+'resync-failed-every-15m'   */15 * * * *   POST /functions/v1/resync-failed
 ```
 
-Hook behavior when `asOfDate == null` (future period):
-- `useCtmGoodLeadsToDate` **is not called** — no query issued with `end < start`.
-- `useRevenueForecast` returns `{ projectedFinish: null, forecastMethod: "unavailable", forecastDataStatus: "no_elapsed_period", ... }`.
-- Actual series is empty (`actual[i] = null` for all `i`).
-- Target line still renders when baseline + avg deal value are valid.
-- Projection series and as-of `ReferenceLine` are hidden.
+with the same `Authorization: Bearer <CRON_SECRET>` header used by `scheduled-sync-all`.
 
-### Safeguard 4 — projection meets actual, invariant enforced
+### 6 — UI: surface retry state (small)
 
-In the series builder we compute `closedRevenueToDate` and `actual[]` from the exact same source (`useSaleRecords` rows, filtered by `won_at` between `targetPeriodStart` and `asOfDate`, `status = 'won'`, `monetary_value` summed). Then:
+`src/components/layout/SourceHealthPanel.tsx` — when `last_run_status === "failure"` but `last_failure_at` is within the last 15 minutes, show label `"Retrying"` (amber, not red) with tooltip `"Auto-retry in progress"`. Purely presentational; uses fields already returned by `get_api_health_summary`.
 
-```ts
-const lastActualValue = actual[elapsedDays - 1];
-console.assert(lastActualValue === closedRevenueToDate);
-projection[elapsedDays - 1] = closedRevenueToDate; // shared boundary point
-```
+## Files touched
 
-The projection's day-`elapsedDays-1` value is set to `closedRevenueToDate` (which equals `lastActualValue`) so the projection line begins exactly where the actual line ends — no discontinuity.
+- edit `supabase/functions/sync-ghl/index.ts` (retry helper + call sites)
+- edit `supabase/functions/scheduled-sync-all/index.ts` (per-source retry loop)
+- new `supabase/functions/resync-failed/index.ts`
+- new migration: add `attempt`, `run_group_id`, `trigger_source` to `sync_runs`
+- insert-only SQL: `cron.schedule('resync-failed-every-15m', …)`
+- edit `src/components/layout/SourceHealthPanel.tsx` (Retrying state)
 
-### Additional tests
+## Not doing
 
-Added to `src/lib/__tests__/revenueRunway.test.ts`:
-
-9. **Confirmed-zero target** → `target === 0`, `percentToTarget === null`, tile renders `"N/A"` with caption `"No prior-period Good Leads"`.
-10. **Multi-property partial coverage** → Property A full 30 days, Property B 10 days, 2 selected → `coveredPropertyDays = 40`, `expectedPropertyDays = 60`, `status = "partial_coverage"`, target unavailable.
-11. **Future custom period** (target starts tomorrow) → `elapsedDays = 0`, `remainingDays = targetPeriodDays`, `actual` series all `null`, `forecastDataStatus = "no_elapsed_period"`, target still numeric when baseline valid, no CTM current-period query is issued (mock supabase; assert it wasn't called for the current-period window).
-12. **Continuity invariant** → for a mid-period case, `series.actual[elapsedDays - 1] === closedRevenueToDate === series.projection[elapsedDays - 1]`.
-
-### Files touched (unchanged from prior revision)
-
-- `src/lib/verified-sales.ts`
-- `src/lib/dateRange.ts` (adds `resolveTargetPeriod` with future-period branch)
-- `src/lib/__tests__/revenueRunway.test.ts`
-- `src/components/sales/RevenueRunway.tsx`
-- `src/pages/SaleRecords.tsx`
-- `src/components/sales/SalesHeatmap.tsx`
-- `src/components/dashboard/ChartCard.tsx`
-
-No schema, RLS, migration, or edge-function changes.
+- No auto-disable of a connection on repeated failure — user should see it and decide.
+- No email/notification on failure — separate ask.
+- No change to CTM/Google Ads/GA4 sync internals; the orchestrator-level retry (change #2) plus recovery pass (change #3) already covers them without touching each function's body.
