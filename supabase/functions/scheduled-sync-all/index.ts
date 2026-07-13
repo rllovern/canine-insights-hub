@@ -70,20 +70,21 @@ Deno.serve(async (req) => {
   const targets = srcRows ?? [];
   let succeeded = 0;
   let failed = 0;
+  let retried = 0;
 
-  // Run sequentially to avoid hammering external APIs / rate limits.
-  for (const row of targets) {
-    const fnName = SOURCE_TO_FN[row.source as string];
-    if (!fnName) continue;
+  // In-attempt retry policy: try up to 3 times with 30s and 120s waits.
+  // Total wall time per (property, source) capped at ~5 minutes.
+  const ATTEMPT_WAITS_MS = [0, 30_000, 120_000];
+  const PER_PAIR_TIMEOUT_MS = 5 * 60_000;
 
+  async function invokeOnce(fnName: string, property_id: string) {
     const started_at = new Date().toISOString();
     let status: "success" | "failure" = "success";
     let error_message: string | null = null;
     let rows_written: number | null = null;
-
     try {
       const { data, error } = await admin.functions.invoke(fnName, {
-        body: { property_id: row.property_id, date_from, date_to },
+        body: { property_id, date_from, date_to },
       });
       if (error) {
         status = "failure";
@@ -98,23 +99,50 @@ Deno.serve(async (req) => {
       status = "failure";
       error_message = e instanceof Error ? e.message : String(e);
     }
+    return { started_at, status, error_message, rows_written };
+  }
 
-    if (status === "success") succeeded++;
+  // Run sequentially to avoid hammering external APIs / rate limits.
+  for (const row of targets) {
+    const fnName = SOURCE_TO_FN[row.source as string];
+    if (!fnName) continue;
+
+    const run_group_id = crypto.randomUUID();
+    const pairDeadline = Date.now() + PER_PAIR_TIMEOUT_MS;
+    let lastStatus: "success" | "failure" = "failure";
+    let attemptsRun = 0;
+
+    for (let i = 0; i < ATTEMPT_WAITS_MS.length; i++) {
+      if (i > 0) {
+        if (Date.now() + ATTEMPT_WAITS_MS[i] > pairDeadline) break;
+        await new Promise((r) => setTimeout(r, ATTEMPT_WAITS_MS[i]));
+      }
+      const attempt = i + 1;
+      const r = await invokeOnce(fnName, row.property_id);
+      attemptsRun++;
+      lastStatus = r.status;
+      await admin.from("sync_runs").insert({
+        property_id: row.property_id,
+        source: row.source,
+        status: r.status,
+        error_message: r.error_message ? r.error_message.slice(0, 2000) : null,
+        started_at: r.started_at,
+        finished_at: new Date().toISOString(),
+        attempt,
+        run_group_id,
+        trigger_source: "cron",
+        stats: { rows_written: r.rows_written, attempt, run_group_id } as never,
+      });
+      if (r.status === "success") break;
+    }
+
+    if (attemptsRun > 1) retried++;
+    if (lastStatus === "success") succeeded++;
     else failed++;
-
-    await admin.from("sync_runs").insert({
-      property_id: row.property_id,
-      source: row.source,
-      status,
-      error_message: error_message ? error_message.slice(0, 2000) : null,
-      started_at,
-      finished_at: new Date().toISOString(),
-      stats: { rows_written } as never,
-    });
   }
 
   return new Response(
-    JSON.stringify({ attempted: targets.length, succeeded, failed }),
+    JSON.stringify({ attempted: targets.length, succeeded, failed, retried }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 });
