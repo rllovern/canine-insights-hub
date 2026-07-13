@@ -15,12 +15,18 @@ interface HealthRow {
   last_run_at: string | null;
 }
 
-type Status = "healthy" | "failing" | "stale" | "never_run" | "not_connected";
+type Status = "healthy" | "failing" | "retrying" | "stale" | "never_run" | "not_connected";
 
 function rowStatus(r: HealthRow): Status {
   if (!r.is_connected) return "not_connected";
   if (!r.last_success_at) return "failing";
-  if (r.last_run_status === "failure" && (!r.last_failure_at || new Date(r.last_failure_at) > new Date(r.last_success_at))) return "failing";
+  if (r.last_run_status === "failure" && (!r.last_failure_at || new Date(r.last_failure_at) > new Date(r.last_success_at))) {
+    // Within the auto-recovery window (~15m) show "Retrying" instead of a hard fail.
+    const failedMinsAgo = r.last_failure_at
+      ? (Date.now() - new Date(r.last_failure_at).getTime()) / 60_000
+      : Infinity;
+    return failedMinsAgo <= 15 ? "retrying" : "failing";
+  }
   if (!r.last_run_at) return "never_run";
   const hours = (Date.now() - new Date(r.last_success_at).getTime()) / 3_600_000;
   if (hours > 24) return "stale";
@@ -30,7 +36,7 @@ function rowStatus(r: HealthRow): Status {
 function aggregate(rows: HealthRow[]): Status {
   const connected = rows.filter((r) => r.is_connected);
   const present = (connected.length ? connected : rows).map(rowStatus);
-  const order: Status[] = ["failing", "stale", "healthy", "never_run", "not_connected"];
+  const order: Status[] = ["failing", "retrying", "stale", "healthy", "never_run", "not_connected"];
   if (!present.length) return "not_connected";
   for (const s of order) if (present.includes(s)) return s;
   return "not_connected";
@@ -38,6 +44,7 @@ function aggregate(rows: HealthRow[]): Status {
 
 const STATUS_STYLE: Record<Status, { label: string; dot: string; text: string }> = {
   healthy:       { label: "Live",    dot: "bg-success",            text: "text-success" },
+  retrying:      { label: "Retrying", dot: "bg-amber-500 animate-pulse", text: "text-amber-600" },
   stale:         { label: "Stale",   dot: "bg-amber-500",          text: "text-amber-600" },
   failing:       { label: "Blocked", dot: "bg-destructive",        text: "text-destructive" },
   never_run:     { label: "Off",     dot: "bg-muted-foreground/40", text: "text-muted-foreground" },
@@ -90,9 +97,9 @@ export function SourceHealthPanel() {
   if (loaded && scoped.length === 0) return null;
 
   const items: { label: string; status: Status; title?: string }[] = [
-    { label: "Google Ads", status: gAds },
-    { label: "CallTrackingMetrics", status: ctm },
-    { label: "GoHighLevel", status: ghl },
+    { label: "Google Ads", status: gAds, title: gAds === "retrying" ? "Auto-retry in progress" : undefined },
+    { label: "CallTrackingMetrics", status: ctm, title: ctm === "retrying" ? "Auto-retry in progress" : undefined },
+    { label: "GoHighLevel", status: ghl, title: ghl === "retrying" ? "Auto-retry in progress" : undefined },
     { label: "CTM / GHL match", status: match, title: matchTip },
   ];
 
