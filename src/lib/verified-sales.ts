@@ -5,6 +5,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+// Group a UTC `won_at` timestamp by the viewer's local calendar day so the
+// heatmap, runway, and record list all agree on which day a sale belongs to.
+// (`won_at.slice(0, 10)` would use UTC and drift by a day for late-evening
+// wins in westerly timezones.)
+export function localDayKey(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export async function fetchVerifiedSalesByDate(
   propertyIds: string[] | null,
   from: string,
@@ -24,7 +36,7 @@ export async function fetchVerifiedSalesByDate(
   const out: Record<string, number> = {};
   for (const r of (data ?? []) as { won_at: string | null }[]) {
     if (!r.won_at) continue;
-    const day = r.won_at.slice(0, 10);
+    const day = localDayKey(r.won_at);
     out[day] = (out[day] ?? 0) + 1;
   }
   return out;

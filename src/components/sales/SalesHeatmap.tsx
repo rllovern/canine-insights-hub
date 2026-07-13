@@ -15,7 +15,7 @@ import {
 } from "date-fns";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { SaleRecord } from "@/lib/verified-sales";
+import { localDayKey, type SaleRecord } from "@/lib/verified-sales";
 import { SalesDayDrawer } from "./SalesDayDrawer";
 
 export type HeatmapMetric = "wins" | "revenue";
@@ -130,7 +130,7 @@ function useAggregate(from: Date, to: Date, rows: SaleRecord[]) {
     }
     for (const r of rows ?? []) {
       if (!r.won_at) continue;
-      const key = r.won_at.slice(0, 10);
+      const key = localDayKey(r.won_at);
       const s = map.get(key);
       if (!s) continue;
       s.count += 1;
