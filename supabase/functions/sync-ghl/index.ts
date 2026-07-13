@@ -85,7 +85,10 @@ async function ghlFetch(method: string, path: string, token: string, body?: Json
     const transient =
       res.status >= 500 ||
       res.status === 408 ||
-      ((res.status === 401 || res.status === 403) && /timed out|timeout/i.test(text));
+      ((res.status === 401 || res.status === 403) && /timed out|timeout/i.test(text)) ||
+      // GHL periodically returns 400 { "Error occurred while searching for contact" }
+      // from /contacts/search under load — identical payload succeeds seconds later.
+      (res.status === 400 && /Error occurred while searching for contact/i.test(text));
     if (transient && attempt < MAX_RETRIES) {
       const waitMs = BACKOFF_BASE_MS * Math.pow(2, attempt);
       await new Promise((r) => setTimeout(r, waitMs));
