@@ -12,6 +12,7 @@ import {
   useRevenueTarget,
   useRevenueForecast,
   buildRunwaySeries,
+  localDayKey,
   type SaleRecord,
 } from "@/lib/verified-sales";
 import { resolveTargetPeriod } from "@/lib/dateRange";
@@ -86,7 +87,7 @@ export default function SaleRecords() {
     const out: Record<string, number> = {};
     for (const r of rows) {
       if (!r.won_at) continue;
-      const day = r.won_at.slice(0, 10);
+      const day = localDayKey(r.won_at);
       out[day] = (out[day] ?? 0) + (r.amount ?? 0);
     }
     return out;
