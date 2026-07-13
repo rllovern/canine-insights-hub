@@ -17,6 +17,14 @@ export function localDayKey(iso: string): string {
   return `${y}-${m}-${day}`;
 }
 
+function localDayBoundaryIso(day: string, boundary: "start" | "end"): string {
+  const [year, month, date] = day.split("-").map(Number);
+  const d = boundary === "start"
+    ? new Date(year, month - 1, date, 0, 0, 0, 0)
+    : new Date(year, month - 1, date, 23, 59, 59, 999);
+  return d.toISOString();
+}
+
 export async function fetchVerifiedSalesByDate(
   propertyIds: string[] | null,
   from: string,
@@ -28,8 +36,8 @@ export async function fetchVerifiedSalesByDate(
     .from("ghl_opportunities")
     .select("won_at")
     .eq("status", "won")
-    .gte("won_at", `${from}T00:00:00.000Z`)
-    .lte("won_at", `${to}T23:59:59.999Z`);
+    .gte("won_at", localDayBoundaryIso(from, "start"))
+    .lte("won_at", localDayBoundaryIso(to, "end"));
   if (propertyIds) q = q.in("property_id", propertyIds);
   const { data, error } = await q;
   if (error) return {};
@@ -94,8 +102,8 @@ export async function fetchSaleRecords(
     .from("ghl_opportunities")
     .select("id, property_id, contact_id, ghl_created_at, won_at, monetary_value, raw")
     .eq("status", "won")
-    .gte("won_at", `${from}T00:00:00.000Z`)
-    .lte("won_at", `${to}T23:59:59.999Z`)
+    .gte("won_at", localDayBoundaryIso(from, "start"))
+    .lte("won_at", localDayBoundaryIso(to, "end"))
     .order("won_at", { ascending: false });
   if (propertyIds) q = q.in("property_id", propertyIds);
 
