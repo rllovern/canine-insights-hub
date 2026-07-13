@@ -1,61 +1,35 @@
 
-## Diagnosis
+## Why the panel shows "Stale" for MoCo Google Ads
 
-Sales bucket by two different date systems:
+`SourceHealthPanel` labels a source **Stale** when its most recent successful sync is > 24 hours old. For MoCo, that's exactly what's happening:
 
-- **30-day list** (`SaleRecords` rows table, `SalesDayDrawer`) uses local browser time — `format(new Date(r.won_at), "yyyy-MM-dd")`.
-- **Sales cadence heatmap** and **Revenue Runway daily aggregate** use UTC — `r.won_at.slice(0, 10)`.
+- `sync_runs` for `property_id = a4faa96c… (Ridgeside K9 MoCo)`, `source = google_ads`:
+  - Last success: **2026-07-11 06:00 UTC** (~60h ago).
+  - Zero attempts of any kind since then — not one success, not one failure.
+- Meanwhile the other four properties' Google Ads have run every 6 hours on schedule (7–12 attempts in the last 3 days). MoCo's Google Ads has only 2 attempts in that same window.
+- MoCo's `property_data_sources` row for `google_ads` is `is_connected = true`, `status = connected`, external_account_id `7133441374`, MCC `2189989288`. Nothing looks disabled.
 
-For a US-Eastern (UTC-4) user, any sale won between 20:00–23:59 local (00:00–03:59 UTC the next day) lands one calendar day later on the heatmap/runway than in the list. That's exactly what's happening on July 10: DB has `won_at` values like `2026-07-11T02:06:57Z`, `T01:41:17Z`, `T01:50:04Z`, `T01:34:04Z`, `T01:55:05Z` — all July 10 evening in local time — plus `2026-07-10T23:37:42Z` and earlier same-day sales. The list groups them as July 10; the heatmap/runway pushes them to July 11.
+So the health panel is correct — the underlying problem is that the cron loop has silently stopped invoking `sync-google-ads` for MoCo, and no `sync_runs` row is being written for the attempts that should exist. `resync-failed` also can't help because its trigger condition is "last run is a failure" — a pair that never runs at all doesn't qualify.
 
-The Revenue Runway loop also generates its day keys with `isoDay()` (local calendar), so UTC-keyed aggregates literally miss the correct bucket entirely on affected days.
+The most likely mechanism: `admin.functions.invoke("sync-google-ads", { … })` for MoCo hangs (Google Ads API stall or Deno CPU/wall-time exhaustion inside the child function), the parent `scheduled-sync-all` invocation is killed at the platform wall-time limit before the `sync_runs.insert(...)` after the invoke runs, and the outer loop never advances. Because insertion happens *after* `invokeOnce` returns, a killed parent produces exactly what we're seeing: no success row, no failure row, no log.
 
-## Fix
+## What this plan will do
 
-Standardize sold-date bucketing on **the same local-day formatter the sales list already uses**, everywhere sales are grouped by day. Purely presentational — no backend, no query change.
+1. **Diagnose the live cause for MoCo specifically.** Manually invoke `sync-google-ads` for MoCo's property_id from an edge-function test call and read the response body / status. This tells us whether it's an expired refresh token, revoked MCC linkage, an invalid customer ID, or a plain timeout. No app code changes yet — just capture the truth.
 
-### 1 — Shared helper
+2. **Fix whatever step 1 surfaces.** Expected shapes:
+   - Token/permission → prompt the internal user to reconnect MoCo Google Ads (record `status='error'` with `last_error` so it surfaces in the panel instead of going silent).
+   - MCC access revoked → same, with the specific fix message.
+   - Timeout / no data → keep connection, rely on step 3.
 
-Add `localDayKey(iso: string): string` to `src/lib/verified-sales.ts` (next to the existing `isoDay`):
+3. **Stop the silent-skip failure mode in `scheduled-sync-all`.** Wrap `admin.functions.invoke` with an `AbortController` + `Promise.race` timeout (e.g. 90s per attempt) and, critically, insert the `sync_runs` row *before* the invoke starts (as `pending`) and update it to `success`/`failure` after — so even a killed parent leaves a trail. Any pair whose latest row is `pending` older than N minutes is treated as a failure by the health panel and by `resync-failed`.
 
-```ts
-export function localDayKey(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-```
+4. **Broaden `resync-failed` recovery.** Add a second candidate rule: any connected `(property, source)` whose most recent `sync_runs` success is older than 25 hours (or has no rows at all) is also eligible, subject to the same 3-cycles-per-6h rate limit. This catches the exact MoCo case even if a future silent skip slips through.
 
-Export it so all three call sites share one implementation.
+5. **Verify.** After deploy, wait one 6h cron cycle (or invoke `scheduled-sync-all` and `resync-failed` manually), confirm a new `sync_runs` row appears for MoCo Google Ads, and confirm the panel drops back to **Live**.
 
-### 2 — Replace UTC slicing at three call sites
+## Technical details
 
-- `src/components/sales/SalesHeatmap.tsx` line 133 — `r.won_at.slice(0, 10)` → `localDayKey(r.won_at)`
-- `src/pages/SaleRecords.tsx` line 89 (the `actualByDay` map fed into `buildRunwaySeries`) — same substitution
-- `src/lib/verified-sales.ts` line 27 in `useWonDealCounts` — same substitution (this feeds any daily-count consumer)
-
-### 3 — Range query stays UTC
-
-`ghl_opportunities.won_at` is a `timestamptz`, so the DB range filters (`.gte("won_at", fromT00:00:00Z)`) must stay in UTC — otherwise we'd narrow the fetch and miss rows. Only the *grouping* changes, not the fetch window. A sale at `2026-07-11T02:06Z` is still fetched by a "through 2026-07-10" filter as long as `to = 2026-07-10T23:59:59Z` is applied to a period that ends on July 11 UTC — and today's queries already use `${to}T23:59:59.999Z`, which gives Eastern users the day of local overlap they need. No fetch-window change required.
-
-### 4 — Test
-
-Add one unit test to `src/lib/__tests__/revenueRunway.test.ts`:
-
-- Given a sale with `won_at = "2026-07-11T02:00:00.000Z"` in a runway window July 1–31, `actualByDay["2026-07-10"]` (derived via `localDayKey`) receives the revenue and the July 10 point in the built series is non-zero.
-
-Skip a timezone-mocking fixture — the test just asserts `localDayKey` reproduces the same value `format(new Date(iso), "yyyy-MM-dd")` returns for a given input in the runtime timezone.
-
-## Files touched
-
-- `src/lib/verified-sales.ts` — add `localDayKey`; use it in `useWonDealCounts`
-- `src/components/sales/SalesHeatmap.tsx` — use `localDayKey`
-- `src/pages/SaleRecords.tsx` — use `localDayKey`
-- `src/lib/__tests__/revenueRunway.test.ts` — one regression test
-
-## Not doing
-
-- Not switching to a property-configured timezone. Every consumer today already reads browser-local dates for display (`format(new Date(...))`) — matching that keeps the fix minimal and consistent with what the user sees in the list.
-- Not touching CTM / daily_metrics daily aggregates — those already store `date` as a plain `date`, no time component, so they aren't affected.
+- Files to change: `supabase/functions/scheduled-sync-all/index.ts`, `supabase/functions/resync-failed/index.ts`. Possibly a small migration if we add a `pending` status convention to `sync_runs` (only if the current CHECK constraint rejects it).
+- No frontend changes needed — `SourceHealthPanel` already handles `retrying`/`stale`/`failing` states correctly.
+- The MoCo-specific fix in step 2 may be user-facing (reconnect prompt) rather than a code change; will report findings from step 1 before proceeding.
