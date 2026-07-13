@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { resolveTargetPeriod } from "@/lib/dateRange";
-import { buildRunwaySeries } from "@/lib/verified-sales";
+import { buildRunwaySeries, localDayKey } from "@/lib/verified-sales";
+import { format } from "date-fns";
 
 const D = (s: string) => new Date(s + "T12:00:00");
 
