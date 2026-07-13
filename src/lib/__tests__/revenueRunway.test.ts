@@ -107,3 +107,19 @@ describe("buildRunwaySeries", () => {
     expect(s.every((p) => p.projection === null)).toBe(true);
   });
 });
+
+describe("localDayKey", () => {
+  it("matches the date-fns local-day format for the same instant", () => {
+    const iso = "2026-07-11T02:00:00.000Z";
+    expect(localDayKey(iso)).toBe(format(new Date(iso), "yyyy-MM-dd"));
+  });
+
+  it("buckets late-evening wins onto the same local day as the sales list", () => {
+    // Only assert alignment in westerly zones (EDT/CDT/PDT). In UTC the local
+    // day for this instant is July 11, which is also what the sales list shows,
+    // so alignment still holds — assert equivalence, not a specific date.
+    const iso = "2026-07-11T02:06:57.000Z";
+    const listDay = format(new Date(iso), "yyyy-MM-dd");
+    expect(localDayKey(iso)).toBe(listDay);
+  });
+});
