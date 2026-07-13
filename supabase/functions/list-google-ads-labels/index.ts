@@ -44,8 +44,8 @@ Deno.serve(async (req) => {
     const { data: userData } = await anon.auth.getUser(token);
     const uid = userData?.user?.id as string | undefined;
     if (uid) {
-      const { data: roleRow } = await admin.from("user_roles").select("role").eq("user_id", uid).eq("role", "internal").maybeSingle();
-      if (roleRow) authorized = true;
+      const { data: isAdmin } = await admin.rpc("is_all_properties_reader", { _user_id: uid });
+      if (isAdmin) authorized = true;
     }
   }
   if (!authorized) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });

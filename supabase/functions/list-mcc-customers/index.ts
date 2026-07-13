@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
     if (!user) {
       return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const { data: isInternal } = await userClient.rpc("has_role", { _user_id: user.id, _role: "internal" });
+    const { data: isInternal } = await userClient.rpc("is_all_properties_reader", { _user_id: user.id });
     if (!isInternal) {
       return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }

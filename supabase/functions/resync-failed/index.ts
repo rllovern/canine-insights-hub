@@ -69,7 +69,9 @@ Deno.serve(async (req) => {
 
   const sixHoursAgo = new Date(Date.now() - 6 * 3_600_000).toISOString();
   const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
-  const twentyFiveHoursAgo = new Date(Date.now() - 25 * 3_600_000).toISOString();
+  // Full sync runs every 4h; if the latest success is older than 5h,
+  // the pair missed a cycle and needs immediate recovery.
+  const fiveHoursAgo = new Date(Date.now() - 5 * 3_600_000).toISOString();
   const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString();
 
   const candidates: { property_id: string; source: string }[] = [];
@@ -108,7 +110,7 @@ Deno.serve(async (req) => {
         .order("started_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (!lastSuccess || lastSuccess.started_at < twentyFiveHoursAgo) {
+      if (!lastSuccess || lastSuccess.started_at < fiveHoursAgo) {
         // Don't race an in-flight run.
         if (!last || last.started_at <= fiveMinAgo) eligible = true;
       }
