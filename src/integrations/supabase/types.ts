@@ -1865,39 +1865,48 @@ export type Database = {
       sync_runs: {
         Row: {
           acknowledged_at: string | null
+          attempt: number
           error: string | null
           error_message: string | null
           finished_at: string | null
           id: string
           property_id: string | null
+          run_group_id: string | null
           source: string
           started_at: string
           stats: Json | null
           status: string
+          trigger_source: string
         }
         Insert: {
           acknowledged_at?: string | null
+          attempt?: number
           error?: string | null
           error_message?: string | null
           finished_at?: string | null
           id?: string
           property_id?: string | null
+          run_group_id?: string | null
           source: string
           started_at?: string
           stats?: Json | null
           status: string
+          trigger_source?: string
         }
         Update: {
           acknowledged_at?: string | null
+          attempt?: number
           error?: string | null
           error_message?: string | null
           finished_at?: string | null
           id?: string
           property_id?: string | null
+          run_group_id?: string | null
           source?: string
           started_at?: string
           stats?: Json | null
           status?: string
+          trigger_source?: string
         }
         Relationships: [
           {
