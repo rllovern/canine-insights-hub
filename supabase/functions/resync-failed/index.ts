@@ -1,9 +1,9 @@
-// Between-cron auto-recovery pass. Runs every 15 minutes via pg_cron.
-// Finds (property, source) pairs whose most recent sync_runs row is a failure
-// with no successful run since, aged 5m–6h, and re-invokes the matching sync
-// function with up to 3 attempts (same retry policy as scheduled-sync-all).
-// Skips pairs already retried >= 3 times by this function in the last 6h so a
-// persistently broken integration cannot loop forever.
+// Between-cron auto-recovery pass. Runs every 2 minutes via pg_cron.
+// Any (property, source) pair whose most recent sync_runs row is a failure
+// (or a stuck "running" older than 5 minutes), or whose last success is older
+// than 5 hours, is re-invoked with the standard 3-attempt policy. Retries
+// continue every 2 minutes until a success is recorded, at which point the
+// pair falls back to the normal 4-hour scheduled cadence.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -31,7 +31,10 @@ function isoToday(): string {
 
 const ATTEMPT_WAITS_MS = [0, 30_000, 120_000];
 const PER_PAIR_TIMEOUT_MS = 5 * 60_000;
-const MAX_RESYNC_CYCLES_PER_6H = 3;
+// Per-tick candidate cap so a single 2-minute run can't blow past platform
+// wall-time when many pairs fail at once. Remaining pairs are picked up on
+// the next tick 2 minutes later.
+const MAX_CANDIDATES_PER_TICK = 10;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -67,12 +70,10 @@ Deno.serve(async (req) => {
     });
   }
 
-  const sixHoursAgo = new Date(Date.now() - 6 * 3_600_000).toISOString();
-  const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
   // Full sync runs every 4h; if the latest success is older than 5h,
   // the pair missed a cycle and needs immediate recovery.
   const fiveHoursAgo = new Date(Date.now() - 5 * 3_600_000).toISOString();
-  const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+  const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
 
   const candidates: { property_id: string; source: string }[] = [];
   for (const row of srcRows ?? []) {
@@ -88,17 +89,16 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    // Three eligibility rules — a pair is a candidate if ANY match:
-    //  a) last row is a "failure" aged 5m–6h (original recovery path)
-    //  b) last row is "running" older than 10m — parent cron was killed mid-flight
-    //  c) no row exists, or last successful row is older than 25h — the pair
-    //     was silently skipped by the 6h cron loop and would otherwise never
-    //     self-heal.
+    // Eligibility rules — a pair is a candidate if ANY match:
+    //  a) last row is a "failure" with no success since (retry every 2m).
+    //  b) last row is "running" older than 5m — parent cron was killed
+    //     mid-flight or a previous resync tick is stuck.
+    //  c) last successful run is older than 5h — the pair was silently
+    //     skipped by the 4h scheduled loop and would otherwise never self-heal.
     let eligible = false;
-    if (last && last.status === "failure"
-        && last.started_at >= sixHoursAgo && last.started_at <= fiveMinAgo) {
+    if (last && last.status === "failure") {
       eligible = true;
-    } else if (last && last.status === "running" && last.started_at < tenMinAgo) {
+    } else if (last && last.status === "running" && last.started_at < fiveMinAgo) {
       eligible = true;
     } else {
       const { data: lastSuccess } = await admin
@@ -111,24 +111,16 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
       if (!lastSuccess || lastSuccess.started_at < fiveHoursAgo) {
-        // Don't race an in-flight run.
-        if (!last || last.started_at <= fiveMinAgo) eligible = true;
+        // Don't race an in-flight run started within the last 5 minutes.
+        if (!last || last.status !== "running" || last.started_at < fiveMinAgo) {
+          eligible = true;
+        }
       }
     }
     if (!eligible) continue;
 
-    // Rate-limit: skip if we've already run 3+ resync cycles in the last 6h.
-    const { count: recentResyncs } = await admin
-      .from("sync_runs")
-      .select("id", { count: "exact", head: true })
-      .eq("property_id", property_id)
-      .eq("source", source)
-      .eq("trigger_source", "resync_failed")
-      .eq("attempt", 1)
-      .gte("started_at", sixHoursAgo);
-    if ((recentResyncs ?? 0) >= MAX_RESYNC_CYCLES_PER_6H) continue;
-
     candidates.push({ property_id, source });
+    if (candidates.length >= MAX_CANDIDATES_PER_TICK) break;
   }
 
   const date_from = isoDaysAgo(30);
