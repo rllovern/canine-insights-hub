@@ -766,9 +766,18 @@ Deno.serve(async (req) => {
   const blockingErrors = errs.filter((msg) =>
     !msg.startsWith("rebuild_lead_facts:"),
   );
+  // Do NOT demote status to "error" on transient sync failures — that would
+  // cause the orchestrator and resync-failed (both filter status='connected')
+  // to silently skip this pair forever. Reserve status='error' for auth /
+  // config failures handled by the connection dialog. Transient issues are
+  // still visible via last_error and sync_runs.
   await admin
     .from("property_data_sources")
-    .update({ last_synced_at: summary.finished_at, last_error: blockingErrors.length ? blockingErrors.join(" | ").slice(0, 1000) : null, status: blockingErrors.length ? "error" : "connected" })
+    .update({
+      last_synced_at: summary.finished_at,
+      last_error: blockingErrors.length ? blockingErrors.join(" | ").slice(0, 1000) : null,
+      status: "connected",
+    })
     .eq("property_id", property_id).eq("source", "ghl");
   await admin.from("sync_runs").insert({
     property_id, source: "ghl",

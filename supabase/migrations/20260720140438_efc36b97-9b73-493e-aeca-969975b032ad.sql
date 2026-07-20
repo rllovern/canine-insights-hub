@@ -1,0 +1,1 @@
+UPDATE public.property_data_sources SET status='connected', last_error=NULL WHERE source='ghl' AND status='error';

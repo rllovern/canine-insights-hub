@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
     .from("property_data_sources")
     .select("property_id, source, status")
     .in("source", ["google_ads", "ctm", "ga4", "keyword_com", "ghl"])
-    .eq("status", "connected");
+    .in("status", ["connected", "error"]);
   if (srcErr) {
     return new Response(JSON.stringify({ error: srcErr.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
