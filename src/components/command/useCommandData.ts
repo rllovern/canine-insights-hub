@@ -62,10 +62,33 @@ async function fetchWindow(
   from: string,
   to: string,
 ): Promise<DailyAgg[]> {
-  // daily_metrics: cost + leads + sales
+  // daily_metrics: cost + leads + sales.
+  // Apply the same scope rules the source/campaign report below uses so the
+  // top-of-report KPI reconciles with the source breakdown:
+  //  - Exclude the `GHL Won` disposition feed (not a media source).
+  //  - For PPC rows on properties that ship a `campaign_labels` allow-list
+  //    (shared Google Ads accounts like Winchester / NoVA), only count
+  //    campaigns labeled to this location.
+  let allowed: Map<string, Set<string>> | null = null;
+  if (propertyIds && propertyIds.length > 0) {
+    const { data: labels, error: labelErr } = await supabase
+      .from("campaign_labels")
+      .select("property_id, campaign")
+      .in("property_id", propertyIds);
+    if (labelErr) throw labelErr;
+    if (labels && labels.length > 0) {
+      allowed = new Map();
+      for (const l of labels as any[]) {
+        if (!allowed.has(l.property_id)) allowed.set(l.property_id, new Set());
+        allowed.get(l.property_id)!.add(l.campaign as string);
+      }
+    }
+  }
+
   let dm = supabase
     .from("daily_metrics")
-    .select("date, cost, good_leads, bad_leads, projected_sale, verified_sale")
+    .select("date, property_id, ad_source, campaign, cost, good_leads, bad_leads, projected_sale, verified_sale")
+    .neq("ad_source", "GHL Won")
     .gte("date", from)
     .lte("date", to);
   if (propertyIds) dm = dm.in("property_id", propertyIds);
@@ -88,6 +111,11 @@ async function fetchWindow(
   const map = new Map<string, DailyAgg>();
   for (const d of eachDateISO(new Date(from), new Date(to))) map.set(d, zeroDay(d));
   for (const r of (dmRes.data ?? []) as any[]) {
+    if (r.ad_source === PPC_SOURCE && allowed) {
+      const set = allowed.get(r.property_id);
+      // Property has labels but this campaign isn't one of them → skip.
+      if (set && !set.has(r.campaign)) continue;
+    }
     const day = map.get(r.date) ?? zeroDay(r.date);
     day.cost += Number(r.cost ?? 0);
     day.good_leads += Number(r.good_leads ?? 0);
