@@ -22,6 +22,7 @@ import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
   rowTotalLeads,
 } from "@/lib/leadModel";
+import { useWonAttribution, UNATTRIBUTED_SOURCE } from "@/lib/verified-sales";
 
 const PPC_SOURCE = "Google PPC";
 
@@ -78,6 +79,12 @@ export default function CallTracking() {
   const isInternal = isAllPropertiesReader;
   const cfg = usePropertyMetricConfig();
   const showCompare = compareMode !== "off";
+  const { propertyIds } = useScope();
+
+  // Verified Sale is sourced from GHL won opportunities (attributed to a media
+  // source via GHL's own attribution payload), not daily_metrics.verified_sale.
+  const wonCur = useWonAttribution(propertyIds, range.from, range.to);
+  const wonPri = useWonAttribution(propertyIds, compareRange.from, compareRange.to, showCompare);
 
   const series = useMemo(() => {
     const zeros = {
@@ -184,7 +191,13 @@ export default function CallTracking() {
       )}
 
       <SectionDivider title="Source Performance" subtitle="Outcomes vs prior period" />
-      <SourceOutcomeTable current={current} prior={prior} cfg={cfg} />
+      <SourceOutcomeTable
+        current={current}
+        prior={prior}
+        cfg={cfg}
+        wonBySource={wonCur.data?.bySource ?? {}}
+        wonPrevBySource={wonPri.data?.bySource ?? {}}
+      />
 
       <SectionDivider title="Campaign Breakdown" subtitle="Detail by source and campaign" />
       <CampaignTable current={current} prior={prior} cfg={cfg} />
