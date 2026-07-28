@@ -355,11 +355,12 @@ function CampaignTable({ current, prior, cfg }: any) {
   const slice = sorted.slice(page * PAGE, page * PAGE + PAGE);
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE));
 
-  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "verified_sale"].filter((c) => {
+  // Verified Sale is attributed at source level only (GHL wins carry a session
+  // source, not a campaign), so it isn't shown in the campaign breakdown.
+  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads"].filter((c) => {
     if (c === "spam" && cfg?.isHidden("spam")) return false;
     if (c === "bad_leads" && cfg?.isHidden("bad_leads")) return false;
     if (c === "good_leads" && cfg?.isHidden("good_leads")) return false;
-    if (c === "verified_sale" && cfg?.isHidden("verified_sale")) return false;
     return true;
   });
   const labels: Record<string, string> = {
