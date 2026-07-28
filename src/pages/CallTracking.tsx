@@ -26,6 +26,14 @@ import { useWonAttribution, UNATTRIBUTED_SOURCE } from "@/lib/verified-sales";
 
 const PPC_SOURCE = "Google PPC";
 
+function isoDay(d: Date | string): string {
+  if (typeof d === "string") return d.slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /**
  * Label rule: for properties that have any campaign_labels rows, only PPC
  * rows whose (property_id, campaign) is labeled for that property count.
@@ -83,8 +91,13 @@ export default function CallTracking() {
 
   // Verified Sale is sourced from GHL won opportunities (attributed to a media
   // source via GHL's own attribution payload), not daily_metrics.verified_sale.
-  const wonCur = useWonAttribution(propertyIds, range.from, range.to);
-  const wonPri = useWonAttribution(propertyIds, compareRange.from, compareRange.to, showCompare);
+  const wonCur = useWonAttribution(propertyIds, isoDay(range.from), isoDay(range.to));
+  const wonPri = useWonAttribution(
+    propertyIds,
+    isoDay(compareRange.from),
+    isoDay(compareRange.to),
+    showCompare,
+  );
 
   const series = useMemo(() => {
     const zeros = {
