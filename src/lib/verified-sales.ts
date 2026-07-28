@@ -173,6 +173,76 @@ export function useSaleRecords(
   });
 }
 
+// ─── Won-deal source attribution ─────────────────────────────────────────
+//
+// GHL is the source of truth for a sale. Each won opportunity carries GHL's
+// own `attributions` payload (session source + medium), which the
+// `ghl_won_attribution` RPC maps onto media sources. This replaces
+// `daily_metrics.verified_sale` (which only ever reflected CTM's manual
+// "converted" toggle and is zero for most locations).
+
+export const UNATTRIBUTED_SOURCE = "Unattributed";
+
+export interface WonAttributionRow {
+  property_id: string;
+  won_day: string;
+  ad_source: string;
+  contact_method: string;
+  wins: number;
+  revenue: number;
+}
+
+export interface WonAttribution {
+  rows: WonAttributionRow[];
+  /** wins keyed by ad_source */
+  bySource: Record<string, number>;
+  total: number;
+}
+
+const EMPTY_ATTRIBUTION: WonAttribution = { rows: [], bySource: {}, total: 0 };
+
+export async function fetchWonAttribution(
+  propertyIds: string[] | null,
+  from: string,
+  to: string,
+): Promise<WonAttribution> {
+  if (propertyIds && propertyIds.length === 0) return EMPTY_ATTRIBUTION;
+  const { data, error } = await supabase.rpc("ghl_won_attribution", {
+    _property_ids: propertyIds,
+    _from: from,
+    _to: to,
+  });
+  if (error || !data) return EMPTY_ATTRIBUTION;
+  const rows = (data as any[]).map((r) => ({
+    property_id: r.property_id as string,
+    won_day: r.won_day as string,
+    ad_source: r.ad_source as string,
+    contact_method: r.contact_method as string,
+    wins: Number(r.wins ?? 0),
+    revenue: Number(r.revenue ?? 0),
+  }));
+  const bySource: Record<string, number> = {};
+  let total = 0;
+  for (const r of rows) {
+    bySource[r.ad_source] = (bySource[r.ad_source] ?? 0) + r.wins;
+    total += r.wins;
+  }
+  return { rows, bySource, total };
+}
+
+export function useWonAttribution(
+  propertyIds: string[] | null,
+  from: string,
+  to: string,
+  enabled = true,
+) {
+  return useQuery({
+    enabled,
+    queryKey: ["won-attribution", propertyIds?.join(",") ?? "all", from, to],
+    queryFn: () => fetchWonAttribution(propertyIds, from, to),
+  });
+}
+
 // ─── Revenue Runway: CTM Good Lead + avg-deal-value hooks ────────────────
 //
 // Fixed target = prior-30-day CTM Good Lead baseline × 30% × avg-deal-value.
