@@ -1,7 +1,8 @@
 // Verified Sale reads from `ghl_opportunities` — GHL Won status is the source
-// of truth for a sale, bucketed by `won_at`. Call Tracking is the only place
-// that keeps reading daily_metrics.verified_sale.
-// Call Tracking is the only place that keeps reading daily_metrics.verified_sale.
+// of truth for a sale, bucketed by `won_at`. `daily_metrics.verified_sale`
+// (CTM's manual "converted" toggle) is no longer read anywhere in the UI; the
+// Performance report attributes GHL wins to media sources via
+// `ghl_won_attribution`.
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
