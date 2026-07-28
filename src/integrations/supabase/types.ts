@@ -2258,6 +2258,17 @@ export type Database = {
           schedule: string
         }[]
       }
+      ghl_won_attribution: {
+        Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: {
+          ad_source: string
+          contact_method: string
+          property_id: string
+          revenue: number
+          wins: number
+          won_day: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

@@ -22,8 +22,17 @@ import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
   rowTotalLeads,
 } from "@/lib/leadModel";
+import { useWonAttribution, UNATTRIBUTED_SOURCE } from "@/lib/verified-sales";
 
 const PPC_SOURCE = "Google PPC";
+
+function isoDay(d: Date | string): string {
+  if (typeof d === "string") return d.slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 /**
  * Label rule: for properties that have any campaign_labels rows, only PPC
@@ -78,6 +87,17 @@ export default function CallTracking() {
   const isInternal = isAllPropertiesReader;
   const cfg = usePropertyMetricConfig();
   const showCompare = compareMode !== "off";
+  const { propertyIds } = useScope();
+
+  // Verified Sale is sourced from GHL won opportunities (attributed to a media
+  // source via GHL's own attribution payload), not daily_metrics.verified_sale.
+  const wonCur = useWonAttribution(propertyIds, isoDay(range.from), isoDay(range.to));
+  const wonPri = useWonAttribution(
+    propertyIds,
+    isoDay(compareRange.from),
+    isoDay(compareRange.to),
+    showCompare,
+  );
 
   const series = useMemo(() => {
     const zeros = {
@@ -184,7 +204,13 @@ export default function CallTracking() {
       )}
 
       <SectionDivider title="Source Performance" subtitle="Outcomes vs prior period" />
-      <SourceOutcomeTable current={current} prior={prior} cfg={cfg} />
+      <SourceOutcomeTable
+        current={current}
+        prior={prior}
+        cfg={cfg}
+        wonBySource={wonCur.data?.bySource ?? {}}
+        wonPrevBySource={wonPri.data?.bySource ?? {}}
+      />
 
       <SectionDivider title="Campaign Breakdown" subtitle="Detail by source and campaign" />
       <CampaignTable current={current} prior={prior} cfg={cfg} />
@@ -213,7 +239,7 @@ function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }
   );
 }
 
-function SourceOutcomeTable({ current, prior, cfg }: any) {
+function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource }: any) {
   // Performance report scope: GHL Won is a sales-disposition feed, not a media
   // source — exclude it from the source/campaign breakdowns. PPC rows are
   // filtered by the campaign_labels label rule so shared Google Ads accounts
@@ -227,15 +253,34 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
 
   // Canonical totals via leadModel.ts. Quality column removed per the
   // performance-report scope.
-  const withTotals = (rows: any[]) => rows.map((r: any) => ({
-    ...r,
-    total_leads: rowTotalLeads(r),
-  }));
-  const curT = withTotals(cur);
-  const preT = withTotals(pre);
+  // Verified Sale comes from GHL won opportunities attributed to a media
+  // source, not daily_metrics.verified_sale (CTM's manual toggle, ~always 0).
+  const withTotals = (rows: any[], won: Record<string, number>) => {
+    const mapped = rows.map((r: any) => ({
+      ...r,
+      total_leads: rowTotalLeads(r),
+      verified_sale: won[r.ad_source] ?? 0,
+    }));
+    // Sources that only have wins (incl. Unattributed) still need a row so the
+    // Grand Total equals total won deals for the period.
+    const seen = new Set(mapped.map((r: any) => r.ad_source));
+    for (const [src, wins] of Object.entries(won)) {
+      if (seen.has(src) || !wins) continue;
+      mapped.push({
+        ad_source: src, record_count: 0, no_entry: 0, spam: 0, total_leads: 0,
+        bad_leads: 0, good_leads: 0, verified_sale: wins,
+      });
+    }
+    return mapped;
+  };
+  const curT = withTotals(cur, wonBySource ?? {});
+  const preT = withTotals(pre, wonPrevBySource ?? {});
   const preMapT = new Map(preT.map((r: any) => [r.ad_source, r]));
 
   const sorted = [...curT].sort((a: any, b: any) => {
+    // Keep the catch-all bucket pinned to the bottom.
+    if (a.ad_source === UNATTRIBUTED_SOURCE) return 1;
+    if (b.ad_source === UNATTRIBUTED_SOURCE) return -1;
     const av = a[sortKey] ?? 0; const bv = b[sortKey] ?? 0;
     return sortDir === "asc" ? av - bv : bv - av;
   });
@@ -310,11 +355,12 @@ function CampaignTable({ current, prior, cfg }: any) {
   const slice = sorted.slice(page * PAGE, page * PAGE + PAGE);
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE));
 
-  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads", "verified_sale"].filter((c) => {
+  // Verified Sale is attributed at source level only (GHL wins carry a session
+  // source, not a campaign), so it isn't shown in the campaign breakdown.
+  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads"].filter((c) => {
     if (c === "spam" && cfg?.isHidden("spam")) return false;
     if (c === "bad_leads" && cfg?.isHidden("bad_leads")) return false;
     if (c === "good_leads" && cfg?.isHidden("good_leads")) return false;
-    if (c === "verified_sale" && cfg?.isHidden("verified_sale")) return false;
     return true;
   });
   const labels: Record<string, string> = {
