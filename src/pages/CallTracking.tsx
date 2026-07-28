@@ -239,7 +239,7 @@ function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }
   );
 }
 
-function SourceOutcomeTable({ current, prior, cfg }: any) {
+function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource }: any) {
   // Performance report scope: GHL Won is a sales-disposition feed, not a media
   // source — exclude it from the source/campaign breakdowns. PPC rows are
   // filtered by the campaign_labels label rule so shared Google Ads accounts
@@ -253,15 +253,34 @@ function SourceOutcomeTable({ current, prior, cfg }: any) {
 
   // Canonical totals via leadModel.ts. Quality column removed per the
   // performance-report scope.
-  const withTotals = (rows: any[]) => rows.map((r: any) => ({
-    ...r,
-    total_leads: rowTotalLeads(r),
-  }));
-  const curT = withTotals(cur);
-  const preT = withTotals(pre);
+  // Verified Sale comes from GHL won opportunities attributed to a media
+  // source, not daily_metrics.verified_sale (CTM's manual toggle, ~always 0).
+  const withTotals = (rows: any[], won: Record<string, number>) => {
+    const mapped = rows.map((r: any) => ({
+      ...r,
+      total_leads: rowTotalLeads(r),
+      verified_sale: won[r.ad_source] ?? 0,
+    }));
+    // Sources that only have wins (incl. Unattributed) still need a row so the
+    // Grand Total equals total won deals for the period.
+    const seen = new Set(mapped.map((r: any) => r.ad_source));
+    for (const [src, wins] of Object.entries(won)) {
+      if (seen.has(src) || !wins) continue;
+      mapped.push({
+        ad_source: src, record_count: 0, no_entry: 0, spam: 0, total_leads: 0,
+        bad_leads: 0, good_leads: 0, verified_sale: wins,
+      });
+    }
+    return mapped;
+  };
+  const curT = withTotals(cur, wonBySource ?? {});
+  const preT = withTotals(pre, wonPrevBySource ?? {});
   const preMapT = new Map(preT.map((r: any) => [r.ad_source, r]));
 
   const sorted = [...curT].sort((a: any, b: any) => {
+    // Keep the catch-all bucket pinned to the bottom.
+    if (a.ad_source === UNATTRIBUTED_SOURCE) return 1;
+    if (b.ad_source === UNATTRIBUTED_SOURCE) return -1;
     const av = a[sortKey] ?? 0; const bv = b[sortKey] ?? 0;
     return sortDir === "asc" ? av - bv : bv - av;
   });
