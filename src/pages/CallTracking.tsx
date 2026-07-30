@@ -22,7 +22,7 @@ import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
   rowTotalLeads,
 } from "@/lib/leadModel";
-import { useWonAttribution, UNATTRIBUTED_SOURCE } from "@/lib/verified-sales";
+import { useWonAttribution } from "@/lib/verified-sales";
 
 const PPC_SOURCE = "Google PPC";
 
@@ -278,9 +278,6 @@ function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource 
   const preMapT = new Map(preT.map((r: any) => [r.ad_source, r]));
 
   const sorted = [...curT].sort((a: any, b: any) => {
-    // Keep the catch-all bucket pinned to the bottom.
-    if (a.ad_source === UNATTRIBUTED_SOURCE) return 1;
-    if (b.ad_source === UNATTRIBUTED_SOURCE) return -1;
     const av = a[sortKey] ?? 0; const bv = b[sortKey] ?? 0;
     return sortDir === "asc" ? av - bv : bv - av;
   });

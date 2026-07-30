@@ -183,6 +183,8 @@ export function useSaleRecords(
 // "converted" toggle and is zero for most locations).
 
 export const UNATTRIBUTED_SOURCE = "Unattributed";
+/** Wins GHL could not attribute roll up into paid search on the report. */
+export const UNATTRIBUTED_ROLLUP_SOURCE = "Google PPC";
 
 export interface WonAttributionRow {
   property_id: string;
@@ -225,7 +227,8 @@ export async function fetchWonAttribution(
   const bySource: Record<string, number> = {};
   let total = 0;
   for (const r of rows) {
-    bySource[r.ad_source] = (bySource[r.ad_source] ?? 0) + r.wins;
+    const key = r.ad_source === UNATTRIBUTED_SOURCE ? UNATTRIBUTED_ROLLUP_SOURCE : r.ad_source;
+    bySource[key] = (bySource[key] ?? 0) + r.wins;
     total += r.wins;
   }
   return { rows, bySource, total };
