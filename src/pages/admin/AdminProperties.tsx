@@ -45,14 +45,14 @@ import { GHLConnectionDialog } from "@/components/data/GHLConnectionDialog";
 function PropertyDialog({
   initial,
   onSaved,
-  onDeleted,
+  onDeleteRequest,
   trigger,
   open: controlledOpen,
   onOpenChange: setControlledOpen,
 }: {
   initial?: Property | null;
   onSaved: () => void;
-  onDeleted?: () => void;
+  onDeleteRequest?: (property: Property) => void;
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -66,9 +66,6 @@ function PropertyDialog({
   const [timezone, setTimezone] = useState(initial?.timezone ?? "America/New_York");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
-  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -76,8 +73,6 @@ function PropertyDialog({
       setSlug(initial?.slug ?? "");
       setTimezone(initial?.timezone ?? "America/New_York");
       setLogoFile(null);
-      setConfirmDelete(false);
-      setDeleteConfirmText("");
     }
   }, [open, initial]);
 
@@ -130,33 +125,8 @@ function PropertyDialog({
     onSaved();
   };
 
-  const handleDelete = async () => {
-    if (!initial) return;
-    setDeleting(true);
-    // Clean up related rows first to avoid FK issues.
-    await supabase.from("property_data_sources").delete().eq("property_id", initial.id);
-    await supabase.from("property_call_score_mappings").delete().eq("property_id", initial.id);
-    await supabase.from("property_settings").delete().eq("property_id", initial.id);
-    await supabase.from("viewer_property_access").delete().eq("property_id", initial.id);
-    await supabase.from("daily_metrics").delete().eq("property_id", initial.id);
-    await supabase.from("ctm_calls").delete().eq("property_id", initial.id);
-    await supabase.from("keyword_rankings").delete().eq("property_id", initial.id);
-    await supabase.from("keyword_share_of_voice").delete().eq("property_id", initial.id);
-    const { error } = await supabase.from("properties").delete().eq("id", initial.id);
-    setDeleting(false);
-    if (error) {
-      toast.error(`Delete failed: ${error.message}`);
-      return;
-    }
-    toast.success("Property deleted.");
-    setConfirmDelete(false);
-    setOpen(false);
-    onDeleted?.();
-  };
-
   return (
-    <>
-      <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setOpen}>
         {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
         <DialogContent>
           <DialogHeader>
@@ -191,13 +161,11 @@ function PropertyDialog({
                   variant="destructive"
                   type="button"
                   onClick={() => {
-                    // Close the edit dialog first — nested Radix overlays fight
-                    // over focus/pointer-events and dismiss on any click.
+                    if (!initial) return;
+                    onDeleteRequest?.(initial);
                     setOpen(false);
-                    setDeleteConfirmText("");
-                    setTimeout(() => setConfirmDelete(true), 0);
                   }}
-                  disabled={saving || deleting}
+                  disabled={saving}
                 >
                   <Trash2 className="mr-1.5 h-4 w-4" />
                   Delete
@@ -210,38 +178,7 @@ function PropertyDialog({
             </div>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={confirmDelete} onOpenChange={(o) => { if (!deleting) setConfirmDelete(o); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this property?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently removes <span className="font-medium text-foreground">{initial?.name}</span> along with all of its synced metrics, calls, keyword rankings, and connections. This cannot be undone.
-              <br /><br />
-              Type <span className="font-mono font-semibold text-foreground">{initial?.slug}</span> to confirm.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <Input
-            autoFocus
-            value={deleteConfirmText}
-            onKeyDown={(e) => e.stopPropagation()}
-            onChange={(e) => setDeleteConfirmText(e.target.value)}
-            placeholder={initial?.slug ?? ""}
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={deleting || deleteConfirmText.trim() !== (initial?.slug ?? "")}
-              onClick={(e) => { e.preventDefault(); void handleDelete(); }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleting ? "Deleting…" : "Delete property"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    </Dialog>
   );
 }
 
@@ -258,6 +195,9 @@ export default function AdminProperties() {
   const [ctmTarget, setCtmTarget] = useState<Property | null>(null);
   const [ghlTarget, setGhlTarget] = useState<Property | null>(null);
   const [editTarget, setEditTarget] = useState<Property | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Property | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -322,6 +262,48 @@ export default function AdminProperties() {
       toast.success("New share link generated.");
       load();
     }
+  };
+
+  const requestDelete = (property: Property) => {
+    setDeleteConfirmText("");
+    setDeleteTarget(property);
+  };
+
+  const deleteProperty = async () => {
+    if (!deleteTarget || deleteConfirmText.trim() !== deleteTarget.slug) return;
+    setDeleting(true);
+
+    const relatedTables = [
+      "property_data_sources",
+      "property_call_score_mappings",
+      "property_settings",
+      "viewer_property_access",
+      "daily_metrics",
+      "ctm_calls",
+      "keyword_rankings",
+      "keyword_share_of_voice",
+    ] as const;
+
+    for (const table of relatedTables) {
+      const { error } = await supabase.from(table).delete().eq("property_id", deleteTarget.id);
+      if (error) {
+        setDeleting(false);
+        toast.error(`Delete failed while removing related data: ${error.message}`);
+        return;
+      }
+    }
+
+    const { error } = await supabase.from("properties").delete().eq("id", deleteTarget.id);
+    setDeleting(false);
+    if (error) {
+      toast.error(`Delete failed: ${error.message}`);
+      return;
+    }
+
+    setDeleteTarget(null);
+    setDeleteConfirmText("");
+    toast.success("Property deleted.");
+    await load();
   };
 
   const copyLink = async (p: Property) => {
@@ -572,11 +554,51 @@ export default function AdminProperties() {
         <PropertyDialog
           initial={editTarget}
           onSaved={load}
-          onDeleted={load}
+          onDeleteRequest={requestDelete}
           open
           onOpenChange={(o) => { if (!o) setEditTarget(null); }}
         />
       )}
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !deleting) {
+            setDeleteTarget(null);
+            setDeleteConfirmText("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this property?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes <span className="font-medium text-foreground">{deleteTarget?.name}</span> along with all of its synced metrics, calls, keyword rankings, and connections. This cannot be undone.
+              <br /><br />
+              Type <span className="font-mono font-semibold text-foreground">{deleteTarget?.slug}</span> to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            autoFocus
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder={deleteTarget?.slug ?? ""}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting || deleteConfirmText.trim() !== (deleteTarget?.slug ?? "")}
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteProperty();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting…" : "Delete property"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!regenTarget} onOpenChange={(o) => { if (!o) { setRegenTarget(null); setRegenConfirm(""); } }}>
         <AlertDialogContent>
