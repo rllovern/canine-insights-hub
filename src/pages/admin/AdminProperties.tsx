@@ -149,6 +149,7 @@ function PropertyDialog({
       return;
     }
     toast.success("Property deleted.");
+    setConfirmDelete(false);
     setOpen(false);
     onDeleted?.();
   };
@@ -189,7 +190,13 @@ function PropertyDialog({
                 <Button
                   variant="destructive"
                   type="button"
-                  onClick={() => setConfirmDelete(true)}
+                  onClick={() => {
+                    // Close the edit dialog first — nested Radix overlays fight
+                    // over focus/pointer-events and dismiss on any click.
+                    setOpen(false);
+                    setDeleteConfirmText("");
+                    setTimeout(() => setConfirmDelete(true), 0);
+                  }}
                   disabled={saving || deleting}
                 >
                   <Trash2 className="mr-1.5 h-4 w-4" />
@@ -205,7 +212,7 @@ function PropertyDialog({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+      <AlertDialog open={confirmDelete} onOpenChange={(o) => { if (!deleting) setConfirmDelete(o); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this property?</AlertDialogTitle>
@@ -218,14 +225,15 @@ function PropertyDialog({
           <Input
             autoFocus
             value={deleteConfirmText}
+            onKeyDown={(e) => e.stopPropagation()}
             onChange={(e) => setDeleteConfirmText(e.target.value)}
             placeholder={initial?.slug ?? ""}
           />
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={deleting || deleteConfirmText.trim() !== (initial?.slug ?? "")}
-              onClick={handleDelete}
+              onClick={(e) => { e.preventDefault(); void handleDelete(); }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? "Deleting…" : "Delete property"}
