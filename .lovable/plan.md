@@ -1,19 +1,20 @@
-## Goal
+# Fix property deletion flow
 
-On the Performance report, GHL won deals that currently land in the catch-all **Unattributed** row should count toward **Google PPC** in the Verified Sale column instead.
+## Diagnosis
 
-## Change
+Clicking **Delete** closes the edit dialog by clearing `editTarget`. Because the confirmation dialog is rendered inside that same conditionally mounted `PropertyDialog`, it is unmounted before its delayed open state can run. This is why the window simply disappears.
 
-In `src/lib/verified-sales.ts` (`fetchWonAttribution`):
-- When building the `bySource` rollup, remap any row whose `ad_source` is `Unattributed` to `Google PPC`, so its wins add to the Google PPC bucket.
-- Leave the raw `rows` array untouched (Sale Records / drill-downs keep the true attribution), and keep `total` unchanged — the Grand Total still equals total won deals for the period.
+## Implementation
 
-In `src/pages/CallTracking.tsx` (`SourceOutcomeTable`):
-- No Unattributed row will appear anymore since the bucket is empty; the existing "sources with wins but no media rows" fallback still creates a Google PPC row if the media feed has none.
-- Remove the now-dead pin-to-bottom sort special-case for `UNATTRIBUTED_SOURCE`.
+1. Lift the pending-delete property and confirmation state to the `AdminProperties` page so the confirmation dialog remains mounted after the edit dialog closes.
+2. Open the parent-level confirmation directly from the edit dialog’s Delete button, preserving the selected property and required slug confirmation.
+3. Harden the deletion routine to check every related-record deletion for errors, keep the confirmation visible when deletion fails, and only remove the property from the list after the database confirms success.
+4. Keep controls disabled while deletion is running and show clear success or failure feedback.
 
-Both the current period and the prior-period comparison use the same hook, so deltas stay consistent.
+## Verification
 
-## Note
-
-This means Google PPC's Verified Sale count includes deals GHL could not attribute (manual CRM entries, Zapier imports, direct/organic-tagged sessions). It will read higher than strictly ad-driven sales — flagging it so the number isn't misread later.
+- Open a property, click **Delete**, and confirm the destructive confirmation stays visible and accepts interaction.
+- Verify cancel leaves the property unchanged.
+- Verify an incorrect slug cannot submit.
+- Verify a correct slug deletes the property, refreshes the list, and closes the confirmation only after success.
+- Confirm there are no dialog ref/accessibility warnings introduced by the updated flow.
