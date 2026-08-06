@@ -93,6 +93,11 @@ export function TourProvider({ children }: { children: ReactNode }) {
 
   const back = useCallback(() => setIndex((i) => Math.max(0, i - 1)), []);
 
+  // Role (or preview role) changed mid-tour — keep the index in range.
+  useEffect(() => {
+    if (index >= total) setIndex(0);
+  }, [index, total]);
+
   // Auto-start once for real admins who have never finished or dismissed the tour.
   useEffect(() => {
     if (autoChecked.current) return;
