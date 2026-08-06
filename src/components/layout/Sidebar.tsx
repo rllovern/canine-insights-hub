@@ -266,18 +266,18 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="hidden md:flex flex-col w-[223px] shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border h-screen overflow-y-auto">
+    <aside data-tour="sidebar" className="hidden md:flex flex-col w-[223px] shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border h-screen overflow-y-auto">
       <div className="px-4 py-3 border-b border-sidebar-border">
         <BrandMark variant="onDark" />
       </div>
-      <div className="px-3 pt-2">
+      <div className="px-3 pt-2" data-tour="scope-selector">
         <ScopeSelector />
       </div>
       <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
         <GroupLabel>EXECUTIVE VIEW</GroupLabel>
         {renderItem(COMMAND_ITEM)}
         {isMinimal && renderItem(BUDGET_ITEM)}
-        {renderItem(SALES_ITEM)}
+        <div data-tour="nav-sales">{renderItem(SALES_ITEM)}</div>
 
         {showRichNav && monitorItems.length > 0 && (
           <>
