@@ -94,14 +94,36 @@ export function TourOverlay() {
 
   let bubbleStyle: React.CSSProperties;
   if (rect) {
-    const below = rect.top + rect.height + 16;
-    const placeBelow = below + 220 < vh || rect.top < 240;
-    const left = Math.min(Math.max(12, rect.left + rect.width / 2 - BUBBLE_W / 2), vw - BUBBLE_W - 12);
-    bubbleStyle = placeBelow
-      ? { top: below, left, width: BUBBLE_W }
-      : { top: Math.max(12, rect.top - 16), left, width: BUBBLE_W, transform: "translateY(-100%)" };
+    const h = bubbleH;
+    const gap = 16;
+    const clampTop = (v: number) => Math.min(Math.max(12, v), Math.max(12, vh - h - 12));
+    const clampLeft = (v: number) => Math.min(Math.max(12, v), Math.max(12, vw - BUBBLE_W - 12));
+    const centeredLeft = clampLeft(rect.left + rect.width / 2 - BUBBLE_W / 2);
+    const centeredTop = clampTop(rect.top + rect.height / 2 - h / 2);
+
+    const fitsBelow = rect.top + rect.height + gap + h + 12 <= vh;
+    const fitsAbove = rect.top - gap - h >= 12;
+    const fitsRight = rect.left + rect.width + gap + BUBBLE_W + 12 <= vw;
+    const fitsLeft = rect.left - gap - BUBBLE_W >= 12;
+
+    if (fitsBelow) {
+      bubbleStyle = { top: rect.top + rect.height + gap, left: centeredLeft, width: BUBBLE_W };
+    } else if (fitsAbove) {
+      bubbleStyle = { top: rect.top - gap - h, left: centeredLeft, width: BUBBLE_W };
+    } else if (fitsRight) {
+      bubbleStyle = { top: centeredTop, left: rect.left + rect.width + gap, width: BUBBLE_W };
+    } else if (fitsLeft) {
+      bubbleStyle = { top: centeredTop, left: rect.left - gap - BUBBLE_W, width: BUBBLE_W };
+    } else {
+      // Target fills the screen — park the bubble in a readable, always-visible spot.
+      bubbleStyle = { top: clampTop(vh - h - 24), left: clampLeft(vw / 2 - BUBBLE_W / 2), width: BUBBLE_W };
+    }
   } else {
-    bubbleStyle = { top: "50%", left: "50%", width: BUBBLE_W, transform: "translate(-50%, -50%)" };
+    bubbleStyle = {
+      top: Math.max(12, vh / 2 - bubbleH / 2),
+      left: Math.max(12, vw / 2 - BUBBLE_W / 2),
+      width: BUBBLE_W,
+    };
   }
 
   const progress = ((index + 1) / total) * 100;
