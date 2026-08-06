@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw, CheckCircle2, XCircle, AlertCircle, MinusCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { GhlBackfillPanel } from "@/components/data/GhlBackfillPanel";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -164,6 +165,8 @@ export default function AdminDataSources() {
           or the per-property button to refresh just one.
         </p>
       </div>
+
+      <GhlBackfillPanel />
 
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
