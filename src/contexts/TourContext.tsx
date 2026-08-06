@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 import { usePreviewMode } from "./PreviewModeContext";
-import { TOUR_KEY, TOUR_STEPS, type TourStep } from "@/lib/tour/steps";
+import { TOUR_KEY, stepsForRole, type TourStep } from "@/lib/tour/steps";
 
 type TourContextValue = {
   /** Whether the tour UI is allowed to appear for this account. */
@@ -45,8 +45,10 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const [index, setIndex] = useState(0);
   const autoChecked = useRef(false);
 
-  const total = TOUR_STEPS.length;
-  const step = running ? TOUR_STEPS[index] ?? null : null;
+  // Only include steps for pages this role can actually reach.
+  const steps = useMemo(() => stepsForRole(effectiveRole), [effectiveRole]);
+  const total = steps.length;
+  const step = running ? steps[index] ?? null : null;
 
   const persist = useCallback(
     async (patch: Record<string, unknown>) => {
