@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
+import ChangePassword from "./pages/ChangePassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Command from "./pages/Command";
 import CallTracking from "./pages/CallTracking";
@@ -50,6 +52,11 @@ const App = () => (
                 <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route
+                    path="/change-password"
+                    element={<RequireAuth><ChangePassword /></RequireAuth>}
+                  />
                   <Route path="/report/:token" element={<PublicReport />} />
                   <Route
                     path="/admin/client-reports"
