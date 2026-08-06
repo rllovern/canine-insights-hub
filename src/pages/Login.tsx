@@ -12,6 +12,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +24,20 @@ export default function Login() {
       return;
     }
     navigate("/dashboard");
+  };
+
+  const onForgot = async () => {
+    if (!email) {
+      toast.error("Enter your email above first");
+      return;
+    }
+    setSendingReset(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setSendingReset(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Check your email for a reset link");
   };
 
   return (
@@ -39,6 +54,14 @@ export default function Login() {
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </Button>
+        <button
+          type="button"
+          onClick={onForgot}
+          disabled={sendingReset}
+          className="w-full text-center text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {sendingReset ? "Sending reset link…" : "Forgot password?"}
+        </button>
       </form>
     </AuthShell>
   );
