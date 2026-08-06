@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AppRole } from "@/lib/types";
+import { TourHelpButton } from "@/components/tour/TourHelpButton";
 
 const PREVIEW_ROLE_LABELS: Record<Exclude<AppRole, "internal" | "viewer">, string> = {
   super_admin: "Super Admin",
@@ -46,7 +47,11 @@ export function TopBar() {
           </div>
         </div>
 
-        <DateRangePicker />
+        <div data-tour="date-range" className="flex items-center">
+          <DateRangePicker />
+        </div>
+
+        <TourHelpButton />
 
         {realIsSuperAdmin && (
           <div className={`flex items-center gap-2 h-9 px-2 sm:px-3 rounded-md border ${isPreviewing ? "border-amber-300 bg-amber-50" : "border-border bg-card"}`}>
