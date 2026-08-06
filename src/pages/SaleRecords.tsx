@@ -164,6 +164,7 @@ export default function SaleRecords() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        <div data-tour="sales-heatmap" className="flex">
         <ChartCard
           title="Sales Cadence"
           subtitle={`${heatmapMetric === "wins" ? "Daily won deals" : "Daily closed revenue"} · ${format(range.from, "MMM d")} – ${format(range.to, "MMM d, yyyy")}`}
@@ -180,7 +181,9 @@ export default function SaleRecords() {
             />
           )}
         </ChartCard>
+        </div>
 
+        <div data-tour="sales-runway" className="flex">
         <ChartCard
           title="Revenue Runway"
           subtitle={`${format(targetPeriod.targetPeriodStart, "MMM d")} – ${format(targetPeriod.targetPeriodEnd, "MMM d, yyyy")} · Fixed target from prior 30d CTM Good Leads`}
@@ -199,9 +202,10 @@ export default function SaleRecords() {
             />
           )}
         </ChartCard>
+        </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <div data-tour="sales-table" className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
           <div className="p-4 space-y-2">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
