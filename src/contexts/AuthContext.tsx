@@ -9,6 +9,9 @@ interface AuthCtx {
   role: AppRole | null;
   loading: boolean;
   roleLoading: boolean;
+  mustChangePassword: boolean;
+  securityLoading: boolean;
+  refreshSecurity: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -20,6 +23,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [roleLoading, setRoleLoading] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [securityLoading, setSecurityLoading] = useState(false);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
@@ -43,8 +48,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [user]);
 
+  const loadSecurity = async (userId: string) => {
+    setSecurityLoading(true);
+    const { data } = await supabase
+      .from("user_security")
+      .select("must_change_password")
+      .eq("user_id", userId)
+      .maybeSingle();
+    setMustChangePassword(Boolean(data?.must_change_password));
+    setSecurityLoading(false);
+  };
+
+  useEffect(() => {
+    if (!user) { setMustChangePassword(false); setSecurityLoading(false); return; }
+    loadSecurity(user.id);
+  }, [user]);
+
   return (
-    <Ctx.Provider value={{ user, session, role, loading, roleLoading, signOut: async () => { await supabase.auth.signOut(); } }}>
+    <Ctx.Provider
+      value={{
+        user,
+        session,
+        role,
+        loading,
+        roleLoading,
+        mustChangePassword,
+        securityLoading,
+        refreshSecurity: async () => { if (user) await loadSecurity(user.id); },
+        signOut: async () => { await supabase.auth.signOut(); },
+      }}
+    >
       {children}
     </Ctx.Provider>
   );
