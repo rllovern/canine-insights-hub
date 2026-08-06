@@ -560,7 +560,7 @@ export function SalesHeatmap({ from, to, rows, metric, onMetricChange }: Props) 
   const dayCount = differenceInCalendarDays(to, from) + 1;
 
   const mode: "month" | "weeks" | "annual" =
-    dayCount <= 31 ? "month" : dayCount <= 120 ? "weeks" : "annual";
+    dayCount <= 120 ? "month" : "annual";
 
   // Drawer state + weekday averages for context
   const [openDate, setOpenDate] = useState<Date | null>(null);
