@@ -47,6 +47,7 @@ interface AuthUser {
   display_name?: string | null;
   created_at: string;
   last_sign_in_at: string | null;
+  must_change_password?: boolean;
 }
 
 export default function AdminUsers() {
@@ -72,6 +73,7 @@ export default function AdminUsers() {
   const [form, setForm] = useState<{ email: string; password: string; role: AppRole; property_id: string }>(
     { email: "", password: "", role: "location_owner", property_id: "" },
   );
+  const [requirePasswordChange, setRequirePasswordChange] = useState(true);
 
   const load = async () => {
     setLoading(true);
@@ -101,6 +103,9 @@ export default function AdminUsers() {
 
   const displayNameFor = (userId: string) =>
     authUsers.find((u) => u.id === userId)?.display_name ?? null;
+
+  const mustChangeFor = (userId: string) =>
+    Boolean(authUsers.find((u) => u.id === userId)?.must_change_password);
 
   const staff = roleRows.filter((r) => r.role === "super_admin" || r.role === "admin");
   const owners = roleRows.filter((r) => r.role === "owner");
@@ -142,6 +147,7 @@ export default function AdminUsers() {
         password: form.password,
         role: form.role,
         property_id: form.role === "location_owner" ? form.property_id : null,
+        require_password_change: requirePasswordChange,
       },
     });
     setCreating(false);
@@ -219,6 +225,9 @@ export default function AdminUsers() {
           <div className="truncate text-[11px] text-muted-foreground">{email}</div>
         )}
         <div className="truncate font-mono text-[10px] text-muted-foreground">{userId}</div>
+        {mustChangeFor(userId) && (
+          <Badge variant="secondary" className="mt-1 text-[10px]">Pending password setup</Badge>
+        )}
       </div>
     );
   };
@@ -313,8 +322,18 @@ export default function AdminUsers() {
               </Button>
             </div>
           </form>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 accent-primary"
+              checked={requirePasswordChange}
+              onChange={(e) => setRequirePasswordChange(e.target.checked)}
+            />
+            Require this person to set their own password at first sign-in
+          </label>
           <p className="text-xs text-muted-foreground">
-            Share the temporary password with the user. They can change it later from their account settings.
+            Share the temporary password with the user. If the option above is on, they must choose their own
+            password the first time they sign in before they can use the app.
           </p>
         </section>
       )}
