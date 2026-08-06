@@ -16,7 +16,17 @@ export function TourOverlay() {
   const location = useLocation();
   const [rect, setRect] = useState<Rect | null>(null);
   const [ready, setReady] = useState(false);
+  const [bubbleH, setBubbleH] = useState(260);
+  const bubbleRef = useRef<HTMLDivElement | null>(null);
   const skipRef = useRef<number | null>(null);
+
+  // Measure the bubble so it can always be placed fully on screen.
+  useEffect(() => {
+    const el = bubbleRef.current;
+    if (!el) return;
+    const h = el.getBoundingClientRect().height;
+    if (h && Math.abs(h - bubbleH) > 2) setBubbleH(h);
+  });
 
   const onRoute = !!step && location.pathname === step.route;
 
@@ -162,6 +172,7 @@ export function TourOverlay() {
             transition={{ duration: 0.2 }}
             className="absolute rounded-2xl border border-border bg-card p-5 shadow-2xl"
             style={bubbleStyle}
+            ref={bubbleRef}
           >
             <div className="mb-3 flex items-start gap-3">
               <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
