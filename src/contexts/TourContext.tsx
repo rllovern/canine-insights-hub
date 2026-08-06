@@ -20,6 +20,9 @@ type TourContextValue = {
 
 const TourContext = createContext<TourContextValue | undefined>(undefined);
 
+// Roles that get the guided walkthrough.
+const TOUR_ROLES = ["admin", "location_owner"];
+
 export function useTour() {
   const ctx = useContext(TourContext);
   if (!ctx) throw new Error("useTour must be used within TourProvider");
@@ -32,9 +35,9 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Strictly the "admin" role. Super Admins previewing as Admin can see it too,
-  // but the tour only auto-starts for real admins.
-  const available = effectiveRole === "admin";
+  // Admin and Location Owner roles. Super Admins previewing as one of those can
+  // see it too, but the tour only auto-starts for real admins / location owners.
+  const available = TOUR_ROLES.includes(effectiveRole as string);
 
   const [running, setRunning] = useState(false);
   const [index, setIndex] = useState(0);
@@ -89,7 +92,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
   // Auto-start once for real admins who have never finished or dismissed the tour.
   useEffect(() => {
     if (autoChecked.current) return;
-    if (!user?.id || realRole !== "admin") return;
+    if (!user?.id || !TOUR_ROLES.includes(realRole as string)) return;
     autoChecked.current = true;
     let cancelled = false;
     (async () => {
