@@ -57,7 +57,9 @@ Deno.serve(async (req) => {
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at ?? null,
     }));
-    return json({ users });
+    const { data: sec } = await admin.from("user_security").select("user_id, must_change_password");
+    const secMap = new Map((sec ?? []).map((s: { user_id: string; must_change_password: boolean }) => [s.user_id, s.must_change_password]));
+    return json({ users: users.map((u) => ({ ...u, must_change_password: secMap.get(u.id) ?? false })) });
   }
 
   if (action === "create") {
@@ -65,6 +67,7 @@ Deno.serve(async (req) => {
     const password = body.password as string | undefined;
     const role = body.role as Role | undefined;
     const property_id = (body.property_id as string | undefined) || null;
+    const require_password_change = body.require_password_change !== false;
 
     if (!email || !password || !role || !ROLES.includes(role)) {
       return json({ error: "email, password, and a valid role are required" }, 400);
@@ -84,6 +87,10 @@ Deno.serve(async (req) => {
 
     const { error: rErr } = await admin.from("user_roles").insert({ user_id: newId, role });
     if (rErr) return json({ error: rErr.message }, 500);
+
+    await admin
+      .from("user_security")
+      .upsert({ user_id: newId, must_change_password: require_password_change }, { onConflict: "user_id" });
 
     if (role === "location_owner" && property_id) {
       const { error: aErr } = await admin
@@ -120,6 +127,12 @@ Deno.serve(async (req) => {
     if (Object.keys(attrs).length > 0) {
       const { error: uErr } = await admin.auth.admin.updateUserById(user_id, attrs);
       if (uErr) return json({ error: uErr.message }, 400);
+    }
+
+    if (password && body.require_password_change !== false) {
+      await admin
+        .from("user_security")
+        .upsert({ user_id, must_change_password: true }, { onConflict: "user_id" });
     }
 
     if (role) {
