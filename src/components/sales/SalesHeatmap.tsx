@@ -606,9 +606,6 @@ export function SalesHeatmap({ from, to, rows, metric, onMetricChange }: Props) 
         {mode === "month" && (
           <MonthView from={from} to={to} byKey={byKey} metric={metric} onOpen={openDay} thresholds={thresholds} />
         )}
-        {mode === "weeks" && (
-          <ContributionGrid from={from} to={to} stats={stats} byKey={byKey} metric={metric} onOpen={openDay} thresholds={thresholds} cellClamp={[12, 24]} />
-        )}
         {mode === "annual" && (
           <ContributionGrid from={from} to={to} stats={stats} byKey={byKey} metric={metric} onOpen={openDay} thresholds={thresholds} cellClamp={[10, 14]} />
         )}
