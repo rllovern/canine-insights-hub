@@ -1,3 +1,10 @@
+import type { AppRole } from "@/lib/types";
+
+/** Roles that can see the full internal navigation. */
+export const STAFF_ROLES: AppRole[] = ["super_admin", "admin"];
+/** Every role the tour supports. */
+export const ALL_TOUR_ROLES: AppRole[] = ["super_admin", "admin", "owner", "location_owner"];
+
 export type TourStep = {
   /** Stable id. */
   id: string;
@@ -10,11 +17,17 @@ export type TourStep = {
   body: string;
   /** Optional extra "what to do" line. */
   action?: string;
+  /** Roles this step applies to. Defaults to every tour role. */
+  roles?: AppRole[];
 };
 
 const t = (s: string) => `[data-tour="${s}"]`;
 
 export const TOUR_KEY = "dashboard-v1";
+
+export function stepsForRole(role: AppRole | null | undefined): TourStep[] {
+  return TOUR_STEPS.filter((s) => !s.roles || (role ? s.roles.includes(role) : false));
+}
 
 export const TOUR_STEPS: TourStep[] = [
   {
@@ -132,6 +145,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "lead-perf",
+    roles: STAFF_ROLES,
     route: "/lead-performance",
     target: t("page-root"),
     title: "Lead Performance",
@@ -140,6 +154,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "calls",
+    roles: STAFF_ROLES,
     route: "/calls",
     target: t("page-root"),
     title: "Call Tracking",
@@ -147,6 +162,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "keywords",
+    roles: STAFF_ROLES,
     route: "/keywords",
     target: t("page-root"),
     title: "Keywords",
@@ -161,6 +177,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "reports",
+    roles: STAFF_ROLES,
     route: "/reports",
     target: t("page-root"),
     title: "Reports",
@@ -168,6 +185,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "assistant",
+    roles: STAFF_ROLES,
     route: "/assistant",
     target: t("page-root"),
     title: "Jarvis, your assistant",
