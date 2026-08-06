@@ -95,7 +95,25 @@ export default function BudgetPacing() {
     let query = supabase.from("budget_accounts").select("*").order("sort_order").order("created_at");
     if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
     const { data } = await query;
-    setRows((data ?? []) as BudgetRow[]);
+    let list = (data ?? []) as BudgetRow[];
+
+    // Self-heal: every in-scope property should have at least one budget row so it
+    // never silently disappears from the table. Only writers can create them.
+    if (isSuperAdmin) {
+      const have = new Set(list.map((r) => r.property_id));
+      const wanted = properties
+        .filter((p) => scopedPropertyIds === null || scopedPropertyIds.includes(p.id))
+        .filter((p) => !have.has(p.id));
+      if (wanted.length) {
+        let nextOrder = list.reduce((a, r) => Math.max(a, r.sort_order ?? 0), 0);
+        const { data: inserted } = await supabase
+          .from("budget_accounts")
+          .insert(wanted.map((p) => ({ property_id: p.id, monthly_budget: 0, sort_order: ++nextOrder })))
+          .select("*");
+        if (inserted?.length) list = [...list, ...(inserted as BudgetRow[])];
+      }
+    }
+    setRows(list);
   };
 
   useEffect(() => {
@@ -104,7 +122,7 @@ export default function BudgetPacing() {
       await reloadRows();
       setLoading(false);
     })();
-  }, [scopedPropertyIds]);
+  }, [scopedPropertyIds, properties, isSuperAdmin]);
 
   useEffect(() => {
     (async () => {
