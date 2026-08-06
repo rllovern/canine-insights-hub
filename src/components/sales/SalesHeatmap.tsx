@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect, KeyboardEvent, MouseEvent } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   eachDayOfInterval,
   startOfMonth,
@@ -296,8 +297,8 @@ function MonthView({ from, to, byKey, metric, onOpen, thresholds }: {
   from: Date; to: Date; byKey: Map<string, DayStat>; metric: HeatmapMetric;
   onOpen: (d: Date) => void; thresholds: Thresholds;
 }) {
-  // Build a single-month calendar. If range spans multiple months, show a
-  // stacked list of month calendars.
+  // Months overlapping the selected range, paged one at a time so the card
+  // keeps a constant height regardless of range length.
   const months = useMemo(() => {
     const list: Date[] = [];
     let cursor = startOfMonth(from);
@@ -306,42 +307,78 @@ function MonthView({ from, to, byKey, metric, onOpen, thresholds }: {
       list.push(cursor);
       cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
     }
-    return list;
+    return list.length ? list : [startOfMonth(to)];
   }, [from, to]);
 
+  const [index, setIndex] = useState(months.length - 1);
+  useEffect(() => { setIndex(months.length - 1); }, [months]);
+  const safeIndex = Math.min(Math.max(index, 0), months.length - 1);
+  const month = months[safeIndex];
+
   return (
-    <div className="space-y-6">
-      {months.map((m) => (
-        <MonthGrid
-          key={m.toISOString()}
-          month={m}
-          from={from}
-          to={to}
-          byKey={byKey}
-          metric={metric}
-          onOpen={onOpen}
-          thresholds={thresholds}
-          showTitle={months.length > 1}
-        />
-      ))}
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <button
+          type="button"
+          aria-label="Previous month"
+          disabled={safeIndex === 0}
+          onClick={() => setIndex((i) => Math.max(0, i - 1))}
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30 disabled:pointer-events-none"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="Next month"
+          disabled={safeIndex === months.length - 1}
+          onClick={() => setIndex((i) => Math.min(months.length - 1, i + 1))}
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30 disabled:pointer-events-none"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+        <div className="text-sm font-semibold text-foreground">{format(month, "MMMM yyyy")}</div>
+        {months.length > 1 && (
+          <div className="text-xs text-muted-foreground">{safeIndex + 1} of {months.length}</div>
+        )}
+      </div>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={month.toISOString()}
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -8 }}
+          transition={{ duration: 0.18 }}
+        >
+          <MonthGrid
+            month={month}
+            from={from}
+            to={to}
+            byKey={byKey}
+            metric={metric}
+            onOpen={onOpen}
+            thresholds={thresholds}
+          />
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
 
-function MonthGrid({ month, from, to, byKey, metric, onOpen, thresholds, showTitle }: {
+function MonthGrid({ month, from, to, byKey, metric, onOpen, thresholds }: {
   month: Date; from: Date; to: Date; byKey: Map<string, DayStat>; metric: HeatmapMetric;
-  onOpen: (d: Date) => void; thresholds: Thresholds; showTitle: boolean;
+  onOpen: (d: Date) => void; thresholds: Thresholds;
 }) {
   const gridStart = startOfWeek(startOfMonth(month), { weekStartsOn: 0 });
-  const gridEnd = endOfWeek(endOfMonth(month), { weekStartsOn: 0 });
+  let gridEnd = endOfWeek(endOfMonth(month), { weekStartsOn: 0 });
+  // Always render 6 week rows so the card height never shifts between months.
+  while (differenceInCalendarDays(gridEnd, gridStart) + 1 < 42) {
+    gridEnd = new Date(gridEnd.getFullYear(), gridEnd.getMonth(), gridEnd.getDate() + 7);
+  }
   const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
   const monthNum = month.getMonth();
 
   return (
     <div>
-      {showTitle && (
-        <div className="mb-2 text-sm font-semibold text-foreground">{format(month, "MMMM yyyy")}</div>
-      )}
       <div className="grid grid-cols-7 gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
         {WEEKDAY_LABELS.map((w) => <div key={w} className="px-1">{w}</div>)}
       </div>
@@ -523,7 +560,7 @@ export function SalesHeatmap({ from, to, rows, metric, onMetricChange }: Props) 
   const dayCount = differenceInCalendarDays(to, from) + 1;
 
   const mode: "month" | "weeks" | "annual" =
-    dayCount <= 31 ? "month" : dayCount <= 120 ? "weeks" : "annual";
+    dayCount <= 120 ? "month" : "annual";
 
   // Drawer state + weekday averages for context
   const [openDate, setOpenDate] = useState<Date | null>(null);
@@ -568,9 +605,6 @@ export function SalesHeatmap({ from, to, rows, metric, onMetricChange }: Props) 
       <div className="min-h-[240px]">
         {mode === "month" && (
           <MonthView from={from} to={to} byKey={byKey} metric={metric} onOpen={openDay} thresholds={thresholds} />
-        )}
-        {mode === "weeks" && (
-          <ContributionGrid from={from} to={to} stats={stats} byKey={byKey} metric={metric} onOpen={openDay} thresholds={thresholds} cellClamp={[12, 24]} />
         )}
         {mode === "annual" && (
           <ContributionGrid from={from} to={to} stats={stats} byKey={byKey} metric={metric} onOpen={openDay} thresholds={thresholds} cellClamp={[10, 14]} />
