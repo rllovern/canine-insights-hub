@@ -1978,6 +1978,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_tour_state: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          dismissed_at: string | null
+          last_step: number
+          tour_key: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          dismissed_at?: string | null
+          last_step?: number
+          tour_key?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          dismissed_at?: string | null
+          last_step?: number
+          tour_key?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       viewer_property_access: {
         Row: {
           created_at: string

@@ -1,0 +1,137 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "./AuthContext";
+import { usePreviewMode } from "./PreviewModeContext";
+import { TOUR_KEY, TOUR_STEPS, type TourStep } from "@/lib/tour/steps";
+
+type TourContextValue = {
+  /** Whether the tour UI is allowed to appear for this account. */
+  available: boolean;
+  running: boolean;
+  step: TourStep | null;
+  index: number;
+  total: number;
+  start: () => void;
+  next: () => void;
+  back: () => void;
+  stop: (completed: boolean) => void;
+};
+
+const TourContext = createContext<TourContextValue | undefined>(undefined);
+
+export function useTour() {
+  const ctx = useContext(TourContext);
+  if (!ctx) throw new Error("useTour must be used within TourProvider");
+  return ctx;
+}
+
+export function TourProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const { realRole, effectiveRole } = usePreviewMode();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Strictly the "admin" role. Super Admins previewing as Admin can see it too,
+  // but the tour only auto-starts for real admins.
+  const available = effectiveRole === "admin";
+
+  const [running, setRunning] = useState(false);
+  const [index, setIndex] = useState(0);
+  const autoChecked = useRef(false);
+
+  const total = TOUR_STEPS.length;
+  const step = running ? TOUR_STEPS[index] ?? null : null;
+
+  const persist = useCallback(
+    async (patch: Record<string, unknown>) => {
+      if (!user?.id) return;
+      await supabase
+        .from("user_tour_state")
+        .upsert(
+          { user_id: user.id, tour_key: TOUR_KEY, ...patch },
+          { onConflict: "user_id,tour_key" },
+        );
+    },
+    [user?.id],
+  );
+
+  const start = useCallback(() => {
+    setIndex(0);
+    setRunning(true);
+  }, []);
+
+  const stop = useCallback(
+    (completed: boolean) => {
+      setRunning(false);
+      void persist(
+        completed
+          ? { completed_at: new Date().toISOString(), last_step: total }
+          : { dismissed_at: new Date().toISOString(), last_step: index },
+      );
+    },
+    [index, persist, total],
+  );
+
+  const next = useCallback(() => {
+    setIndex((i) => {
+      if (i + 1 >= total) {
+        setRunning(false);
+        void persist({ completed_at: new Date().toISOString(), last_step: total });
+        return 0;
+      }
+      return i + 1;
+    });
+  }, [persist, total]);
+
+  const back = useCallback(() => setIndex((i) => Math.max(0, i - 1)), []);
+
+  // Auto-start once for real admins who have never finished or dismissed the tour.
+  useEffect(() => {
+    if (autoChecked.current) return;
+    if (!user?.id || realRole !== "admin") return;
+    autoChecked.current = true;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("user_tour_state")
+        .select("completed_at,dismissed_at")
+        .eq("user_id", user.id)
+        .eq("tour_key", TOUR_KEY)
+        .maybeSingle();
+      if (cancelled) return;
+      if (!data || (!data.completed_at && !data.dismissed_at)) {
+        setIndex(0);
+        setRunning(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, realRole]);
+
+  // Keep the route in sync with the current step.
+  useEffect(() => {
+    if (!running || !step) return;
+    if (location.pathname !== step.route) navigate(step.route);
+  }, [running, step, location.pathname, navigate]);
+
+  // Escape closes the tour.
+  useEffect(() => {
+    if (!running) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") stop(false);
+      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft") back();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [running, stop, next, back]);
+
+  const value = useMemo<TourContextValue>(
+    () => ({ available, running, step, index, total, start, next, back, stop }),
+    [available, running, step, index, total, start, next, back, stop],
+  );
+
+  return <TourContext.Provider value={value}>{children}</TourContext.Provider>;
+}
