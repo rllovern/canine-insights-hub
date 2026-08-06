@@ -91,7 +91,8 @@ export default function Command() {
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6" data-tour="command-kpis">
+          <div data-tour="kpi-spend">
           <KpiSparkCard
             label={isAds ? "Ad Spend (Google PPC)" : "Ad Spend"}
             value={fmtCurrency(active.spend)}
@@ -103,6 +104,8 @@ export default function Command() {
             formatValue={fmtCurrency}
             sourceTable={isAds ? "daily_metrics.cost where ad_source = 'Google PPC' AND campaign labeled for this location" : "daily_metrics.cost"}
           />
+          </div>
+          <div data-tour="kpi-records">
           <KpiSparkCard
             label={isAds ? "PPC Records" : "Records"}
             value={fmtNumber(active.calls)}
@@ -113,6 +116,8 @@ export default function Command() {
             formatValue={fmtNumber}
             sourceTable={isAds ? "daily_metrics.record_count where ad_source = 'Google PPC'" : "v_lead_counts_daily.records (calls + forms)"}
           />
+          </div>
+          <div data-tour="kpi-qualified">
           <KpiSparkCard
             label={isAds ? "PPC Qualified" : "Qualified Calls"}
             value={fmtNumber(active.qualifiedCalls)}
@@ -123,7 +128,8 @@ export default function Command() {
             formatValue={fmtNumber}
             sourceTable={isAds ? "daily_metrics.good_leads where ad_source = 'Google PPC'" : "daily_metrics.good_leads"}
           />
-          <Link to="/sales" className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+          </div>
+          <Link to="/sales" data-tour="kpi-sales" className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
             {ownerView ? (
               <KpiSparkCard
                 label={isAds ? "PPC Sales" : "Sales (count)"}
@@ -153,7 +159,7 @@ export default function Command() {
 
       {/* Funnel + Portfolio Verdict */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-2 lg:min-h-[260px]">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2" data-tour="command-funnel">
           {loading ? <Skeleton className="h-full min-h-[240px] rounded-2xl" /> : (
             <JourneyFunnel
               t={active}
@@ -165,7 +171,7 @@ export default function Command() {
             />
           )}
         </div>
-        <div>
+        <div data-tour="command-verdict">
           <PortfolioVerdict totals={active} targets={data.targets} viewMode={mode} />
         </div>
       </div>
