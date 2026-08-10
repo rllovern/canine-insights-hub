@@ -13,12 +13,18 @@ relevant section in the same change. Do not let it go stale.
 | B | Name the 5 (actually 7) monitoring findings | 2026-08-03 | **Reported 2026-08-10.** 4 open, 3 superseded. | Fix approval |
 | C | Corrected per-property figures 30/90/365 after the 44 retirements | 2026-08-08 | **Reported 2026-08-10.** | — |
 | D | MoCo GHL connection + backfill | Phase 1 item 5 | **Blocked.** `location_id cLpbBgAiU9bpKx2mxTVt` configured; agency token is not authorized for MoCo scope. | Needs a MoCo-specific GHL private integration token |
-| E | Item 3 — rename `won_at` to "Date marked Won" everywhere (UI, public report, CSV/exports) + closure-curve replacement proposal | 2026-08-08 | Not started | Queued behind security review |
+| E | Item 3 — rename `won_at` to "Date marked Won" everywhere (UI, public report, CSV/exports) + closure-curve replacement proposal | 2026-08-08 | **Partial 2026-08-10.** Sale Records table header + CSV header renamed; funnel copy updated. Public report, Command tooltips, remaining exports still say "sold"/"sale date". Closure-curve replacement proposal not written. | — |
 | F | CTM and Google Ads pagination audit | 2026-08-06 | Not started | — |
 | G | Item 4 — persisted import-cluster flags, excluded from derived baselines only | 2026-08-07 | Not started | — |
 | H | CRM Capture Rate as a named, visible metric (per property, 30/90, by channel) | 2026-08-08 | Analysis done (Winchester 52.1%); UI not built | — |
 | I | `rebuild_lead_facts` before/after deltas | 2026-08-06 | Blocked | NoVA conversation walk still running |
 | J | Weekly reconcile two-clean-pass enforcement in production cadence | 2026-08-09 | Shipped, first passes accumulating | — |
+| K | Retire `sheet_sales` completely (Google Sheet is dead; GHL is sole sales source) | 2026-08-10 | **Shipped 2026-08-10.** No live read of sheet data existed — every sales surface already read `ghl_opportunities`. Removed: `sync-sheet-sales` function + cron job, Admin → Google Sheets page/route/nav, `sheet_sync_config`, `properties.google_sheet_tab`, `get_sheet_sales_by_report_token`. `sheet_sales` renamed to `sheet_sales_archived` with app access revoked. | — |
+| L | Hard errors must pause, not retry forever | 2026-08-10 | **Shipped.** `resync-failed` classifies 401/403/invalid-token/scope/config failures as hard, sets `property_data_sources.status='paused'` with the reason, stops all retries, and Admin → Data Sources shows a "Paused — needs reconnect" banner + pill. | — |
+| M | `admin-users` 500 on POST | 2026-08-10 | **Fixed.** `auth.getClaims()` *throws* on a malformed/expired JWT; the throw was uncaught and killed the worker (plain-text 500, no CORS). Now returns 401 "Session expired", and the whole handler is wrapped so any throw returns JSON + CORS. Verified live: garbage JWT → 401. | — |
+| N | `scheduled-sync-all` 504s | 2026-08-10 | **Diagnosed, fix proposed, not built.** | Awaiting approval of the dispatcher rewrite |
+| O | DFW date-display disclosure (all wins carry one August batch stamp) | 2026-08-10 | Options proposed, not built | Awaiting choice |
+| P | Journey Funnel coherence | 2026-08-10 | **Fixed.** Lead Mix / Qualified now use CTM tiers only (bad + good + projected = total). CRM wins shown separately, labelled "counted by Date marked Won". | — |
 
 **Change log addendum 2026-08-10:** role helpers (`has_role`, `is_staff`,
 `is_super_admin`, `is_all_properties_reader`, `can_access_property`,
