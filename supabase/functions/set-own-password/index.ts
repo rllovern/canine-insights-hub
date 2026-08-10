@@ -32,12 +32,30 @@ Deno.serve(async (req) => {
   const { data: claimsRes, error: claimsErr } = await userClient.auth.getClaims(token);
   const callerId = claimsRes?.claims?.sub as string | undefined;
   const callerEmail = claimsRes?.claims?.email as string | undefined;
+  const issuedAt = Number(claimsRes?.claims?.iat ?? 0);
   if (claimsErr || !callerId) return json({ error: "Unauthorized" }, 401);
 
   const body = await req.json().catch(() => ({}));
   const password = typeof body.password === "string" ? body.password : "";
+  const fromRecovery = body.from_recovery === true;
   if (password.length < 8) return json({ error: "Password must be at least 8 characters" }, 400);
   if (password.length > 128) return json({ error: "Password is too long" }, 400);
+
+  const admin0 = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+
+  // A recovery link is single use: if the caller's token was issued before the
+  // last completed reset, this session came from an already-consumed link.
+  if (fromRecovery) {
+    const { data: sec } = await admin0
+      .from("user_security")
+      .select("last_password_reset_at")
+      .eq("user_id", callerId)
+      .maybeSingle();
+    const last = sec?.last_password_reset_at ? Date.parse(sec.last_password_reset_at as string) : 0;
+    if (last && issuedAt && issuedAt * 1000 < last) {
+      return json({ error: "This reset link has already been used. Please request a new one." }, 400);
+    }
+  }
 
   // Reject reusing the current password.
   if (callerEmail) {
@@ -46,13 +64,16 @@ Deno.serve(async (req) => {
     if (!sameErr) return json({ error: "Choose a password different from your current one" }, 400);
   }
 
-  const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  const admin = admin0;
   const { error: uErr } = await admin.auth.admin.updateUserById(callerId, { password });
   if (uErr) return json({ error: uErr.message }, 400);
 
   const { error: sErr } = await admin
     .from("user_security")
-    .upsert({ user_id: callerId, must_change_password: false }, { onConflict: "user_id" });
+    .upsert(
+      { user_id: callerId, must_change_password: false, last_password_reset_at: new Date().toISOString() },
+      { onConflict: "user_id" },
+    );
   if (sErr) return json({ error: sErr.message }, 500);
 
   return json({ ok: true });
