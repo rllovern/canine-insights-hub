@@ -537,7 +537,11 @@ Deno.serve(async (req) => {
     // location has more than the safety-capped pages. Hydrate every in-window
     // contact directly by contactId so old leads with visible GHL activity do
     // not end up with zero local messages.
-    for (const cid of contactIds.slice(0, MAX_TARGETED_CONVERSATION_LOOKUPS)) {
+    // Only worth doing on the first invoke of the phase — later invokes are
+    // walking the location-wide cursor and would repeat the same lookups.
+    const targetedBudget = (phase === "all" || Number(cursorIn?.skip ?? 0) === 0)
+      ? MAX_TARGETED_CONVERSATION_LOOKUPS : 0;
+    for (const cid of contactIds.slice(0, targetedBudget)) {
       const alreadyHasConversation = Array.from(convMap.values()).some((conv) => String((conv as Json).contactId ?? "") === cid);
       if (alreadyHasConversation) continue;
       targetedConversationLookups++;
