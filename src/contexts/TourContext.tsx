@@ -20,10 +20,10 @@ type TourContextValue = {
 
 const TourContext = createContext<TourContextValue | undefined>(undefined);
 
-// Roles the tour auto-starts for.
-const TOUR_ROLES = ["admin", "location_owner"];
 // Roles that can launch the tour manually (Help button).
 const TOUR_HELP_ROLES = ["super_admin", "admin", "owner", "location_owner"];
+// Routes where the tour must never auto-start (auth / onboarding screens).
+const BLOCKED_AUTOSTART_ROUTES = ["/login", "/reset-password", "/change-password", "/auth"];
 
 export function useTour() {
   const ctx = useContext(TourContext);
@@ -98,10 +98,13 @@ export function TourProvider({ children }: { children: ReactNode }) {
     if (index >= total) setIndex(0);
   }, [index, total]);
 
-  // Auto-start once for real admins who have never finished or dismissed the tour.
+  // Auto-start on first login for any signed-in user who has never finished or
+  // dismissed the tour.
   useEffect(() => {
     if (autoChecked.current) return;
-    if (!user?.id || !TOUR_ROLES.includes(realRole as string)) return;
+    if (!user?.id || !realRole) return;
+    if (BLOCKED_AUTOSTART_ROUTES.some((r) => location.pathname.startsWith(r))) return;
+    if (total === 0) return;
     autoChecked.current = true;
     let cancelled = false;
     (async () => {
@@ -120,7 +123,12 @@ export function TourProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, realRole]);
+  }, [user?.id, realRole, location.pathname, total]);
+
+  // New sign-in (different user) — allow the auto-start check to run again.
+  useEffect(() => {
+    autoChecked.current = false;
+  }, [user?.id]);
 
   // Keep the route in sync with the current step.
   useEffect(() => {
