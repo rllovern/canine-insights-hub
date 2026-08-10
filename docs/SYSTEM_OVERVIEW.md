@@ -17,7 +17,7 @@ relevant section in the same change. Do not let it go stale.
 | F | CTM and Google Ads pagination audit | 2026-08-06 | Not started | — |
 | G | Item 4 — persisted import-cluster flags, excluded from derived baselines only | 2026-08-07 | Not started | — |
 | H | CRM Capture Rate as a named, visible metric (per property, 30/90, by channel) | 2026-08-08 | Analysis done (Winchester 52.1%); UI not built | — |
-| I | `rebuild_lead_facts` before/after deltas | 2026-08-06 | **Unblocked 2026-08-10.** NoVA conversation walk has reached 2024-12-14, matching its earliest contact (2024-12-02); 202,901 messages stored. Walk is effectively complete. Ready to run. | — |
+| I | `rebuild_lead_facts` before/after deltas | 2026-08-06 | **Done 2026-08-10.** Re-run for all 6 CRM-connected properties. Only NoVA moved: never-responded 83.1% → 67.9%, responded leads 2,137 → 4,048, currently-waiting 6,690 → 5,806. All other properties byte-identical — their conversation data was already complete. | — |
 | J | Weekly reconcile two-clean-pass enforcement in production cadence | 2026-08-09 | Shipped, first passes accumulating | — |
 | K | Retire `sheet_sales` completely (Google Sheet is dead; GHL is sole sales source) | 2026-08-10 | **Shipped 2026-08-10.** No live read of sheet data existed — every sales surface already read `ghl_opportunities`. Removed: `sync-sheet-sales` function + cron job, Admin → Google Sheets page/route/nav, `sheet_sync_config`, `properties.google_sheet_tab`, `get_sheet_sales_by_report_token`. `sheet_sales` renamed to `sheet_sales_archived` with app access revoked. | — |
 | L | Hard errors must pause, not retry forever | 2026-08-10 | **Shipped.** `resync-failed` classifies 401/403/invalid-token/scope/config failures as hard, sets `property_data_sources.status='paused'` with the reason, stops all retries, and Admin → Data Sources shows a "Paused — needs reconnect" banner + pill. | — |
@@ -27,7 +27,8 @@ relevant section in the same change. Do not let it go stale.
 | P | Journey Funnel coherence | 2026-08-10 | **Fixed.** Lead Mix / Qualified now use CTM tiers only (bad + good + projected = total). CRM wins shown separately, labelled "counted by Date marked Won". | — |
 | Q | `won_at` provenance measurement | 2026-08-10 | **Closed by requester.** 2,758/2,758 wins from `lastStatusChangeAt`; fallbacks never fired. No `won_at_source` column needed. §8.4 corrected. | — |
 | R | §8 / §5 [RECALL] verification sweep | 2026-08-10 | **Done 2026-08-10.** Each claim now marked confirmed / corrected / still unverified. Two corrections: §8.4 (won_at root cause was false) and §8.2 (coverage figures were a 30-day-horizon artifact). | — |
-| S | Batch-entry flag on a rolling window + per-location closure-curve decision | 2026-08-10 | **Measured, §5.10.** DFW is the only property that trips the flag. Proposal below; build follows the DFW badge. | Awaiting approval of the per-location rule |
+| S | Batch-entry flag on a rolling window + per-location closure-curve decision | 2026-08-10 | **Rule amended 2026-08-10** — second clause is now active-day coverage <25%, not a portfolio-median multiple. DFW is still the only property flagged (6.3% coverage). §5.10. Build follows the DFW badge. | Awaiting approval of the per-location rule |
+| T | Sub-80% revenue floor labeling (§5.4) | 2026-08-10 | **Shipped for Sale Records.** Below 80% amount coverage the total renders "≥ $X" with "N of M wins have a deal value recorded (Y% coverage)". Applies to NoVA (47.8%), Winchester (46.6%), Central IL (18.8%). | Other revenue surfaces still unlabelled |
 
 **Change log addendum 2026-08-10:** role helpers (`has_role`, `is_staff`,
 `is_super_admin`, `is_all_properties_reader`, `can_access_property`,
