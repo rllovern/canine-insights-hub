@@ -177,7 +177,7 @@ export default function AdminUsers() {
       },
     });
     setCreating(false);
-    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
     const res = data as { invite_email_sent?: boolean; invite_email_error?: string | null } | null;
     if (res?.invite_email_sent) {
@@ -199,7 +199,7 @@ export default function AdminUsers() {
       body: { action: "resend_invite", user_id: u.user_id, app_url: window.location.origin },
     });
     setResendingId(null);
-    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
     toast.success("Set-password email sent");
     load();
@@ -238,7 +238,7 @@ export default function AdminUsers() {
 
     const { data, error } = await supabase.functions.invoke("admin-users", { body: payload });
     setSaving(false);
-    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
     toast.success("User updated");
     setEditTarget(null);
@@ -252,7 +252,7 @@ export default function AdminUsers() {
       body: { action: "delete", user_id: editTarget.user_id },
     });
     setDeleting(false);
-    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
     toast.success("User deleted");
     setConfirmDelete(false);
