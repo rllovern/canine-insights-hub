@@ -163,6 +163,8 @@ export default function SaleRecords() {
         }
       />
 
+      <RestatedBadge propertyIds={propertyIds} />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         <div data-tour="sales-heatmap" className="min-w-0">
         <ChartCard
