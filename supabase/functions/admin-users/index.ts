@@ -47,6 +47,23 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const action = body.action as string | undefined;
 
+  // Sends the built-in password-recovery email so a new user can set their own
+  // password. Uses the anon client because resetPasswordForEmail is a public
+  // auth endpoint (the service client would bypass mail delivery).
+  const sendInviteEmail = async (email: string, appUrl?: string) => {
+    const redirectTo = `${(appUrl ?? "").replace(/\/+$/, "")}/reset-password`;
+    const anon = createClient(SUPABASE_URL, ANON_KEY);
+    const { error } = await anon.auth.resetPasswordForEmail(
+      email,
+      appUrl ? { redirectTo } : undefined,
+    );
+    if (error) {
+      console.error("invite email failed", email, error.message);
+      return { sent: false, error: error.message };
+    }
+    return { sent: true, error: null as string | null };
+  };
+
   if (action === "list") {
     const { data, error } = await admin.auth.admin.listUsers({ perPage: 200 });
     if (error) return json({ error: error.message }, 500);
@@ -68,6 +85,8 @@ Deno.serve(async (req) => {
     const role = body.role as Role | undefined;
     const property_id = (body.property_id as string | undefined) || null;
     const require_password_change = body.require_password_change !== false;
+    const send_invite_email = body.send_invite_email !== false;
+    const app_url = (body.app_url as string | undefined) || undefined;
 
     if (!email || !password || !role || !ROLES.includes(role)) {
       return json({ error: "email, password, and a valid role are required" }, 400);
@@ -99,7 +118,32 @@ Deno.serve(async (req) => {
       if (aErr) return json({ error: aErr.message }, 500);
     }
 
-    return json({ ok: true, user_id: newId });
+    let invite_email_sent = false;
+    let invite_email_error: string | null = null;
+    if (send_invite_email) {
+      const res = await sendInviteEmail(email, app_url);
+      invite_email_sent = res.sent;
+      invite_email_error = res.error;
+    }
+
+    return json({ ok: true, user_id: newId, invite_email_sent, invite_email_error });
+  }
+
+  if (action === "resend_invite") {
+    const user_id = (body.user_id as string | undefined)?.trim();
+    if (!user_id) return json({ error: "user_id required" }, 400);
+    const app_url = (body.app_url as string | undefined) || undefined;
+
+    const { data: target, error: gErr } = await admin.auth.admin.getUserById(user_id);
+    if (gErr || !target?.user?.email) return json({ error: gErr?.message ?? "User has no email" }, 400);
+
+    await admin
+      .from("user_security")
+      .upsert({ user_id, must_change_password: true }, { onConflict: "user_id" });
+
+    const res = await sendInviteEmail(target.user.email, app_url);
+    if (!res.sent) return json({ error: res.error ?? "Failed to send email" }, 400);
+    return json({ ok: true, invite_email_sent: true });
   }
 
   if (action === "update") {
