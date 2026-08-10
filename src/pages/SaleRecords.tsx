@@ -72,6 +72,12 @@ export default function SaleRecords() {
   // Wins with no dollar figure recorded in the CRM. We never impute a value —
   // revenue reads "No deal values recorded" instead of $0.
   const revenueRecorded = rows.some((r) => (r.amount ?? 0) > 0);
+  // §5.4 floor labeling: below 80% amount coverage the dollar total is a FLOOR,
+  // not a measurement. We never impute the missing values — we disclose them.
+  const winsWithAmount = rows.filter((r) => (r.amount ?? 0) > 0).length;
+  const amountCoveragePct = rows.length ? (winsWithAmount / rows.length) * 100 : 0;
+  const isRevenueFloor = revenueRecorded && amountCoveragePct < 80;
+  const coverageNote = `${winsWithAmount} of ${rows.length} wins have a deal value recorded (${amountCoveragePct.toFixed(0)}% coverage)`;
 
   const propertyName = useMemo(() => {
     const map = new Map(properties.map((p) => [p.id, p.name]));
@@ -165,7 +171,11 @@ export default function SaleRecords() {
           crm.noneConnected
             ? `${label} · No CRM connected — sales cannot be reported for this location`
             : `${label} · ${format(range.from, "MMM d, yyyy")} – ${format(range.to, "MMM d, yyyy")} · ${rows.length} ${rows.length === 1 ? "sale" : "sales"} · ${
-                revenueRecorded ? currency.format(total) : "No deal values recorded"
+                !revenueRecorded
+                  ? "No deal values recorded"
+                  : isRevenueFloor
+                    ? `at least ${currency.format(total)} — ${coverageNote}`
+                    : currency.format(total)
               }`
         }
         actions={
@@ -272,9 +282,21 @@ export default function SaleRecords() {
               {revenueRecorded ? (
                 <tfoot>
                   <tr className="border-t border-border bg-muted/30 font-semibold">
-                    <td className="px-3 py-2" colSpan={showProperty ? 6 : 5}>Total</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{currency.format(total)}</td>
+                    <td className="px-3 py-2" colSpan={showProperty ? 6 : 5}>
+                      {isRevenueFloor ? "Total (floor)" : "Total"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {isRevenueFloor ? `≥ ${currency.format(total)}` : currency.format(total)}
+                    </td>
                   </tr>
+                  {isRevenueFloor && (
+                    <tr className="bg-muted/30 text-xs font-normal text-muted-foreground">
+                      <td className="px-3 pb-2" colSpan={showProperty ? 7 : 6}>
+                        {coverageNote}. Wins without a value are counted but contribute $0, so the
+                        total is a floor. Values are never estimated.
+                      </td>
+                    </tr>
+                  )}
                 </tfoot>
               ) : (
                 <tfoot>
