@@ -216,7 +216,7 @@ export default function AdminUsers() {
       role: u.role,
       property_id: assigned?.property_id ?? "",
     });
-    setConfirmDelete(false);
+    setDeleteTarget(null);
   };
 
   const saveEdit = async (e: React.FormEvent) => {
@@ -578,7 +578,7 @@ export default function AdminUsers() {
                   type="button"
                   variant="destructive"
                   disabled={editTarget.user_id === me?.id}
-                  onClick={() => setConfirmDelete(true)}
+                  onClick={() => { setDeleteTarget(editTarget); setEditTarget(null); }}
                 >
                   Delete user
                 </Button>
@@ -592,7 +592,7 @@ export default function AdminUsers() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this user?</AlertDialogTitle>
