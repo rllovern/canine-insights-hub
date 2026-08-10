@@ -36,6 +36,29 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Mail, Pencil } from "lucide-react";
 
+// supabase.functions.invoke() surfaces only "Edge Function returned a non-2xx
+// status code" — the useful message lives in the response body. Pull it out.
+async function fnError(
+  error: unknown,
+  data: unknown,
+): Promise<string | null> {
+  const bodyErr = (data as { error?: string } | null)?.error;
+  if (bodyErr) return bodyErr;
+  if (!error) return null;
+  const ctx = (error as { context?: Response }).context;
+  if (ctx && typeof ctx.text === "function") {
+    try {
+      const raw = await ctx.clone().text();
+      const parsed = JSON.parse(raw) as { error?: string };
+      if (parsed?.error) return parsed.error;
+      if (raw) return raw;
+    } catch {
+      /* fall through to generic message */
+    }
+  }
+  return (error as { message?: string }).message ?? "Request failed";
+}
+
 interface UserRow {
   user_id: string;
   role: AppRole;
