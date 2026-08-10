@@ -2423,6 +2423,14 @@ export type Database = {
           source: string
         }[]
       }
+      get_campaign_labels_by_report_token: {
+        Args: { _token: string }
+        Returns: {
+          campaign: string
+          label_name: string
+          property_id: string
+        }[]
+      }
       get_cron_secret_v2: { Args: never; Returns: string }
       get_ctm_calls_by_report_token: {
         Args: { _from: string; _to: string; _token: string }
@@ -2633,8 +2641,26 @@ export type Database = {
           schedule: string
         }[]
       }
+      get_won_days_by_report_token: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: {
+          monetary_value: number
+          won_at: string
+        }[]
+      }
       ghl_won_attribution: {
         Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: {
+          ad_source: string
+          contact_method: string
+          property_id: string
+          revenue: number
+          wins: number
+          won_day: string
+        }[]
+      }
+      ghl_won_attribution_by_report_token: {
+        Args: { _from: string; _to: string; _token: string }
         Returns: {
           ad_source: string
           contact_method: string
