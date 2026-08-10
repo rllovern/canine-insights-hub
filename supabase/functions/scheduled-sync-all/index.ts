@@ -80,14 +80,44 @@ Deno.serve(async (req) => {
   // parent's platform wall-time limit and silently kill the outer loop.
   const PER_INVOKE_TIMEOUT_MS = 90_000;
 
-  async function invokeOnce(fnName: string, property_id: string) {
+  // ---- Connection health bookkeeping (degraded state) ----------------
+  async function recordHealth(
+    property_id: string,
+    source: string,
+    ok: boolean,
+    failedPhase: string | null,
+  ) {
+    if (ok) {
+      await admin.from("property_data_sources").update({
+        last_success_at: new Date().toISOString(),
+        consecutive_failures: 0,
+        last_failed_phase: null,
+        backoff_until: null,
+      }).eq("property_id", property_id).eq("source", source);
+      return;
+    }
+    const { data: cur } = await admin
+      .from("property_data_sources")
+      .select("consecutive_failures")
+      .eq("property_id", property_id).eq("source", source)
+      .maybeSingle();
+    const next = Number(cur?.consecutive_failures ?? 0) + 1;
+    await admin.from("property_data_sources").update({
+      consecutive_failures: next,
+      last_failure_at: new Date().toISOString(),
+      last_failed_phase: failedPhase,
+    }).eq("property_id", property_id).eq("source", source);
+  }
+
+  async function invokeOnce(fnName: string, property_id: string, extra: Record<string, unknown> = {}) {
     const started_at = new Date().toISOString();
     let status: "success" | "failure" = "success";
     let error_message: string | null = null;
     let rows_written: number | null = null;
+    let payload: any = null;
     try {
       const invokePromise = admin.functions.invoke(fnName, {
-        body: { property_id, date_from, date_to },
+        body: { property_id, date_from, date_to, ...extra },
       });
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
@@ -96,6 +126,7 @@ Deno.serve(async (req) => {
         );
       });
       const { data, error } = (await Promise.race([invokePromise, timeoutPromise])) as any;
+      payload = data ?? null;
       if (error) {
         status = "failure";
         error_message = String(error.message ?? error);
@@ -109,7 +140,57 @@ Deno.serve(async (req) => {
       status = "failure";
       error_message = e instanceof Error ? e.message : String(e);
     }
-    return { started_at, status, error_message, rows_written };
+    return { started_at, status, error_message, rows_written, payload };
+  }
+
+  // ---- GHL phase runner ----------------------------------------------
+  // Each phase is idempotent and safely re-runnable; the cursor returned by
+  // one invoke feeds the next, so pagination is per-invoke rather than
+  // per-run and full coverage becomes achievable over successive invokes.
+  const GHL_PHASES = [
+    "users", "pipelines", "contacts", "conversations",
+    "opportunities", "appointments", "finalize",
+  ];
+  const MAX_INVOKES_PER_PHASE = 8;
+  const GHL_WALL_BUDGET_MS = 10 * 60_000;
+
+  async function runGhlChunked(property_id: string, run_group_id: string) {
+    const deadline = Date.now() + GHL_WALL_BUDGET_MS;
+    let anyFailure = false;
+    let failedPhase: string | null = null;
+    for (const p of GHL_PHASES) {
+      let cursor: unknown = null;
+      for (let i = 0; i < MAX_INVOKES_PER_PHASE; i++) {
+        if (Date.now() > deadline) return { ok: !anyFailure, failedPhase: failedPhase ?? p };
+        const startedAt = new Date().toISOString();
+        const { data: pending } = await admin.from("sync_runs").insert({
+          property_id, source: "ghl", status: "running", started_at: startedAt,
+          attempt: i + 1, run_group_id, trigger_source: "cron", phase: p,
+        }).select("id").maybeSingle();
+
+        const r = await invokeOnce("sync-ghl", property_id, { phase: p, cursor });
+        const done = r.payload?.phase_done !== false;
+        const update = {
+          status: r.status,
+          phase: p,
+          error_message: r.error_message ? r.error_message.slice(0, 2000) : null,
+          finished_at: new Date().toISOString(),
+          stats: { phase: p, phase_done: done, invoke: i + 1, run_group_id } as never,
+        };
+        if (pending?.id) await admin.from("sync_runs").update(update).eq("id", pending.id);
+        else await admin.from("sync_runs").insert({ property_id, source: "ghl", started_at: startedAt, attempt: i + 1, run_group_id, trigger_source: "cron", ...update });
+
+        if (r.status === "failure") {
+          anyFailure = true;
+          failedPhase = p;
+          break; // move to the next phase; a stuck phase must not block the rest
+        }
+        if (done) break;
+        cursor = r.payload?.next_cursor ?? null;
+        if (!cursor) break;
+      }
+    }
+    return { ok: !anyFailure, failedPhase };
   }
 
   // Run sequentially to avoid hammering external APIs / rate limits.
@@ -118,6 +199,14 @@ Deno.serve(async (req) => {
     if (!fnName) continue;
 
     const run_group_id = crypto.randomUUID();
+
+    if (row.source === "ghl") {
+      const res = await runGhlChunked(row.property_id as string, run_group_id);
+      await recordHealth(row.property_id as string, "ghl", res.ok, res.failedPhase);
+      if (res.ok) succeeded++; else failed++;
+      continue;
+    }
+
     const pairDeadline = Date.now() + PER_PAIR_TIMEOUT_MS;
     let lastStatus: "success" | "failure" = "failure";
     let attemptsRun = 0;
@@ -173,6 +262,7 @@ Deno.serve(async (req) => {
       if (r.status === "success") break;
     }
 
+    await recordHealth(row.property_id as string, row.source as string, lastStatus === "success", null);
     if (attemptsRun > 1) retried++;
     if (lastStatus === "success") succeeded++;
     else failed++;
