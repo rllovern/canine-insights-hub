@@ -5,6 +5,7 @@ import { Property } from "@/lib/types";
 import { DashboardProvider } from "@/contexts/DashboardContext";
 import { PublicShell } from "@/components/layout/PublicShell";
 import { PublicReportToolbar } from "@/components/layout/PublicReportToolbar";
+import { DataFreshnessLine } from "@/components/reports/DataFreshnessLine";
 import type { MetricRow } from "@/lib/data-sources";
 import Dashboard from "@/pages/Dashboard";
 import CallTracking from "@/pages/CallTracking";
@@ -62,6 +63,7 @@ export const TokenReport = forwardRef<
           }
         >
           <div className="space-y-8">
+            <DataFreshnessLine token={token} />
             <Dashboard />
             <CallTracking />
           </div>

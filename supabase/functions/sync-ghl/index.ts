@@ -243,7 +243,14 @@ Deno.serve(async (req) => {
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  let body: { property_id?: string; date_from?: string; date_to?: string; include_tasks?: boolean } = {};
+  let body: {
+    property_id?: string;
+    date_from?: string;
+    date_to?: string;
+    include_tasks?: boolean;
+    phase?: string;
+    cursor?: unknown;
+  } = {};
   try { body = await req.json(); } catch { /* allow empty */ }
   const { property_id } = body;
   if (!property_id) {
@@ -251,6 +258,28 @@ Deno.serve(async (req) => {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
+  // ---- Phase chunking -------------------------------------------------
+  // The orchestrator drives one phase per invoke and passes the cursor back
+  // in, so a single phase can span many invokes without ever hitting the 90s
+  // wall-time limit. `phase: "all"` (the default) preserves the legacy
+  // single-invoke behaviour used by the manual sync button.
+  const PHASES = [
+    "users", "pipelines", "contacts", "conversations",
+    "opportunities", "appointments", "tasks", "finalize",
+  ] as const;
+  type Phase = typeof PHASES[number];
+  const phase = String(body.phase ?? "all");
+  if (phase !== "all" && !PHASES.includes(phase as Phase)) {
+    return new Response(JSON.stringify({ error: `unknown phase: ${phase}` }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const runs = (p: Phase) => phase === "all" || phase === p;
+  // Cursor carried across invokes of the same phase. Shape is phase-specific.
+  const cursorIn = (body.cursor ?? null) as Record<string, unknown> | null;
+  let cursorOut: Record<string, unknown> | null = null;
+  let phaseDone = true;
 
   const { data: pds, error: pdsErr } = await admin
     .from("property_data_sources")
@@ -279,6 +308,7 @@ Deno.serve(async (req) => {
     property_id, location_id: locationId,
     window: { from: dateFrom.toISOString(), to: dateTo.toISOString() },
     include_tasks: includeTasks,
+    phase,
     started_at: new Date().toISOString(),
     counts: {} as Json,
     samples: {} as Json,
@@ -298,7 +328,7 @@ Deno.serve(async (req) => {
   }
 
   // ===== 1. USERS ===================================================
-  await safe("users", async () => {
+  if (runs("users")) await safe("users", async () => {
     const j = await ghlFetch("GET", `/users/?locationId=${locationId}`, token);
     const users = ((j.users as Json[]) ?? []);
     const rows = users.map((u) => ({
@@ -314,7 +344,7 @@ Deno.serve(async (req) => {
   }, undefined);
 
   // ===== 2. PIPELINES + STAGES + MAPPING SEED =======================
-  await safe("pipelines", async () => {
+  if (runs("pipelines")) await safe("pipelines", async () => {
     const j = await ghlFetch("GET", `/opportunities/pipelines?locationId=${locationId}`, token);
     const pipelines = ((j.pipelines as Json[]) ?? []);
 
@@ -353,29 +383,42 @@ Deno.serve(async (req) => {
     counts.mapping_suggestions_added = seeded ?? 0;
   }, undefined);
 
-  // ===== 3. CONTACTS (cursor pagination) ============================
+  // ===== 3. CONTACTS (deterministic cursor pagination) ==============
   const contactIds: string[] = [];
   const contactCreatedAt = new Map<string, string>();
   const contactLookup = new Map<string, { phone: string | null; email: string | null }>();
-  await safe("contacts", async () => {
-    let cursor: unknown[] | null = null;
+  if (runs("contacts")) await safe("contacts", async () => {
+    // Resume from the cursor the previous invoke handed back.
+    let cursor: unknown[] | null = Array.isArray(cursorIn?.searchAfter)
+      ? (cursorIn!.searchAfter as unknown[]) : null;
     let pages = 0;
     const buffer: Json[] = [];
+    let exhausted = false;
     while (pages < MAX_CONTACT_SEARCH_PAGES) {
-      const reqBody: Json = { locationId, pageLimit: 100 };
+      // Explicit deterministic sort. Without it GHL's searchAfter cursor walks
+      // an undefined order and which records a run sees is non-reproducible.
+      const reqBody: Json = {
+        locationId,
+        pageLimit: 100,
+        sort: [{ field: "dateUpdated", direction: "asc" }],
+      };
       if (cursor) reqBody.searchAfter = cursor;
       const j = await ghlFetch("POST", "/contacts/search", token, reqBody);
       pages++;
       const list = ((j.contacts as Json[]) ?? []);
-      if (!list.length) break;
+      if (!list.length) { exhausted = true; break; }
       buffer.push(...list);
       const last = list[list.length - 1] as Json;
       const sa = Array.isArray(last.searchAfter) ? last.searchAfter : null;
-      if (!sa || list.length < 100) break;
+      if (!sa || list.length < 100) { exhausted = true; break; }
       cursor = sa;
     }
     counts.contact_pages = pages;
-    counts.contact_pagination_capped = buffer.length >= MAX_CONTACT_SEARCH_PAGES * 100;
+    counts.contact_pagination_capped = !exhausted;
+    if (phase === "contacts") {
+      phaseDone = exhausted;
+      cursorOut = exhausted ? null : { searchAfter: cursor };
+    }
 
     const rows = buffer.map((c) => {
       const a = c as Json;
@@ -435,23 +478,69 @@ Deno.serve(async (req) => {
   }, undefined);
 
   // ===== 4. CONVERSATIONS + MESSAGES (classified) ===================
-  await safe("conversations_messages", async () => {
+  if (runs("conversations")) await safe("conversations_messages", async () => {
+    // When this phase runs on its own invoke the contacts phase lives in a
+    // different process, so hydrate the in-window contact set from our copy.
+    if (!contactIds.length) {
+      const { data: storedContacts } = await admin
+        .from("ghl_contacts")
+        .select("ghl_contact_id, phone, email, ghl_created_at")
+        .eq("property_id", property_id)
+        .gte("ghl_created_at", dateFrom.toISOString())
+        .order("ghl_created_at", { ascending: false })
+        .limit(2000);
+      for (const c of storedContacts ?? []) {
+        const id = c.ghl_contact_id as string;
+        contactIds.push(id);
+        contactLookup.set(id, { phone: (c.phone as string | null) ?? null, email: (c.email as string | null) ?? null });
+      }
+    }
     const convMap = new Map<string, Json>();
-    let skip = 0;
+    // GHL's /conversations/search IGNORES `skip` entirely (verified against the
+    // live API: skip=0/35/70 all return the same page). The only working cursor
+    // is startAfterDate, walked with an explicit deterministic sort.
+    let startAfterDate: number | null = cursorIn?.startAfterDate != null
+      ? Number(cursorIn.startAfterDate) : null;
     let conversationPages = 0;
     let conversationSearchCapped = false;
-    while (conversationPages < MAX_CONVERSATION_SEARCH_PAGES) {
-      const j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&limit=100&skip=${skip}`, token);
+    let conversationsExhausted = false;
+    // In chunked mode a page is exactly the batch we can message-sync in one
+    // invoke, so no conversation inside a fetched page is ever dropped; the
+    // cursor picks up at the next batch on the following invoke.
+    const convPageSize = phase === "conversations" ? MAX_CONVERSATIONS_FOR_MESSAGE_SYNC : 100;
+    const convPageBudget = phase === "conversations" ? 1 : MAX_CONVERSATION_SEARCH_PAGES;
+    while (conversationPages < convPageBudget) {
+      // Deterministic order: most recent last-message first. Explicit sort is
+      // required — without it skip-based paging walks an undefined order and
+      // which conversations a run sees is not reproducible.
+      const cursorParam = startAfterDate != null ? `&startAfterDate=${startAfterDate}` : "";
+      const j = await ghlFetch(
+        "GET",
+        `/conversations/search?locationId=${locationId}&limit=${convPageSize}&sortBy=last_message_date&sort=desc${cursorParam}`,
+        token,
+      );
       const list = ((j.conversations as Json[]) ?? []);
       for (const conv of list) {
         const id = String((conv as Json).id ?? "");
         if (id) convMap.set(id, conv);
       }
       conversationPages++;
-      if (list.length < 100) break;
-      skip += list.length;
+      const tail = list[list.length - 1] as Json | undefined;
+      const tailDate = tail ? Number(tail.lastMessageDate ?? tail.dateUpdated ?? NaN) : NaN;
+      if (Number.isFinite(tailDate)) startAfterDate = tailDate;
+      // Sorted newest-first: once the page tail predates the sync window there
+      // is nothing left in range, so the phase is finished.
+      if (Number.isFinite(tailDate) && tailDate < dateFrom.getTime()) {
+        conversationsExhausted = true;
+        break;
+      }
+      if (list.length < convPageSize) { conversationsExhausted = true; break; }
     }
-    if (conversationPages >= MAX_CONVERSATION_SEARCH_PAGES) conversationSearchCapped = true;
+    if (conversationPages >= convPageBudget && !conversationsExhausted) conversationSearchCapped = true;
+    if (phase === "conversations") {
+      phaseDone = conversationsExhausted;
+      cursorOut = conversationsExhausted ? null : { startAfterDate };
+    }
     const contactSet = new Set(contactIds);
     const targetedConversationSamples: Json[] = [];
     let targetedConversationLookups = 0;
@@ -461,7 +550,11 @@ Deno.serve(async (req) => {
     // location has more than the safety-capped pages. Hydrate every in-window
     // contact directly by contactId so old leads with visible GHL activity do
     // not end up with zero local messages.
-    for (const cid of contactIds.slice(0, MAX_TARGETED_CONVERSATION_LOOKUPS)) {
+    // Only worth doing on the first invoke of the phase — later invokes are
+    // walking the location-wide cursor and would repeat the same lookups.
+    const targetedBudget = (phase === "all" || cursorIn?.startAfterDate == null)
+      ? MAX_TARGETED_CONVERSATION_LOOKUPS : 0;
+    for (const cid of contactIds.slice(0, targetedBudget)) {
       const alreadyHasConversation = Array.from(convMap.values()).some((conv) => String((conv as Json).contactId ?? "") === cid);
       if (alreadyHasConversation) continue;
       targetedConversationLookups++;
@@ -604,20 +697,31 @@ Deno.serve(async (req) => {
   }, undefined);
 
   // ===== 5. OPPORTUNITIES (+ stage-diff history) ====================
-  await safe("opportunities", async () => {
-    let page = 1;
+  if (runs("opportunities")) await safe("opportunities", async () => {
+    let page = Number(cursorIn?.page ?? 1) || 1;
+    const firstPage = page;
     const pulled: Json[] = [];
     let opportunityPages = 0;
     let opportunityPaginationCapped = false;
-    while (page <= MAX_OPPORTUNITY_PAGES) {
+    let opportunitiesExhausted = false;
+    let reportedTotal: number | null = null;
+    while (opportunityPages < MAX_OPPORTUNITY_PAGES) {
       const j = await ghlFetch("POST", "/opportunities/search", token, { locationId, limit: 100, page });
       const list = ((j.opportunities as Json[]) ?? []);
+      const meta = (j.meta ?? {}) as Json;
+      if (reportedTotal == null && meta.total != null) reportedTotal = Number(meta.total);
       pulled.push(...list);
       opportunityPages++;
-      if (list.length < 100) break;
       page++;
+      if (list.length < 100) { opportunitiesExhausted = true; break; }
     }
-    if (page > MAX_OPPORTUNITY_PAGES) opportunityPaginationCapped = true;
+    opportunityPaginationCapped = !opportunitiesExhausted;
+    counts.opportunities_reported_total = reportedTotal;
+    counts.opportunity_first_page = firstPage;
+    if (phase === "opportunities") {
+      phaseDone = opportunitiesExhausted;
+      cursorOut = opportunitiesExhausted ? null : { page };
+    }
     counts.opportunities_pulled = pulled.length;
     counts.opportunity_pages = opportunityPages;
     counts.opportunity_pagination_capped = opportunityPaginationCapped;
@@ -683,7 +787,7 @@ Deno.serve(async (req) => {
   }, undefined);
 
   // ===== 6. CALENDARS + APPOINTMENTS ================================
-  await safe("appointments", async () => {
+  if (runs("appointments")) await safe("appointments", async () => {
     const cj = await ghlFetch("GET", `/calendars/?locationId=${locationId}`, token);
     const cals = ((cj.calendars as Json[]) ?? []);
     counts.calendars = cals.length;
@@ -741,7 +845,7 @@ Deno.serve(async (req) => {
   }, undefined);
 
   // ===== 7. TASKS (opt-in) ==========================================
-  if (includeTasks) {
+  if (runs("tasks") && includeTasks) {
     await safe("tasks", async () => {
       const taskRows: Json[] = [];
       // Cap to in-window contacts.
@@ -773,8 +877,8 @@ Deno.serve(async (req) => {
     }, undefined);
   }
 
-  // ===== 8. REBUILD LEAD FACTS ======================================
-  await safe("rebuild_lead_facts", async () => {
+  // ===== 8. REBUILD LEAD FACTS (finalize only) ======================
+  if (runs("finalize")) await safe("rebuild_lead_facts", async () => {
     const { data, error } = await admin.rpc("rebuild_lead_facts", { _property_id: property_id });
     if (error) throw new Error(error.message);
     counts.lead_facts = (data as Json | null)?.facts_written ?? 0;
@@ -785,6 +889,8 @@ Deno.serve(async (req) => {
 
   // ===== Bookkeeping ================================================
   summary.finished_at = new Date().toISOString();
+  summary.phase_done = phaseDone;
+  summary.next_cursor = cursorOut;
   const blockingErrors = errs.filter((msg) =>
     !msg.startsWith("rebuild_lead_facts:"),
   );
@@ -793,6 +899,9 @@ Deno.serve(async (req) => {
   // to silently skip this pair forever. Reserve status='error' for auth /
   // config failures handled by the connection dialog. Transient issues are
   // still visible via last_error and sync_runs.
+  const failedPhase = blockingErrors.length
+    ? String(blockingErrors[0]).split(":")[0]
+    : null;
   await admin
     .from("property_data_sources")
     .update({
@@ -804,8 +913,12 @@ Deno.serve(async (req) => {
   await admin.from("sync_runs").insert({
     property_id, source: "ghl",
     status: blockingErrors.length ? "failure" : "success",
+    phase: blockingErrors.length ? failedPhase : (phase === "all" ? null : phase),
     error_message: blockingErrors.length ? blockingErrors.join(" | ").slice(0, 1000) : null,
-    stats: { warnings: errs.filter((msg) => !blockingErrors.includes(msg)) } as never,
+    stats: {
+      warnings: errs.filter((msg) => !blockingErrors.includes(msg)),
+      phase, phase_done: phaseDone, next_cursor: cursorOut,
+    } as never,
   });
 
   return new Response(JSON.stringify(summary, null, 2), {

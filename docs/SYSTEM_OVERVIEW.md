@@ -1505,3 +1505,57 @@ re-derived after Phase 3.
 
 **Decision (locked):** unattributed wins roll into "Google PPC". To be moved
 behind a per-property config flag with a visible label on any card using it.
+
+### 2026-08-10 — Phase 1, item 1 continued (sort order, ground truth, degraded state, phase chunking)
+
+**Read from live API and codebase on 2026-08-10. Everything in this entry is measured, not recalled.**
+
+#### A. Pagination sort order — findings
+
+| Endpoint | Before | Now | Verified behaviour |
+|---|---|---|---|
+| `POST /contacts/search` (contacts) | `searchAfter` cursor, **no sort** | `sort: [{field: dateUpdated, direction: asc}]` | Sort accepted; `searchAfter` tuple is `[dateUpdated_ms, id]` and aligns with the sort field |
+| `GET /conversations/search` | `skip` offset, **no sort** | `sortBy=last_message_date&sort=desc`, cursor = `startAfterDate` | **`skip` is ignored by GHL.** skip=0/35/70 returned byte-identical pages. Conversation pagination never worked. `startAfterDate` does page correctly |
+| `POST /opportunities/search` | `page` offset, no sort | `page` offset retained + `meta.total` recorded | API rejects `sort`/`sortBy`/`status` in the body (422). No sort control exists on this endpoint in `2021-07-28` |
+| `GET /conversations/{id}/messages` | `lastMessageId` cursor | unchanged | Cursor is inherently ordered; no bug |
+
+**Is prior data suspect or only incomplete?**
+- Contacts/opportunities: **incomplete, not wrong.** Records fetched were stored correctly; records never fetched are simply absent. However, because contact order was undefined, a record fetched once and then never seen again *would* go stale — its stored copy could reflect an old stage/amount. With `dateUpdated asc` the walk is now reproducible.
+- Conversations/messages: **worse than incomplete.** Because `skip` was ignored, every run re-fetched the same first page forever. Message coverage was frozen at whatever the first page contained plus per-contact targeted lookups.
+
+#### B. Ground truth vs stored (live counts, 2026-08-10)
+
+| Property | Contacts GHL / ours | Opportunities GHL / ours | Won GHL / ours | Conversations GHL / ours |
+|---|---|---|---|---|
+| Ashtabula | 5,603 / 5,603 ✅ | 423 / 434 ⚠️ (11 extra) | 137 / 137 ✅ | 1,381 / 201 |
+| Central IL | 6,080 / 238 ❌ | 1,688 / 1,504 | 16 / 16 ✅ | 2,702 / 60 |
+| DFW | 1,187 / 1,185 ✅ | 891 / 891 ✅ | 84 / 84 ✅ | 1,153 / 56 (was 25) |
+| Colorado Springs | 664 / 664 ✅ | 425 / 426 ⚠️ | 40 / 40 ✅ | 587 / 286 |
+| NoVA | 12,416 / 1,239 ❌ | 5,336 / 2,014 ❌ | 1,560 / 628 ❌ | 8,338 / 611 |
+| Winchester | 4,071 / 542 ❌ | 2,606 / 1,710 ❌ | 921 / 639 ❌ | 3,947 / 335 |
+
+Implications: **NoVA is missing 932 won opportunities and Winchester 282.** Every conversion, close-rate and revenue figure at those two locations is understated. "Extra" opportunities at Ashtabula/CO Springs are records deleted in GHL that we still hold (drift, item 5).
+
+#### C. Degraded state — shipped
+`property_data_sources` gained `consecutive_failures`, `last_success_at`, `last_failure_at`, `last_failed_phase`, `backoff_until`. `sync_runs` gained `phase`. Health is written by both the orchestrator and the recovery pass. `status` is never demoted, so a degraded pair is still swept by the orchestrator.
+
+Client-facing: `report_data_freshness(_token)` + `src/components/reports/DataFreshnessLine.tsx` render a freshness line at the top of `/report/:token`. It turns into a warning when any source has ≥3 consecutive failures or the oldest source last succeeded >12h ago.
+
+#### D. Phase chunking — shipped
+`sync-ghl` accepts `{ phase, cursor }`. Phases: `users → pipelines → contacts → conversations → opportunities → appointments → tasks → finalize`. Each is idempotent, each returns `phase_done` and `next_cursor`, each writes its own `sync_runs` row with `phase` set. `rebuild_lead_facts` now runs **only** in `finalize`. `phase: "all"` preserves the legacy single-invoke path used by the manual sync button. The orchestrator (`scheduled-sync-all`) walks the phases, up to 8 invokes per phase, 10-minute wall budget per property.
+
+#### E. Circuit breaker — shipped
+`resync-failed` retries every 2 minutes for the first 5 consecutive failures, then backs off 10m → 20m → 40m → … capped at 4h, stored in `backoff_until` and cleared on the first success.
+
+#### F. Retry storm — no collateral damage found
+Across the last 14 days: 1,484 GHL failures, of which 1,400 were `invalid input syntax for type json` (the NUL bug), 66 stuck-run reaps, 15 invoke timeouts, 2 transient contact-search 400s. **Zero 429s and zero rate-limit errors recorded**, on any property. Caveat: `ghlFetch` swallows 429s internally by retrying, so a 429 that eventually succeeded would not appear in `sync_runs`. No evidence of quota throttling affecting other properties.
+
+#### G. NUL-bug message gaps
+Only DFW was affected. Failure window 2026-08-06 → 2026-08-08 (122, 722, 563 failures/day). Recovery run on 2026-08-10 raised DFW from 25 conversations / 322 messages to 56 / 462. Full recovery of DFW's 1,153 conversations is blocked by the 30-day sync window, not by the bug.
+
+#### H. Drift: opportunities not re-fetched in >30 days
+Ashtabula 9, CO Springs 1, Winchester 97, NoVA 276, Central IL 0, DFW 0. Total 383.
+
+#### I. Proposed — NOT built, awaiting approval
+1. **New MAX_* caps** (now per-invoke, not per-run): contacts 5→10 pages, conversations 1 page of 35 per invoke (unchanged, deliberately matched to the message-sync batch so no conversation inside a fetched page is dropped), opportunities 15→10 pages per invoke with cursor continuation, total message pages 50→60, conversations for message sync 35 (unchanged), targeted lookups 20 → first invoke only (already applied).
+2. **Monthly full reconciliation pass**: a `ghl-reconcile` function walking the complete record set with no date window, comparing `meta.total` against our counts per object type, re-fetching everything sorted by `dateUpdated asc`, and hard-deleting local rows GHL no longer returns. Runs on the 1st at 03:00, one property per invoke, phase-chunked like the main sync.

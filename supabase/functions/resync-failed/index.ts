@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
 
   const { data: srcRows, error: srcErr } = await admin
     .from("property_data_sources")
-    .select("property_id, source, status")
+    .select("property_id, source, status, consecutive_failures, backoff_until")
     .in("source", ["google_ads", "ctm", "ga4", "keyword_com", "ghl"])
     .in("status", ["connected", "error"]);
   if (srcErr) {
@@ -97,6 +97,13 @@ Deno.serve(async (req) => {
   for (const row of srcRows ?? []) {
     const property_id = row.property_id as string;
     const source = row.source as string;
+
+    // ----- Circuit breaker ------------------------------------------
+    // A pair that keeps failing must not be retried every 2 minutes for days.
+    // After 5 consecutive failures we back off geometrically (10m, 20m, 40m…)
+    // up to a 4h ceiling, matching the normal scheduled cadence.
+    const backoffUntil = row.backoff_until as string | null;
+    if (backoffUntil && new Date(backoffUntil).getTime() > Date.now()) continue;
 
     const { data: last } = await admin
       .from("sync_runs")
@@ -171,6 +178,36 @@ Deno.serve(async (req) => {
     return { started_at, status, error_message, rows_written };
   }
 
+  const FAILURE_GRACE = 5; // free fast retries before the breaker engages
+  async function recordHealth(property_id: string, source: string, ok: boolean) {
+    if (ok) {
+      await admin.from("property_data_sources").update({
+        last_success_at: new Date().toISOString(),
+        consecutive_failures: 0,
+        last_failed_phase: null,
+        backoff_until: null,
+      }).eq("property_id", property_id).eq("source", source);
+      return;
+    }
+    const { data: cur } = await admin
+      .from("property_data_sources")
+      .select("consecutive_failures")
+      .eq("property_id", property_id).eq("source", source)
+      .maybeSingle();
+    const next = Number(cur?.consecutive_failures ?? 0) + 1;
+    let backoff_until: string | null = null;
+    if (next > FAILURE_GRACE) {
+      const steps = next - FAILURE_GRACE;              // 1, 2, 3, …
+      const minutes = Math.min(240, 10 * Math.pow(2, steps - 1)); // 10m → 4h cap
+      backoff_until = new Date(Date.now() + minutes * 60_000).toISOString();
+    }
+    await admin.from("property_data_sources").update({
+      consecutive_failures: next,
+      last_failure_at: new Date().toISOString(),
+      backoff_until,
+    }).eq("property_id", property_id).eq("source", source);
+  }
+
   for (const c of candidates) {
     const fnName = SOURCE_TO_FN[c.source];
     if (!fnName) continue;
@@ -200,6 +237,7 @@ Deno.serve(async (req) => {
       });
       if (r.status === "success") break;
     }
+    await recordHealth(c.property_id, c.source, lastStatus === "success");
     if (lastStatus === "success") recovered++;
     else stillFailing++;
   }
