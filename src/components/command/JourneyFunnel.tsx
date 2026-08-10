@@ -144,6 +144,7 @@ function LeadMix({
   bad,
   good,
   projected,
+  crmWins,
   total,
   benchmarkLabel,
   benchmarkRate,
