@@ -148,13 +148,36 @@ export default function AdminUsers() {
         role: form.role,
         property_id: form.role === "location_owner" ? form.property_id : null,
         require_password_change: requirePasswordChange,
+        send_invite_email: true,
+        app_url: window.location.origin,
       },
     });
     setCreating(false);
     const err = error?.message ?? (data as { error?: string } | null)?.error;
     if (err) { toast.error(err); return; }
-    toast.success("User created");
+    const res = data as { invite_email_sent?: boolean; invite_email_error?: string | null } | null;
+    if (res?.invite_email_sent) {
+      toast.success("User created — set-password email sent");
+    } else {
+      toast.success("User created", {
+        description: res?.invite_email_error
+          ? `Email not sent (${res.invite_email_error}). Share the temporary password instead.`
+          : "Email not sent. Share the temporary password instead.",
+      });
+    }
     setForm({ email: "", password: "", role: "location_owner", property_id: "" });
+    load();
+  };
+
+  const resendInvite = async (u: UserRow) => {
+    setResendingId(u.user_id);
+    const { data, error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "resend_invite", user_id: u.user_id, app_url: window.location.origin },
+    });
+    setResendingId(null);
+    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    if (err) { toast.error(err); return; }
+    toast.success("Set-password email sent");
     load();
   };
 
@@ -234,14 +257,27 @@ export default function AdminUsers() {
 
   const editButton = (u: UserRow) =>
     isSuperAdmin ? (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 gap-1 text-xs"
-        onClick={() => openEdit(u)}
-      >
-        <Pencil className="h-3 w-3" /> Edit
-      </Button>
+      <span className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs"
+          disabled={resendingId === u.user_id}
+          onClick={() => resendInvite(u)}
+          title="Email this person a link to set their own password"
+        >
+          <Mail className="h-3 w-3" />
+          {resendingId === u.user_id ? "Sending…" : "Resend invite"}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs"
+          onClick={() => openEdit(u)}
+        >
+          <Pencil className="h-3 w-3" /> Edit
+        </Button>
+      </span>
     ) : null;
 
   return (
