@@ -1516,12 +1516,17 @@ export type Database = {
       }
       property_data_sources: {
         Row: {
+          backoff_until: string | null
           campaign_label_filter: string | null
           config: Json | null
+          consecutive_failures: number
           external_account_id: string | null
           id: string
           is_connected: boolean
           last_error: string | null
+          last_failed_phase: string | null
+          last_failure_at: string | null
+          last_success_at: string | null
           last_synced_at: string | null
           login_customer_id: string | null
           property_id: string
@@ -1532,12 +1537,17 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          backoff_until?: string | null
           campaign_label_filter?: string | null
           config?: Json | null
+          consecutive_failures?: number
           external_account_id?: string | null
           id?: string
           is_connected?: boolean
           last_error?: string | null
+          last_failed_phase?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
           last_synced_at?: string | null
           login_customer_id?: string | null
           property_id: string
@@ -1548,12 +1558,17 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          backoff_until?: string | null
           campaign_label_filter?: string | null
           config?: Json | null
+          consecutive_failures?: number
           external_account_id?: string | null
           id?: string
           is_connected?: boolean
           last_error?: string | null
+          last_failed_phase?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
           last_synced_at?: string | null
           login_customer_id?: string | null
           property_id?: string
@@ -1870,6 +1885,7 @@ export type Database = {
           error_message: string | null
           finished_at: string | null
           id: string
+          phase: string | null
           property_id: string | null
           run_group_id: string | null
           source: string
@@ -1885,6 +1901,7 @@ export type Database = {
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          phase?: string | null
           property_id?: string | null
           run_group_id?: string | null
           source: string
@@ -1900,6 +1917,7 @@ export type Database = {
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          phase?: string | null
           property_id?: string | null
           run_group_id?: string | null
           source?: string
@@ -2516,6 +2534,15 @@ export type Database = {
         }
       }
       rebuild_lead_facts: { Args: { _property_id: string }; Returns: Json }
+      report_data_freshness: {
+        Args: { _token: string }
+        Returns: {
+          consecutive_failures: number
+          last_success_at: string
+          source: string
+          status: string
+        }[]
+      }
       seed_pipeline_mapping_suggestions: {
         Args: { _property_id: string }
         Returns: number
