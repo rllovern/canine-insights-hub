@@ -1,8 +1,11 @@
-import { forwardRef, useMemo, type ReactNode } from "react";
+import { forwardRef, useEffect, useMemo, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
 import { DashboardProvider } from "@/contexts/DashboardContext";
+import { PublicTokenProvider } from "@/contexts/PublicTokenContext";
+import { useProperties } from "@/contexts/PropertyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { PublicShell } from "@/components/layout/PublicShell";
 import { PublicReportToolbar } from "@/components/layout/PublicReportToolbar";
 import { DataFreshnessLine } from "@/components/reports/DataFreshnessLine";
@@ -10,6 +13,22 @@ import { RestatedBadge } from "@/components/reports/RestatedBadge";
 import type { MetricRow } from "@/lib/data-sources";
 import Dashboard from "@/pages/Dashboard";
 import CallTracking from "@/pages/CallTracking";
+
+/**
+ * For anonymous visitors the authenticated property list is empty, so scope
+ * resolves to null and every page renders "Select a client". Inject the
+ * token-resolved property for the lifetime of the report.
+ */
+function PublicScopeBridge({ property }: { property: Property }) {
+  const { user } = useAuth();
+  const { setPublicProperty } = useProperties();
+  useEffect(() => {
+    if (user) return;
+    setPublicProperty(property);
+    return () => setPublicProperty(null);
+  }, [user, property, setPublicProperty]);
+  return null;
+}
 
 /**
  * Renders the exact client-facing token report (header, toolbar, dashboard,
@@ -52,6 +71,8 @@ export const TokenReport = forwardRef<
 
   return (
     <QueryClientProvider client={queryClient}>
+      <PublicTokenProvider token={token}>
+      <PublicScopeBridge property={property} />
       <DashboardProvider fetcher={fetcher} fetcherKey={`public:${token}`} enabled={true}>
       <div ref={ref}>
         <PublicShell
@@ -72,6 +93,7 @@ export const TokenReport = forwardRef<
         </PublicShell>
       </div>
       </DashboardProvider>
+      </PublicTokenProvider>
     </QueryClientProvider>
   );
 });

@@ -8,6 +8,13 @@ interface PropertyContextValue {
   properties: Property[];
   loading: boolean;
   reload: () => Promise<void>;
+  /**
+   * Property resolved from a public report token (anonymous visitor). When
+   * set it replaces the authenticated property list so scope-dependent
+   * components render instead of showing "Select a client".
+   */
+  publicProperty: Property | null;
+  setPublicProperty: (p: Property | null) => void;
   /** @deprecated Use `useScope().activeProperty`. Kept for legacy components. */
   activeProperty: Property | null;
   /** @deprecated Use `useScope().setScope({ mode: "property", propertyId })`. */
@@ -22,6 +29,7 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeProperty, setActivePropertyState] = useState<Property | null>(null);
+  const [publicProperty, setPublicProperty] = useState<Property | null>(null);
 
   const setActiveProperty = useCallback((p: Property | null) => {
     setActivePropertyState(p);
@@ -73,8 +81,20 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
     load();
   }, [load]);
 
+  const effectiveProperties = publicProperty ? [publicProperty] : properties;
+
   return (
-    <PropertyContext.Provider value={{ properties, loading, reload: load, activeProperty, setActiveProperty }}>
+    <PropertyContext.Provider
+      value={{
+        properties: effectiveProperties,
+        loading: publicProperty ? false : loading,
+        reload: load,
+        publicProperty,
+        setPublicProperty,
+        activeProperty: publicProperty ?? activeProperty,
+        setActiveProperty,
+      }}
+    >
       {children}
     </PropertyContext.Provider>
   );

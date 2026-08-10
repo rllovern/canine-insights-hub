@@ -32,13 +32,19 @@ function readStored(): Stored | null {
 }
 
 export function ScopeProvider({ children }: { children: ReactNode }) {
-  const { properties, loading } = useProperties();
+  const { properties, loading, publicProperty } = useProperties();
   const { effectiveRole, isAllPropertiesReader, isLocationOwner } = usePreviewMode();
   const [mode, setMode] = useState<ScopeMode>("agency");
   const [propertyId, setPropertyId] = useState<string | null>(null);
 
   // Hydrate from storage / sensible defaults once properties load.
   useEffect(() => {
+    // Public report: scope is dictated by the token-resolved property.
+    if (publicProperty) {
+      setMode("property");
+      setPropertyId(publicProperty.id);
+      return;
+    }
     if (loading) return;
     // Location Owner: force property scope to their (single) assigned property.
     if (isLocationOwner) {
@@ -60,15 +66,17 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
     }
     // Defaults: agency view for everyone else.
     setMode("agency"); setPropertyId(null);
-  }, [loading, properties, isLocationOwner]);
+  }, [loading, properties, isLocationOwner, publicProperty]);
 
   const setScope = useCallback((next: { mode: ScopeMode; propertyId?: string | null }) => {
     const nextMode = next.mode;
     const nextPid = nextMode === "property" ? (next.propertyId ?? null) : null;
     setMode(nextMode);
     setPropertyId(nextPid);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode: nextMode, propertyId: nextPid })); } catch { /* ignore */ }
-  }, []);
+    if (!publicProperty) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode: nextMode, propertyId: nextPid })); } catch { /* ignore */ }
+    }
+  }, [publicProperty]);
 
   const value = useMemo<ScopeValue>(() => {
     const activeProperty = mode === "property" ? (properties.find((p) => p.id === propertyId) ?? null) : null;
