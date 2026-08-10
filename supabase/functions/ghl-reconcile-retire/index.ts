@@ -58,9 +58,9 @@ Deno.serve(async (req) => {
   const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer /, "");
   const cronSecret = req.headers.get("x-cron-secret");
   let cronOk = false;
-  if (cronSecret) {
+  if (cronSecret || jwt) {
     const { data: expected } = await admin.rpc("get_cron_secret_v2");
-    cronOk = !!expected && cronSecret === expected;
+    cronOk = !!expected && (cronSecret === expected || jwt === expected);
   }
   if (jwt !== SERVICE_KEY && !cronOk) {
     const { data: userRes } = await admin.auth.getUser(jwt);
