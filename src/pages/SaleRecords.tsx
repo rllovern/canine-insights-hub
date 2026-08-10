@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/data/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useScope } from "@/contexts/ScopeContext";
+import { RestatedBadge } from "@/components/reports/RestatedBadge";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import {
@@ -162,6 +163,8 @@ export default function SaleRecords() {
           </Button>
         }
       />
+
+      <RestatedBadge propertyIds={propertyIds} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         <div data-tour="sales-heatmap" className="min-w-0">

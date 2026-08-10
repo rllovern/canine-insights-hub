@@ -1020,6 +1020,122 @@ export type Database = {
           },
         ]
       }
+      ghl_opportunities_retired: {
+        Row: {
+          assigned_to: string | null
+          contact_id: string | null
+          created_at: string
+          deleted_at: string
+          deleted_cause: string
+          ghl_created_at: string | null
+          ghl_opportunity_id: string
+          ghl_updated_at: string | null
+          id: string
+          lost_at: string | null
+          lost_reason_normalized: string | null
+          lost_reason_raw: string | null
+          monetary_value: number | null
+          pipeline_id: string | null
+          property_id: string
+          raw: Json | null
+          reconcile_run_id: string | null
+          stage_id: string | null
+          status: Database["public"]["Enums"]["ghl_opportunity_status"]
+          status_raw: string | null
+          surviving_opportunity_id: string | null
+          surviving_status: string | null
+          updated_at: string
+          won_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          contact_id?: string | null
+          created_at?: string
+          deleted_at?: string
+          deleted_cause?: string
+          ghl_created_at?: string | null
+          ghl_opportunity_id: string
+          ghl_updated_at?: string | null
+          id?: string
+          lost_at?: string | null
+          lost_reason_normalized?: string | null
+          lost_reason_raw?: string | null
+          monetary_value?: number | null
+          pipeline_id?: string | null
+          property_id: string
+          raw?: Json | null
+          reconcile_run_id?: string | null
+          stage_id?: string | null
+          status?: Database["public"]["Enums"]["ghl_opportunity_status"]
+          status_raw?: string | null
+          surviving_opportunity_id?: string | null
+          surviving_status?: string | null
+          updated_at?: string
+          won_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          contact_id?: string | null
+          created_at?: string
+          deleted_at?: string
+          deleted_cause?: string
+          ghl_created_at?: string | null
+          ghl_opportunity_id?: string
+          ghl_updated_at?: string | null
+          id?: string
+          lost_at?: string | null
+          lost_reason_normalized?: string | null
+          lost_reason_raw?: string | null
+          monetary_value?: number | null
+          pipeline_id?: string | null
+          property_id?: string
+          raw?: Json | null
+          reconcile_run_id?: string | null
+          stage_id?: string | null
+          status?: Database["public"]["Enums"]["ghl_opportunity_status"]
+          status_raw?: string | null
+          surviving_opportunity_id?: string | null
+          surviving_status?: string | null
+          updated_at?: string
+          won_at?: string | null
+        }
+        Relationships: []
+      }
+      ghl_opportunity_miss_streaks: {
+        Row: {
+          first_missed_at: string
+          ghl_opportunity_id: string
+          last_missed_at: string
+          last_run_id: string | null
+          miss_count: number
+          property_id: string
+        }
+        Insert: {
+          first_missed_at?: string
+          ghl_opportunity_id: string
+          last_missed_at?: string
+          last_run_id?: string | null
+          miss_count?: number
+          property_id: string
+        }
+        Update: {
+          first_missed_at?: string
+          ghl_opportunity_id?: string
+          last_missed_at?: string
+          last_run_id?: string | null
+          miss_count?: number
+          property_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_opportunity_miss_streaks_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ghl_opportunity_stage_history: {
         Row: {
           changed_at: string
@@ -1383,6 +1499,75 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      metric_restatements: {
+        Row: {
+          cause: string
+          cause_detail: string | null
+          created_at: string
+          delta: number | null
+          id: string
+          metric: string
+          new_value: number
+          opportunity_id: string | null
+          period_end: string
+          period_start: string
+          prior_value: number
+          property_id: string
+          reconcile_run_id: string | null
+          surviving_opportunity_id: string | null
+          surviving_status: string | null
+        }
+        Insert: {
+          cause: string
+          cause_detail?: string | null
+          created_at?: string
+          delta?: number | null
+          id?: string
+          metric: string
+          new_value: number
+          opportunity_id?: string | null
+          period_end: string
+          period_start: string
+          prior_value: number
+          property_id: string
+          reconcile_run_id?: string | null
+          surviving_opportunity_id?: string | null
+          surviving_status?: string | null
+        }
+        Update: {
+          cause?: string
+          cause_detail?: string | null
+          created_at?: string
+          delta?: number | null
+          id?: string
+          metric?: string
+          new_value?: number
+          opportunity_id?: string | null
+          period_end?: string
+          period_start?: string
+          prior_value?: number
+          property_id?: string
+          reconcile_run_id?: string | null
+          surviving_opportunity_id?: string | null
+          surviving_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metric_restatements_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metric_restatements_reconcile_run_id_fkey"
+            columns: ["reconcile_run_id"]
+            isOneToOne: false
+            referencedRelation: "reconcile_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       properties: {
         Row: {
@@ -1779,6 +1964,68 @@ export type Database = {
           },
         ]
       }
+      reconcile_runs: {
+        Row: {
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          live_count: number | null
+          missing_count: number | null
+          notes: Json | null
+          pages: number | null
+          property_id: string | null
+          retired_count: number
+          source: string
+          started_at: string
+          status: string
+          stored_count: number | null
+          walk_complete: boolean
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          live_count?: number | null
+          missing_count?: number | null
+          notes?: Json | null
+          pages?: number | null
+          property_id?: string | null
+          retired_count?: number
+          source?: string
+          started_at?: string
+          status?: string
+          stored_count?: number | null
+          walk_complete?: boolean
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          live_count?: number | null
+          missing_count?: number | null
+          notes?: Json | null
+          pages?: number | null
+          property_id?: string | null
+          retired_count?: number
+          source?: string
+          started_at?: string
+          status?: string
+          stored_count?: number | null
+          walk_complete?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reconcile_runs_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sheet_sales: {
         Row: {
           city_state: string | null
@@ -2158,6 +2405,10 @@ export type Database = {
         Args: { _property_id: string; _user_id: string }
         Returns: boolean
       }
+      count_wins_in_period: {
+        Args: { _from: string; _property_id: string; _to: string }
+        Returns: number
+      }
       get_api_health_summary: {
         Args: never
         Returns: {
@@ -2273,6 +2524,58 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "properties"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_restatements: {
+        Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: {
+          cause: string
+          cause_detail: string | null
+          created_at: string
+          delta: number | null
+          id: string
+          metric: string
+          new_value: number
+          opportunity_id: string | null
+          period_end: string
+          period_start: string
+          prior_value: number
+          property_id: string
+          reconcile_run_id: string | null
+          surviving_opportunity_id: string | null
+          surviving_status: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "metric_restatements"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_restatements_by_report_token: {
+        Args: { _from: string; _to: string; _token: string }
+        Returns: {
+          cause: string
+          cause_detail: string | null
+          created_at: string
+          delta: number | null
+          id: string
+          metric: string
+          new_value: number
+          opportunity_id: string | null
+          period_end: string
+          period_start: string
+          prior_value: number
+          property_id: string
+          reconcile_run_id: string | null
+          surviving_opportunity_id: string | null
+          surviving_status: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "metric_restatements"
           isOneToOne: false
           isSetofReturn: true
         }
@@ -2550,6 +2853,10 @@ export type Database = {
       set_sync_cron_schedule: {
         Args: { _active: boolean; _schedule: string }
         Returns: undefined
+      }
+      sum_won_revenue_in_period: {
+        Args: { _from: string; _property_id: string; _to: string }
+        Returns: number
       }
       sync_verified_sales_daily_metrics: {
         Args: { _property_id: string }
