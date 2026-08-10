@@ -1475,3 +1475,33 @@ change:
 - A page or card → §6
 - A bug found, fixed, or worked around → §8
 - Something you looked into and still could not determine → §9
+---
+
+## §10 Change log (maintained going forward)
+
+### 2026-08-10 — Phase 1, item 1 (GHL sync stability)
+
+**Shipped**
+- `sync-ghl`: added `sanitizeJson()` applied inside `upsertChunked()`. Strips
+  `\u0000` and unpaired surrogates from every key/value before upsert. This was
+  the cause of DFW's `invalid input syntax for type json` on `ghl_messages`
+  (1,115 failed runs 2026-08-07 → 2026-08-08).
+- `resync-failed`: added a **stuck-run reaper**. Any `sync_runs` row still
+  `status='running'` 15 minutes after `started_at` is closed as `failure` with
+  `error_message='stuck run reaped…'`, making the pair eligible for recovery.
+- Data fix: the 6 runs stuck in `running` since 2026-08-08 were reaped.
+
+**Reported, not implemented (awaiting approval)**
+- Connection-state honesty mechanism for `property_data_sources.status`
+  (proposal: add `degraded` + `consecutive_failures`/`last_success_at`).
+- Timeout diagnosis: the 90s ceiling is `PER_INVOKE_TIMEOUT_MS` in
+  `scheduled-sync-all`; the fix is reducing per-run work (phase splitting),
+  not raising the ceiling.
+
+**Cancelled by user (do not build):** three-tier win classification,
+regime-change caps on `ownCloseRate`, import-cluster lead detection, anything
+using days-to-close. All were derived from a failing sync and must be
+re-derived after Phase 3.
+
+**Decision (locked):** unattributed wins roll into "Google PPC". To be moved
+behind a per-property config flag with a visible label on any card using it.

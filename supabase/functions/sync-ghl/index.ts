@@ -201,11 +201,33 @@ function isWithinWindow(iso: unknown, from: Date, to: Date): boolean {
 }
 
 // ---------- Chunked upsert ------------------------------------------
+// Postgres json/jsonb cannot store the NUL code point (\u0000), and lone
+// surrogates are not valid JSON text either. GHL message bodies (DFW) contain
+// both, which produced "invalid input syntax for type json" on every run.
+function sanitizeJson<T>(value: T): T {
+  if (typeof value === "string") {
+    return value
+      .replace(/\u0000/g, "")
+      // strip unpaired surrogates
+      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "")
+      .replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "$1") as unknown as T;
+  }
+  if (Array.isArray(value)) return value.map((v) => sanitizeJson(v)) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[sanitizeJson(k)] = sanitizeJson(v);
+    }
+    return out as unknown as T;
+  }
+  return value;
+}
+
 async function upsertChunked(admin: ReturnType<typeof createClient>, table: string, rows: unknown[], onConflict: string, chunk = 200) {
   if (!rows.length) return 0;
   let n = 0;
   for (let i = 0; i < rows.length; i += chunk) {
-    const slice = rows.slice(i, i + chunk);
+    const slice = sanitizeJson(rows.slice(i, i + chunk));
     const { error } = await admin.from(table).upsert(slice as never, { onConflict });
     if (error) throw new Error(`upsert ${table}: ${error.message}`);
     n += slice.length;
