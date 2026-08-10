@@ -17,7 +17,7 @@ relevant section in the same change. Do not let it go stale.
 | F | CTM and Google Ads pagination audit | 2026-08-06 | Not started | — |
 | G | Item 4 — persisted import-cluster flags, excluded from derived baselines only | 2026-08-07 | Not started | — |
 | H | CRM Capture Rate as a named, visible metric (per property, 30/90, by channel) | 2026-08-08 | Analysis done (Winchester 52.1%); UI not built | — |
-| I | `rebuild_lead_facts` before/after deltas | 2026-08-06 | Blocked | NoVA conversation walk still running |
+| I | `rebuild_lead_facts` before/after deltas | 2026-08-06 | **Unblocked 2026-08-10.** NoVA conversation walk has reached 2024-12-14, matching its earliest contact (2024-12-02); 202,901 messages stored. Walk is effectively complete. Ready to run. | — |
 | J | Weekly reconcile two-clean-pass enforcement in production cadence | 2026-08-09 | Shipped, first passes accumulating | — |
 | K | Retire `sheet_sales` completely (Google Sheet is dead; GHL is sole sales source) | 2026-08-10 | **Shipped 2026-08-10.** No live read of sheet data existed — every sales surface already read `ghl_opportunities`. Removed: `sync-sheet-sales` function + cron job, Admin → Google Sheets page/route/nav, `sheet_sync_config`, `properties.google_sheet_tab`, `get_sheet_sales_by_report_token`. `sheet_sales` renamed to `sheet_sales_archived` with app access revoked. | — |
 | L | Hard errors must pause, not retry forever | 2026-08-10 | **Shipped.** `resync-failed` classifies 401/403/invalid-token/scope/config failures as hard, sets `property_data_sources.status='paused'` with the reason, stops all retries, and Admin → Data Sources shows a "Paused — needs reconnect" banner + pill. | — |
@@ -25,6 +25,9 @@ relevant section in the same change. Do not let it go stale.
 | N | `scheduled-sync-all` 504s | 2026-08-10 | **Diagnosed, fix proposed, not built.** | Awaiting approval of the dispatcher rewrite |
 | O | DFW date-display disclosure (all wins carry one August batch stamp) | 2026-08-10 | Options proposed, not built | Awaiting choice |
 | P | Journey Funnel coherence | 2026-08-10 | **Fixed.** Lead Mix / Qualified now use CTM tiers only (bad + good + projected = total). CRM wins shown separately, labelled "counted by Date marked Won". | — |
+| Q | `won_at` provenance measurement | 2026-08-10 | **Closed by requester.** 2,758/2,758 wins from `lastStatusChangeAt`; fallbacks never fired. No `won_at_source` column needed. §8.4 corrected. | — |
+| R | §8 / §5 [RECALL] verification sweep | 2026-08-10 | **Done 2026-08-10.** Each claim now marked confirmed / corrected / still unverified. Two corrections: §8.4 (won_at root cause was false) and §8.2 (coverage figures were a 30-day-horizon artifact). | — |
+| S | Batch-entry flag on a rolling window + per-location closure-curve decision | 2026-08-10 | **Measured, §5.10.** DFW is the only property that trips the flag. Proposal below; build follows the DFW badge. | Awaiting approval of the per-location rule |
 
 **Change log addendum 2026-08-10:** role helpers (`has_role`, `is_staff`,
 `is_super_admin`, `is_all_properties_reader`, `can_access_property`,
@@ -1066,11 +1069,15 @@ as a real result.
   (`verified-sales.ts:401-407`).
 - `lead_quality_rollup` returns `NULL`, not `0`, when the denominator is zero.
 
-**Extensions agreed but NOT yet implemented [RECALL]:** revenue must be labeled
+**Extensions agreed [RECALL — PARTIALLY CONFIRMED SHIPPED 2026-08-10]:** revenue must be labeled
 a *floor* wherever amount coverage is below 80%; where coverage is 0%
 (Colorado Springs) it must read "No deal values recorded" and never `$0`;
 expected value must be shown in **wins** rather than dollars below 80% coverage.
-**None of this exists in code today.**
+The "No deal values recorded" rendering for Colorado Springs and the
+"No CRM connected" rendering for MoCo **shipped** with the `sheet_sales`
+retirement. The sub-80% floor labeling and wins-instead-of-dollars rule are
+**still unbuilt** — and now apply to NoVA and Winchester too, whose coverage
+fell below 50% after the backfill (§8.2).
 
 ## 5.5 Disqualification tags
 
@@ -1086,10 +1093,11 @@ lands on `ghl_lead_facts.is_disqualified`,
 `suppresses_needs_first_response_by_tag`, and `disqualification_reason`, all
 written by `rebuild_lead_facts()`.
 
-**Known defect [RECALL, consistent with the DB contents]:** `sold` and
+**Known defect [RECALL — STILL UNVERIFIED against downstream impact]:** `sold` and
 `booked` — successful outcomes — disqualify a lead, which removes converted
 leads from denominators and can inflate close rates. Identified in audit,
-**not yet fixed**.
+**not yet fixed**. The 15 tag rows are [DB]-confirmed; the claimed inflation of
+close rates has **not** been measured end-to-end.
 
 ## 5.6 CTM ↔ GHL attribution and reconciliation
 
@@ -1107,24 +1115,49 @@ leads from denominators and can inflate close rates. Identified in audit,
 - **KPI reconciliation rule:** the Command header KPIs must match the source
   breakdown below them. Two exclusions implement this: `ad_source = 'GHL Won'`
   is excluded, and PPC rows are filtered against `campaign_labels` for shared ad
-  accounts (NoVA, Winchester). [CODE — `useCommandData.ts:60-118`; RECALL: this
-  was the fix for "194 vs 85 good leads" on NoVA]
+  accounts (NoVA, Winchester). [CODE — `useCommandData.ts:60-118`;
+  RECALL — CONFIRMED: this was the fix for "194 vs 85 good leads" on NoVA, and
+  the exclusion logic is present in the current code.]
 
 ## 5.7 Timezone rule
 
 Sales are bucketed by **local calendar day**, using `localDayKey` /
 `localDayBoundaryIso`, so a query's UTC boundaries cover the full local day.
-[CODE — `verified-sales.ts:13-19`] [RECALL: introduced to fix "4 sold on July 10
-in the table, 1 on the heatmap"]. The SQL side does the equivalent with
+[CODE — `verified-sales.ts:13-19`] [RECALL — CONFIRMED in code: introduced to fix
+"4 sold on July 10 in the table, 1 on the heatmap"]. The SQL side does the equivalent with
 `won_at AT TIME ZONE properties.timezone`. **Undermined by all seven properties
 carrying `America/New_York` regardless of actual location** (§8).
 
 ## 5.8 Sync failure policy
 
-Any failed sync retries until it succeeds — recovery attempts every ~2 minutes —
-then reverts to the normal cadence of every 4 hours. [RECALL: explicit
-instruction] [CODE: `resync-failed` header and eligibility logic support this;
-the actual cron registration is unverified, §9.]
+Any *transient* failure retries until it succeeds — recovery attempts every ~2
+minutes — then reverts to the normal cadence of every 4 hours. [RECALL —
+CONFIRMED and since AMENDED] Hard failures (401/403, invalid token, config
+errors) now **pause** the pair instead of retrying forever, and surface in
+Admin → Data Sources with the reason. MoCo is the current paused example.
+
+## 5.10 Batch-entry (won-date) flag [measured 2026-08-10]
+
+`won_at` is the date the operator marked the record Won in GHL — faithfully
+recorded, never derived (§8.4). Whether it is usable as a close-timing proxy is
+therefore a **per-location** question, decided by a rolling-window batch-entry
+flag rather than a global rule. Current 90-day distribution [DB]:
+
+| Property | Wins (90d) | Distinct won days | Largest single day |
+|---|---|---|---|
+| NoVA | 291 | 76 | 4.1% |
+| Winchester | 151 | 61 | 4.6% |
+| Colorado Springs | 40 | 21 | 12.5% |
+| Ashtabula | 27 | 22 | 7.4% |
+| **DFW** | **84** | **4** | **60.7%** |
+| Central IL | 1 | 1 | 100% (sample too small) |
+
+Flag rule: over a rolling 90-day window with at least 10 wins, a location is
+**batch-entry** when one calendar day holds more than 60% of wins, or when
+wins-per-active-day exceeds 3x the portfolio median. DFW trips it (21.0
+wins/active-day vs a 2.8 median); nobody else does. The flag is recomputed on
+every reconcile pass, so a location that starts marking promptly clears it
+automatically and the badge retires itself.
 
 ## 5.9 Decisions made and then reversed [RECALL]
 
@@ -1291,23 +1324,30 @@ A vault-backed `get_cron_secret_v2()` provides the cron secret. [CODE]
 
 ## Critical — currently affecting displayed numbers
 
-1. **MoCo has no GHL connection.** [DB] `property_data_sources` has only `ctm`
-   and `google_ads` for MoCo. Consequences: 0 `ghl_lead_facts`, 0
-   `ghl_opportunities`, therefore **0 verified sales and a completely blank Lead
-   Performance page** for MoCo, against 163 good leads in `daily_metrics`.
-   MoCo's only revenue source is the `MOCO 2026` sheet tab (20 rows, $21,930).
-   **Affecting numbers: yes, severely.**
+1. **MoCo has no working GHL data.** [DB, re-measured 2026-08-10 — CORRECTED]
+   A `ghl` row now exists in `property_data_sources` for MoCo (7 ghl / 7 ctm /
+   7 google_ads rows total), but the Private Integration token is unauthorized,
+   so the pair is **paused by the hard-failure classifier** and MoCo still has
+   0 `ghl_opportunities` and 0 `ghl_lead_facts`. Sales surfaces render
+   "No CRM connected" rather than $0 (shipped). The `MOCO 2026` sheet tab is
+   retired with the rest of `sheet_sales`. **Affecting numbers: no longer —
+   disclosed instead. Blocker: the client must supply a valid token.**
 
-2. **$0 win amounts.** [DB] Amount coverage by property:
+2. **$0 win amounts.** [DB, re-measured 2026-08-10 post-backfill — CONFIRMED,
+   figures restated] Amount coverage by property:
 
    | Property | Wins | With amount | Coverage | Recorded revenue |
    |---|---|---|---|---|
    | Colorado Springs | 40 | 0 | **0.0%** | $0 |
    | Central IL | 16 | 3 | **18.8%** | $2,330 |
-   | Winchester | 639 | 399 | 62.4% | $1,004,540 |
-   | NoVA | 628 | 540 | 86.0% | $756,880 |
+   | Winchester | 921 | 429 | 46.6% | $1,083,150 |
+   | NoVA | 1560 | 745 | 47.8% | $1,088,560 |
    | Ashtabula | 137 | 118 | 86.1% | $141,518 |
    | DFW | 84 | 78 | 92.9% | $210,784 |
+
+   Coverage for NoVA and Winchester **fell** versus the pre-backfill figures
+   above because the backfill added thousands of older wins carrying no amount.
+   The earlier 86% / 62% numbers were an artifact of a truncated 30-day horizon.
 
    Colorado Springs currently renders **$0 revenue**, which reads as "no sales"
    and is false. The agreed fix (floor labeling, coverage statement, "No deal
@@ -1316,22 +1356,38 @@ A vault-backed `get_cron_secret_v2()` provides the cron secret. [CODE]
    deleted/unassigned users; the value is not recoverable from the GHL `raw`
    payload.] **Affecting numbers: yes.**
 
-3. **Unassigned wins.** [DB] Colorado Springs 40/40, Winchester 454/639,
-   DFW 76/84, NoVA 173/628, Ashtabula 11/137, Central IL 0/16. [RECALL: the
-   evidence splits three ways — CO Springs unassigned wins look real, DFW's are
-   backfill imports, and Winchester/NoVA contain "instant won" records created
-   and won within five minutes.] The three-tier filter is approved but
-   **not built**, so all of these currently count. **Affecting numbers: yes.**
+3. **Unassigned wins.** [DB, re-measured 2026-08-10 — CONFIRMED, figures
+   restated] Colorado Springs 40/40, Winchester 547/921, DFW 76/84,
+   NoVA 930/1560, Ashtabula 11/137, Central IL 0/16. The three-tier
+   VERIFIED/IMPORTED/SUSPECT classification that was going to act on this was
+   **cancelled permanently** under the mirror rule — we do not judge whether a
+   client's win is real. This entry is now descriptive only.
+   **Affecting numbers: no. Retained for context.**
 
-4. **Bulk-stamped won dates.** Root cause is in code:
-   `won_at = lastStatusChangeAt ?? lastStageChangeAt ?? updatedAt`
-   (`sync-ghl:624-625`). A bulk GHL edit rewrites `updatedAt`, so many wins land
-   on one artificial day. [RECALL: Central IL has 12 of 13 zero-value wins
-   stamped inside a single 7-minute window; DFW's dates are bulk-stamped despite
-   93% amount coverage.] This distorts the Sales Cadence heatmap and any
-   cycle-time model. **Affecting numbers: yes.**
+4. **Batch-entered won dates — NOT a code defect. [DB, measured 2026-08-10 —
+   PRIOR CLAIM CORRECTED]** The previous entry asserted a root cause in code:
+   `won_at = lastStatusChangeAt ?? lastStageChangeAt ?? updatedAt`. That is
+   **measurably false**. Every one of the **2,758 wins** in the database took
+   `won_at` from `lastStatusChangeAt`. The `lastStageChangeAt` and `updatedAt`
+   fallbacks have **never fired** — zero rows, every property:
 
-5. **All seven properties are set to `America/New_York`,** including DFW
+   | Property | Wins | lastStatusChangeAt | lastStageChangeAt | updatedAt |
+   |---|---|---|---|---|
+   | NoVA | 1560 | 1560 | 0 | 0 |
+   | Winchester | 921 | 921 | 0 | 0 |
+   | Ashtabula | 137 | 137 | 0 | 0 |
+   | DFW | 84 | 84 | 0 | 0 |
+   | Colorado Springs | 40 | 40 | 0 | 0 |
+   | Central IL | 16 | 16 | 0 | 0 |
+
+   `won_at` is therefore a faithful record of **the moment the operator moved
+   the record to Won in GHL**. Clustering at DFW (84 wins on 4 distinct days,
+   51 of them on 2026-08-05) is **operator batch-entry inside GHL**, which the
+   mirror rule says we disclose and do not correct. No `won_at_source` column
+   is needed. **Affecting numbers: no. Requires disclosure, not a fix.**
+
+5. **All seven properties are set to `America/New_York`,** [DB, re-verified
+   2026-08-10 — CONFIRMED, still true] including DFW
    (Central) and Central IL (Central). [DB] Every local-day bucketing rule —
    `localDayKey` in TypeScript and `AT TIME ZONE properties.timezone` in
    `ghl_won_attribution` — is therefore wrong by one hour of boundary for those
@@ -1354,10 +1410,11 @@ A vault-backed `get_cron_secret_v2()` provides the cron secret. [CODE]
    Because `sync-ghl` keeps `status='connected'` on failure, the UI does not
    surface this. **Affecting numbers: yes — CRM data is silently incomplete.**
 
-9. **`sheet_sales` is stale.** [DB] Max `sale_date` 2026-07-06; the sync still
-   runs. [RECALL: humans stopped updating the spreadsheet; it is not a sync
-   failure.] Anything reading `sheet_sales` — including the owner-view "Sales"
-   KPI — under-reports after 2026-07-06. **Affecting numbers: yes.**
+9. **`sheet_sales` — RESOLVED, source retired.** The Google Sheet is retired;
+   GoHighLevel is the sole source of truth for sales. Every sales surface now
+   reads `ghl_opportunities`; the sync function, cron entry, and admin page are
+   deleted; the table is archived as `sheet_sales_archived` with no reads.
+   **Affecting numbers: no.**
 
 ## Resolved but worth recording
 
@@ -1379,7 +1436,8 @@ A vault-backed `get_cron_secret_v2()` provides the cron secret. [CODE]
 11. **`sync-ga4` and `sync-keyword-com` are dead** — both write `client_id` and
     read `client_data_sources`, none of which exist. The `/keywords` page shows
     nothing. **Affecting numbers: no, they show nothing at all.**
-12. **Zero of 218 pipeline stage mappings are user-confirmed.** [DB]
+12. **Zero of 218 pipeline stage mappings are user-confirmed.** [DB, re-verified
+    2026-08-10 — CONFIRMED, still 0 of 218]
     `lead_perf_quality.unmapped_stages` counts only confirmed mappings, so it
     currently reports every stage as unmapped. **Affecting numbers: yes, on the
     Data Quality rail.**
@@ -1405,7 +1463,8 @@ A vault-backed `get_cron_secret_v2()` provides the cron secret. [CODE]
     errors** — a failed insert leaves the snapshot empty. [CODE]
 21. **`ghl-backfill` aborts its resumable chain on any error** (returns
     `next: null`), so a transient failure requires restarting the backfill.
-22. **Central IL has no `property_targets` row**, and neither does DFW, so both
+22. **Central IL has no `property_targets` row**, and neither does DFW [DB,
+    re-verified 2026-08-10 — CONFIRMED], so both
     silently fall back to the hardcoded 200/400 defaults. [DB]
 
 ## Approved work not yet built [RECALL]
