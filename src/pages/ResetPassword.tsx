@@ -27,9 +27,12 @@ export default function ResetPassword() {
     if (password.length < 8) { toast.error("Password must be at least 8 characters"); return; }
     if (password !== confirm) { toast.error("Passwords do not match"); return; }
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    // set-own-password also clears the "must change password" flag so invited
+    // users aren't bounced back here on their next sign-in.
+    const { data, error } = await supabase.functions.invoke("set-own-password", { body: { password } });
     setLoading(false);
-    if (error) { toast.error(error.message); return; }
+    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    if (err) { toast.error(err); return; }
     toast.success("Password updated — you're signed in");
     navigate("/command", { replace: true });
   };

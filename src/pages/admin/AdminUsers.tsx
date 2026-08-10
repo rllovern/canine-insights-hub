@@ -34,7 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil } from "lucide-react";
+import { Mail, Pencil } from "lucide-react";
 
 interface UserRow {
   user_id: string;
@@ -60,6 +60,7 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [editTarget, setEditTarget] = useState<UserRow | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     email: string;
     display_name: string;
@@ -148,13 +149,36 @@ export default function AdminUsers() {
         role: form.role,
         property_id: form.role === "location_owner" ? form.property_id : null,
         require_password_change: requirePasswordChange,
+        send_invite_email: true,
+        app_url: window.location.origin,
       },
     });
     setCreating(false);
     const err = error?.message ?? (data as { error?: string } | null)?.error;
     if (err) { toast.error(err); return; }
-    toast.success("User created");
+    const res = data as { invite_email_sent?: boolean; invite_email_error?: string | null } | null;
+    if (res?.invite_email_sent) {
+      toast.success("User created — set-password email sent");
+    } else {
+      toast.success("User created", {
+        description: res?.invite_email_error
+          ? `Email not sent (${res.invite_email_error}). Share the temporary password instead.`
+          : "Email not sent. Share the temporary password instead.",
+      });
+    }
     setForm({ email: "", password: "", role: "location_owner", property_id: "" });
+    load();
+  };
+
+  const resendInvite = async (u: UserRow) => {
+    setResendingId(u.user_id);
+    const { data, error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "resend_invite", user_id: u.user_id, app_url: window.location.origin },
+    });
+    setResendingId(null);
+    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    if (err) { toast.error(err); return; }
+    toast.success("Set-password email sent");
     load();
   };
 
@@ -234,14 +258,27 @@ export default function AdminUsers() {
 
   const editButton = (u: UserRow) =>
     isSuperAdmin ? (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 gap-1 text-xs"
-        onClick={() => openEdit(u)}
-      >
-        <Pencil className="h-3 w-3" /> Edit
-      </Button>
+      <span className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs"
+          disabled={resendingId === u.user_id}
+          onClick={() => resendInvite(u)}
+          title="Email this person a link to set their own password"
+        >
+          <Mail className="h-3 w-3" />
+          {resendingId === u.user_id ? "Sending…" : "Resend invite"}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs"
+          onClick={() => openEdit(u)}
+        >
+          <Pencil className="h-3 w-3" /> Edit
+        </Button>
+      </span>
     ) : null;
 
   return (
@@ -332,8 +369,8 @@ export default function AdminUsers() {
             Require this person to set their own password at first sign-in
           </label>
           <p className="text-xs text-muted-foreground">
-            Share the temporary password with the user. If the option above is on, they must choose their own
-            password the first time they sign in before they can use the app.
+            The new user is emailed a secure link to set their own password. The temporary password above is a
+            backup you can share if the email doesn't arrive — use "Resend invite" on their row to try again.
           </p>
         </section>
       )}
