@@ -369,8 +369,8 @@ export default function AdminUsers() {
             Require this person to set their own password at first sign-in
           </label>
           <p className="text-xs text-muted-foreground">
-            Share the temporary password with the user. If the option above is on, they must choose their own
-            password the first time they sign in before they can use the app.
+            The new user is emailed a secure link to set their own password. The temporary password above is a
+            backup you can share if the email doesn't arrive — use "Resend invite" on their row to try again.
           </p>
         </section>
       )}
