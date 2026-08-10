@@ -30,8 +30,26 @@ export async function fetchVerifiedSalesByDate(
   propertyIds: string[] | null,
   from: string,
   to: string,
+  publicToken?: string | null,
 ): Promise<Record<string, number>> {
-  if (propertyIds && propertyIds.length === 0) return {};
+  if (!publicToken && propertyIds && propertyIds.length === 0) return {};
+
+  const out: Record<string, number> = {};
+
+  if (publicToken) {
+    const { data, error } = await supabase.rpc("get_won_days_by_report_token", {
+      _token: publicToken,
+      _from: localDayBoundaryIso(from, "start"),
+      _to: localDayBoundaryIso(to, "end"),
+    });
+    if (error) return {};
+    for (const r of (data ?? []) as { won_at: string | null }[]) {
+      if (!r.won_at) continue;
+      const day = localDayKey(r.won_at);
+      out[day] = (out[day] ?? 0) + 1;
+    }
+    return out;
+  }
 
   let q = supabase
     .from("ghl_opportunities")
@@ -42,7 +60,6 @@ export async function fetchVerifiedSalesByDate(
   if (propertyIds) q = q.in("property_id", propertyIds);
   const { data, error } = await q;
   if (error) return {};
-  const out: Record<string, number> = {};
   for (const r of (data ?? []) as { won_at: string | null }[]) {
     if (!r.won_at) continue;
     const day = localDayKey(r.won_at);
@@ -56,12 +73,13 @@ export function useVerifiedSalesTotal(
   from: string,
   to: string,
   enabled = true,
+  publicToken?: string | null,
 ) {
   return useQuery({
     enabled,
-    queryKey: ["verified-sales-total", propertyIds?.join(",") ?? "all", from, to],
+    queryKey: ["verified-sales-total", publicToken ?? propertyIds?.join(",") ?? "all", from, to],
     queryFn: async () => {
-      const map = await fetchVerifiedSalesByDate(propertyIds, from, to);
+      const map = await fetchVerifiedSalesByDate(propertyIds, from, to, publicToken);
       return Object.values(map).reduce((a, b) => a + b, 0);
     },
   });
@@ -208,13 +226,20 @@ export async function fetchWonAttribution(
   propertyIds: string[] | null,
   from: string,
   to: string,
+  publicToken?: string | null,
 ): Promise<WonAttribution> {
-  if (propertyIds && propertyIds.length === 0) return EMPTY_ATTRIBUTION;
-  const { data, error } = await supabase.rpc("ghl_won_attribution", {
-    _property_ids: propertyIds,
-    _from: from,
-    _to: to,
-  });
+  if (!publicToken && propertyIds && propertyIds.length === 0) return EMPTY_ATTRIBUTION;
+  const { data, error } = publicToken
+    ? await supabase.rpc("ghl_won_attribution_by_report_token", {
+        _token: publicToken,
+        _from: from,
+        _to: to,
+      })
+    : await supabase.rpc("ghl_won_attribution", {
+        _property_ids: propertyIds,
+        _from: from,
+        _to: to,
+      });
   if (error || !data) return EMPTY_ATTRIBUTION;
   const rows = (data as any[]).map((r) => ({
     property_id: r.property_id as string,
@@ -239,11 +264,12 @@ export function useWonAttribution(
   from: string,
   to: string,
   enabled = true,
+  publicToken?: string | null,
 ) {
   return useQuery({
     enabled,
-    queryKey: ["won-attribution", propertyIds?.join(",") ?? "all", from, to],
-    queryFn: () => fetchWonAttribution(propertyIds, from, to),
+    queryKey: ["won-attribution", publicToken ?? propertyIds?.join(",") ?? "all", from, to],
+    queryFn: () => fetchWonAttribution(propertyIds, from, to, publicToken),
   });
 }
 
