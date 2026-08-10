@@ -19,14 +19,15 @@ const GHL_VERSION = "2021-07-28";
 const MAX_RPS = 8;             // ceiling per probe report
 const MAX_RETRIES = 5;
 const BACKOFF_BASE_MS = 2000;  // 2s, 4s, 8s, 16s, 32s
-const MAX_CONTACT_SEARCH_PAGES = 5;
-const MAX_CONVERSATION_SEARCH_PAGES = 4;
-const MAX_MESSAGE_PAGES_PER_CONVERSATION = 2;
-const MAX_TARGETED_CONVERSATION_LOOKUPS = 20;
-const MAX_CONVERSATIONS_FOR_MESSAGE_SYNC = 35;
-const MAX_TOTAL_MESSAGE_PAGES = 50;
-const MAX_OPPORTUNITY_PAGES = 15;
-const MAX_TAG_REFRESH = 75;
+// Record caps are gone. Each invoke runs its phase until the cursor is
+// exhausted or the wall-clock budget is spent, then hands the cursor back.
+// The orchestrator loops. The only remaining rails are this budget, the rate
+// limiter, and the orchestrator's max-invokes-per-phase.
+const DEFAULT_BUDGET_MS = 55_000;   // 90s ceiling minus upsert/response headroom
+const MAX_BUDGET_MS = 70_000;
+const CONVERSATION_PAGE_SIZE = 50;  // fetch + message-hydrate as one atomic unit
+const MAX_TARGETED_CONVERSATION_LOOKUPS = 20; // per-invoke fan-out guard only
+const MAX_TAG_REFRESH = 75;         // per-invoke fan-out guard only
 
 type Json = Record<string, unknown>;
 
@@ -250,6 +251,7 @@ Deno.serve(async (req) => {
     include_tasks?: boolean;
     phase?: string;
     cursor?: unknown;
+    budget_ms?: number;
   } = {};
   try { body = await req.json(); } catch { /* allow empty */ }
   const { property_id } = body;
@@ -280,6 +282,11 @@ Deno.serve(async (req) => {
   const cursorIn = (body.cursor ?? null) as Record<string, unknown> | null;
   let cursorOut: Record<string, unknown> | null = null;
   let phaseDone = true;
+  // Wall-clock budget for this invoke. Replaces every per-run record cap.
+  const invokeStartedMs = Date.now();
+  const budgetMs = Math.min(MAX_BUDGET_MS, Math.max(5_000, Number(body.budget_ms ?? DEFAULT_BUDGET_MS)));
+  const budgetLeftMs = () => budgetMs - (Date.now() - invokeStartedMs);
+  const haveBudget = (reserveMs = 8_000) => budgetLeftMs() > reserveMs;
 
   const { data: pds, error: pdsErr } = await admin
     .from("property_data_sources")
@@ -394,7 +401,7 @@ Deno.serve(async (req) => {
     let pages = 0;
     const buffer: Json[] = [];
     let exhausted = false;
-    while (pages < MAX_CONTACT_SEARCH_PAGES) {
+    while (haveBudget(12_000)) {
       // Explicit deterministic sort. Without it GHL's searchAfter cursor walks
       // an undefined order and which records a run sees is non-reproducible.
       const reqBody: Json = {
@@ -414,7 +421,7 @@ Deno.serve(async (req) => {
       cursor = sa;
     }
     counts.contact_pages = pages;
-    counts.contact_pagination_capped = !exhausted;
+    counts.contact_budget_exhausted = !exhausted;
     if (phase === "contacts") {
       phaseDone = exhausted;
       cursorOut = exhausted ? null : { searchAfter: cursor };
@@ -495,68 +502,101 @@ Deno.serve(async (req) => {
         contactLookup.set(id, { phone: (c.phone as string | null) ?? null, email: (c.email as string | null) ?? null });
       }
     }
-    const convMap = new Map<string, Json>();
-    // GHL's /conversations/search IGNORES `skip` entirely (verified against the
-    // live API: skip=0/35/70 all return the same page). The only working cursor
-    // is startAfterDate, walked with an explicit deterministic sort.
+    // GHL's /conversations/search IGNORES `skip` entirely (verified live:
+    // skip=0/35/70 return identical pages). The only working cursor is
+    // startAfterDate, walked with an explicit deterministic sort.
+    //
+    // Messages are hydrated INSIDE the page loop so a page is an atomic unit:
+    // either every conversation on it is message-synced and the cursor moves
+    // past it, or the cursor stays put and the next invoke redoes the page.
+    // Nothing can be skipped.
+    const contactSet = new Set(contactIds);
     let startAfterDate: number | null = cursorIn?.startAfterDate != null
       ? Number(cursorIn.startAfterDate) : null;
     let conversationPages = 0;
-    let conversationSearchCapped = false;
     let conversationsExhausted = false;
-    // In chunked mode a page is exactly the batch we can message-sync in one
-    // invoke, so no conversation inside a fetched page is ever dropped; the
-    // cursor picks up at the next batch on the following invoke.
-    const convPageSize = phase === "conversations" ? MAX_CONVERSATIONS_FOR_MESSAGE_SYNC : 100;
-    const convPageBudget = phase === "conversations" ? 1 : MAX_CONVERSATION_SEARCH_PAGES;
-    while (conversationPages < convPageBudget) {
-      // Deterministic order: most recent last-message first. Explicit sort is
-      // required — without it skip-based paging walks an undefined order and
-      // which conversations a run sees is not reproducible.
-      const cursorParam = startAfterDate != null ? `&startAfterDate=${startAfterDate}` : "";
-      const j = await ghlFetch(
-        "GET",
-        `/conversations/search?locationId=${locationId}&limit=${convPageSize}&sortBy=last_message_date&sort=desc${cursorParam}`,
-        token,
-      );
-      const list = ((j.conversations as Json[]) ?? []);
-      for (const conv of list) {
-        const id = String((conv as Json).id ?? "");
-        if (id) convMap.set(id, conv);
-      }
-      conversationPages++;
-      const tail = list[list.length - 1] as Json | undefined;
-      const tailDate = tail ? Number(tail.lastMessageDate ?? tail.dateUpdated ?? NaN) : NaN;
-      if (Number.isFinite(tailDate)) startAfterDate = tailDate;
-      // Sorted newest-first: once the page tail predates the sync window there
-      // is nothing left in range, so the phase is finished.
-      if (Number.isFinite(tailDate) && tailDate < dateFrom.getTime()) {
-        conversationsExhausted = true;
-        break;
-      }
-      if (list.length < convPageSize) { conversationsExhausted = true; break; }
-    }
-    if (conversationPages >= convPageBudget && !conversationsExhausted) conversationSearchCapped = true;
-    if (phase === "conversations") {
-      phaseDone = conversationsExhausted;
-      cursorOut = conversationsExhausted ? null : { startAfterDate };
-    }
-    const contactSet = new Set(contactIds);
-    const targetedConversationSamples: Json[] = [];
-    let targetedConversationLookups = 0;
-    let targetedConversationsAdded = 0;
+    let conversationsSeen = 0;
 
-    // Location-wide conversation search can miss older conversations when the
-    // location has more than the safety-capped pages. Hydrate every in-window
-    // contact directly by contactId so old leads with visible GHL activity do
-    // not end up with zero local messages.
-    // Only worth doing on the first invoke of the phase — later invokes are
-    // walking the location-wide cursor and would repeat the same lookups.
+    const msgRows: Json[] = [];
+    let firstHumanSample: Json | null = null;
+    let firstAutoSample: Json | null = null;
+    let totalMessagePages = 0;
+    let conversationsExactly100 = 0;
+    let budgetStop = false;
+    const perConversation: Json[] = [];
+    const classCounts: Record<string, number> = { human: 0, automation: 0, ai: 0, system: 0, customer: 0, unknown: 0 };
+
+    const hydrateMessages = async (convs: Json[]) => {
+      for (const c of convs) {
+        const cAny = c as Json;
+        const conversationId = String(cAny.id ?? "");
+        const contactId = String(cAny.contactId ?? "");
+        if (!conversationId) continue;
+        const lastMsgAt = cAny.lastMessageTimestamp
+          ? new Date(Number(cAny.lastMessageTimestamp)).getTime()
+          : Number(cAny.lastMessageDate ?? 0);
+        const isRecent = lastMsgAt >= dateFrom.getTime();
+        if (contactId && !contactSet.has(contactId) && !isRecent) continue;
+
+        const seenMessageIds = new Set<string>();
+        let lastMessageId: string | null = null;
+        let messagePages = 0;
+
+        // No page cap: walk the conversation to its end, budget permitting.
+        while (haveBudget(4_000)) {
+          const qs = new URLSearchParams({ limit: "100" });
+          if (lastMessageId) qs.set("lastMessageId", lastMessageId);
+          const mj = await ghlFetch("GET", `/conversations/${conversationId}/messages?${qs.toString()}`, token);
+          const page = messagesFromPayload(mj);
+          messagePages++;
+          totalMessagePages++;
+
+          for (const m of page.messages) {
+            const mA = m as Json;
+            const id = String(mA.id ?? "");
+            if (!id || seenMessageIds.has(id)) continue;
+            seenMessageIds.add(id);
+            const cls = classifyMessage(mA);
+            classCounts[cls] = (classCounts[cls] ?? 0) + 1;
+            if (cls === "human" && !firstHumanSample) firstHumanSample = mA;
+            if (cls === "automation" && !firstAutoSample) firstAutoSample = mA;
+            msgRows.push({
+              property_id,
+              ghl_message_id: id,
+              conversation_id: conversationId,
+              contact_id: contactId || null,
+              direction: mA.direction ?? null,
+              channel: messageChannel(mA),
+              message_type: mA.messageType ?? null,
+              ghl_user_id: mA.userId ?? null,
+              response_source: cls,
+              source_raw: mA.source ?? null,
+              sent_at: mA.dateAdded ?? null,
+              body_preview: typeof mA.body === "string" ? (mA.body as string).slice(0, 280) : null,
+              meta: normalizedMessageMeta(mA),
+              raw: m,
+            });
+          }
+
+          lastMessageId = page.lastMessageId;
+          if (!page.messages.length || page.nextPage === false || (page.nextPage == null && page.messages.length < 100)) break;
+          if (!lastMessageId) break;
+        }
+
+        if (seenMessageIds.size === 100) conversationsExactly100++;
+        perConversation.push({ conversation_id: conversationId, contact_id: contactId || null, messages_fetched: seenMessageIds.size, pages: messagePages });
+      }
+    };
+
+    // Targeted per-contact hydration runs only on the first invoke of the
+    // phase; later invokes are walking the location-wide cursor.
     const targetedBudget = (phase === "all" || cursorIn?.startAfterDate == null)
       ? MAX_TARGETED_CONVERSATION_LOOKUPS : 0;
+    let targetedConversationLookups = 0;
+    let targetedConversationsAdded = 0;
+    const targetedConvs = new Map<string, Json>();
     for (const cid of contactIds.slice(0, targetedBudget)) {
-      const alreadyHasConversation = Array.from(convMap.values()).some((conv) => String((conv as Json).contactId ?? "") === cid);
-      if (alreadyHasConversation) continue;
+      if (!haveBudget(20_000)) break;
       targetedConversationLookups++;
       const found = new Map<string, Json>();
       const addMatches = (items: Json[]) => {
@@ -580,117 +620,52 @@ Deno.serve(async (req) => {
           return convContactId === cid || (!!phoneDigits && convPhone.endsWith(phoneDigits.slice(-10))) || (!!email && convEmail === email);
         }));
       }
-      const list = Array.from(found.values());
-      for (const conv of list) {
-        const id = String((conv as Json).id ?? "");
-        if (!id || convMap.has(id)) continue;
-        convMap.set(id, conv);
+      for (const [id, conv] of found) {
+        if (targetedConvs.has(id)) continue;
+        targetedConvs.set(id, conv);
         targetedConversationsAdded++;
       }
-      if (list.length && targetedConversationSamples.length < 10) targetedConversationSamples.push({ contact_id: cid, conversations_found: list.length });
     }
-    counts.targeted_conversation_lookup_cap = MAX_TARGETED_CONVERSATION_LOOKUPS;
+    if (targetedConvs.size) await hydrateMessages(Array.from(targetedConvs.values()));
 
-    const allConvs = Array.from(convMap.values());
-    const convs = allConvs.slice(0, MAX_CONVERSATIONS_FOR_MESSAGE_SYNC);
-    counts.conversations = allConvs.length;
-    counts.conversations_message_sync_attempted = convs.length;
-    counts.conversation_message_sync_capped = allConvs.length > MAX_CONVERSATIONS_FOR_MESSAGE_SYNC;
+    // Location-wide walk.
+    while (haveBudget(20_000)) {
+      const cursorParam = startAfterDate != null ? `&startAfterDate=${startAfterDate}` : "";
+      const j = await ghlFetch(
+        "GET",
+        `/conversations/search?locationId=${locationId}&limit=${CONVERSATION_PAGE_SIZE}&sortBy=last_message_date&sort=desc${cursorParam}`,
+        token,
+      );
+      const list = ((j.conversations as Json[]) ?? []);
+      conversationPages++;
+      if (!list.length) { conversationsExhausted = true; break; }
+      conversationsSeen += list.length;
+
+      await hydrateMessages(list);
+
+      const tail = list[list.length - 1] as Json;
+      const tailDate = Number(tail.lastMessageDate ?? tail.dateUpdated ?? NaN);
+      if (Number.isFinite(tailDate)) startAfterDate = tailDate;
+      // Sorted newest-first: once the page tail predates the window, done.
+      if (Number.isFinite(tailDate) && tailDate < dateFrom.getTime()) { conversationsExhausted = true; break; }
+      if (list.length < CONVERSATION_PAGE_SIZE) { conversationsExhausted = true; break; }
+    }
+    if (!conversationsExhausted) budgetStop = true;
+
+    if (phase === "conversations") {
+      phaseDone = conversationsExhausted;
+      cursorOut = conversationsExhausted ? null : { startAfterDate };
+    }
+
+    counts.conversations = conversationsSeen;
     counts.conversation_pages = conversationPages;
-    counts.conversation_search_capped = conversationSearchCapped;
+    counts.conversation_budget_stop = budgetStop;
     counts.targeted_conversation_lookups = targetedConversationLookups;
     counts.targeted_conversations_added = targetedConversationsAdded;
-    samples.targeted_conversation_hydration = targetedConversationSamples;
-
-    const msgRows: Json[] = [];
-    let firstHumanSample: Json | null = null;
-    let firstAutoSample: Json | null = null;
-    let messagePaginationCapped = false;
-    let conversationsExactly100 = 0;
-    let totalMessagePages = 0;
-    const cappedConversations: Json[] = [];
-    const perConversation: Json[] = [];
-    const classCounts: Record<string, number> = { human: 0, automation: 0, ai: 0, system: 0, customer: 0, unknown: 0 };
-
-    for (const c of convs) {
-      if (totalMessagePages >= MAX_TOTAL_MESSAGE_PAGES) {
-        messagePaginationCapped = true;
-        break;
-      }
-      const cAny = c as Json;
-      const conversationId = String(cAny.id ?? "");
-      const contactId = String(cAny.contactId ?? "");
-      if (!conversationId) continue;
-      const lastMsgAt = cAny.lastMessageTimestamp ? new Date(Number(cAny.lastMessageTimestamp)).getTime() : 0;
-      const isRecent = lastMsgAt >= dateFrom.getTime();
-      if (contactId && !contactSet.has(contactId) && !isRecent) continue;
-
-      const seenMessageIds = new Set<string>();
-      let lastMessageId: string | null = null;
-      let messagePages = 0;
-      let conversationMessageCount = 0;
-      let stoppedByNoMore = false;
-
-      while (messagePages < MAX_MESSAGE_PAGES_PER_CONVERSATION && totalMessagePages < MAX_TOTAL_MESSAGE_PAGES) {
-        const qs = new URLSearchParams({ limit: "100" });
-        if (lastMessageId) qs.set("lastMessageId", lastMessageId);
-        const mj = await ghlFetch("GET", `/conversations/${conversationId}/messages?${qs.toString()}`, token);
-        const page = messagesFromPayload(mj);
-        messagePages++;
-        totalMessagePages++;
-
-        for (const m of page.messages) {
-          const mA = m as Json;
-          const id = String(mA.id ?? "");
-          if (!id || seenMessageIds.has(id)) continue;
-          seenMessageIds.add(id);
-          const cls = classifyMessage(mA);
-          classCounts[cls] = (classCounts[cls] ?? 0) + 1;
-          if (cls === "human" && !firstHumanSample) firstHumanSample = mA;
-          if (cls === "automation" && !firstAutoSample) firstAutoSample = mA;
-          msgRows.push({
-            property_id,
-            ghl_message_id: id,
-            conversation_id: conversationId,
-            contact_id: contactId || null,
-            direction: mA.direction ?? null,
-            channel: messageChannel(mA),
-            message_type: mA.messageType ?? null,
-            ghl_user_id: mA.userId ?? null,
-            response_source: cls,
-            source_raw: mA.source ?? null,
-            sent_at: mA.dateAdded ?? null,
-            body_preview: typeof mA.body === "string" ? (mA.body as string).slice(0, 280) : null,
-            meta: normalizedMessageMeta(mA),
-            raw: m,
-          });
-        }
-
-        conversationMessageCount = seenMessageIds.size;
-        lastMessageId = page.lastMessageId;
-        if (!page.messages.length || page.nextPage === false || (page.nextPage == null && page.messages.length < 100)) {
-          stoppedByNoMore = true;
-          break;
-        }
-        if (!lastMessageId) break;
-      }
-
-      if (totalMessagePages >= MAX_TOTAL_MESSAGE_PAGES) messagePaginationCapped = true;
-
-      if (conversationMessageCount === 100) conversationsExactly100++;
-      if (!stoppedByNoMore && messagePages >= MAX_MESSAGE_PAGES_PER_CONVERSATION) {
-        messagePaginationCapped = true;
-        cappedConversations.push({ conversation_id: conversationId, contact_id: contactId || null, messages_fetched: conversationMessageCount, pages: messagePages });
-      }
-      perConversation.push({ conversation_id: conversationId, contact_id: contactId || null, messages_fetched: conversationMessageCount, pages: messagePages, capped: !stoppedByNoMore && messagePages >= MAX_MESSAGE_PAGES_PER_CONVERSATION });
-      console.log("sync-ghl conversation messages", JSON.stringify({ property_id, conversation_id: conversationId, contact_id: contactId || null, messages_fetched: conversationMessageCount, pages: messagePages }));
-    }
     counts.messages = await upsertChunked(admin, "ghl_messages", msgRows, "property_id,ghl_message_id");
     counts.messages_by_source = classCounts;
     counts.conversation_message_pages = totalMessagePages;
     counts.conversations_exactly_100_messages = conversationsExactly100;
-    counts.conversation_message_pagination_capped = messagePaginationCapped;
-    samples.conversation_message_pagination_capped = cappedConversations.slice(0, 10);
     samples.conversation_message_counts = perConversation.slice(0, 25);
     samples.message_human = firstHumanSample;
     samples.message_automation = firstAutoSample;
@@ -698,33 +673,39 @@ Deno.serve(async (req) => {
 
   // ===== 5. OPPORTUNITIES (+ stage-diff history) ====================
   if (runs("opportunities")) await safe("opportunities", async () => {
-    let page = Number(cursorIn?.page ?? 1) || 1;
-    const firstPage = page;
+    // /opportunities/search (POST) rejects any sort parameter with a 422, but
+    // the GET form accepts `order=added_asc` plus a real cursor (startAfter +
+    // startAfterId returned in meta). Verified live against DFW: the cursor
+    // walk returned 891 unique of 891 reported, zero duplicates. No date
+    // windowing needed.
+    let startAfter = cursorIn?.startAfter != null ? String(cursorIn.startAfter) : null;
+    let startAfterId = cursorIn?.startAfterId != null ? String(cursorIn.startAfterId) : null;
     const pulled: Json[] = [];
     let opportunityPages = 0;
-    let opportunityPaginationCapped = false;
     let opportunitiesExhausted = false;
     let reportedTotal: number | null = null;
-    while (opportunityPages < MAX_OPPORTUNITY_PAGES) {
-      const j = await ghlFetch("POST", "/opportunities/search", token, { locationId, limit: 100, page });
+    while (haveBudget(15_000)) {
+      const qs = new URLSearchParams({ location_id: locationId, limit: "100", order: "added_asc" });
+      if (startAfter && startAfterId) { qs.set("startAfter", startAfter); qs.set("startAfterId", startAfterId); }
+      const j = await ghlFetch("GET", `/opportunities/search?${qs.toString()}`, token);
       const list = ((j.opportunities as Json[]) ?? []);
       const meta = (j.meta ?? {}) as Json;
       if (reportedTotal == null && meta.total != null) reportedTotal = Number(meta.total);
       pulled.push(...list);
       opportunityPages++;
-      page++;
+      if (!list.length || meta.startAfter == null) { opportunitiesExhausted = true; break; }
+      startAfter = String(meta.startAfter);
+      startAfterId = String(meta.startAfterId ?? "");
       if (list.length < 100) { opportunitiesExhausted = true; break; }
     }
-    opportunityPaginationCapped = !opportunitiesExhausted;
     counts.opportunities_reported_total = reportedTotal;
-    counts.opportunity_first_page = firstPage;
     if (phase === "opportunities") {
       phaseDone = opportunitiesExhausted;
-      cursorOut = opportunitiesExhausted ? null : { page };
+      cursorOut = opportunitiesExhausted ? null : { startAfter, startAfterId };
     }
     counts.opportunities_pulled = pulled.length;
     counts.opportunity_pages = opportunityPages;
-    counts.opportunity_pagination_capped = opportunityPaginationCapped;
+    counts.opportunity_budget_stop = !opportunitiesExhausted;
 
     // Existing rows for stage-diff
     const { data: existing } = await admin
@@ -797,12 +778,23 @@ Deno.serve(async (req) => {
     const statusDist: Record<string, number> = {};
     const startMs = dateFrom.getTime();
     const endMs = dateTo.getTime();
-    const SEVEN = 7 * 86400_000;
+    // 30-day windows, resumable. Over a multi-year backfill the old 7-day walk
+    // was hundreds of sequential calls and blew the invoke timeout.
+    const WINDOW = 30 * 86400_000;
+    let calIndex = Number(cursorIn?.calIndex ?? 0) || 0;
+    let windowStart = cursorIn?.windowStart != null ? Number(cursorIn.windowStart) : startMs;
+    let apptExhausted = true;
 
-    for (const c of cals) {
-      const calId = String((c as Json).id);
-      for (let s = startMs; s < endMs; s += SEVEN) {
-        const e = Math.min(s + SEVEN, endMs);
+    outer:
+    for (; calIndex < cals.length; calIndex++) {
+      const calId = String((cals[calIndex] as Json).id);
+      for (let s = windowStart; s < endMs; s += WINDOW) {
+        if (!haveBudget(15_000)) {
+          apptExhausted = false;
+          windowStart = s;
+          break outer;
+        }
+        const e = Math.min(s + WINDOW, endMs);
         const j = await ghlFetch(
           "GET",
           `/calendars/events?locationId=${locationId}&calendarId=${calId}&startTime=${s}&endTime=${e}`,
@@ -830,6 +822,7 @@ Deno.serve(async (req) => {
           });
         }
       }
+      windowStart = startMs;
     }
     // Dedupe — same event can be returned across overlapping windows/calendars.
     const seen = new Set<string>();
@@ -841,6 +834,11 @@ Deno.serve(async (req) => {
     });
     counts.appointments = await upsertChunked(admin, "ghl_appointments", deduped, "property_id,ghl_event_id");
     counts.appointment_status_distribution = statusDist;
+    counts.appointment_budget_stop = !apptExhausted;
+    if (phase === "appointments") {
+      phaseDone = apptExhausted;
+      cursorOut = apptExhausted ? null : { calIndex, windowStart };
+    }
     samples.appointment = apptRows[0] ?? null;
   }, undefined);
 
