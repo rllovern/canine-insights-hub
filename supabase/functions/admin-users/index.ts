@@ -18,7 +18,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-Deno.serve(async (req) => {
+async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -33,11 +33,18 @@ Deno.serve(async (req) => {
   const userClient = createClient(SUPABASE_URL, ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
   });
-  const { data: claimsRes, error: claimsErr } = await userClient.auth.getClaims(token);
-  const callerId = claimsRes?.claims?.sub;
-  if (claimsErr || !callerId) {
-    return json({ error: "Unauthorized" }, 401);
+  // getClaims THROWS on a malformed or expired JWT rather than returning an
+  // error — that uncaught throw was the 500 the admin panel hit whenever a
+  // stale session token was sent.
+  let callerId: string | undefined;
+  try {
+    const { data: claimsRes, error: claimsErr } = await userClient.auth.getClaims(token);
+    if (claimsErr) return json({ error: "Session expired — sign in again" }, 401);
+    callerId = claimsRes?.claims?.sub;
+  } catch (_e) {
+    return json({ error: "Session expired — sign in again" }, 401);
   }
+  if (!callerId) return json({ error: "Unauthorized" }, 401);
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -225,4 +232,16 @@ Deno.serve(async (req) => {
   }
 
   return json({ error: "Unknown action" }, 400);
+}
+
+// Any unexpected throw must still come back as JSON *with* CORS headers,
+// otherwise the browser reports an opaque failure instead of the real cause.
+Deno.serve(async (req) => {
+  try {
+    return await handle(req);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("admin-users unhandled error", msg);
+    return json({ error: `Server error: ${msg}` }, 500);
+  }
 });

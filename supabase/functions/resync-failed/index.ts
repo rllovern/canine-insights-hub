@@ -30,6 +30,29 @@ function isoToday(): string {
 }
 
 const ATTEMPT_WAITS_MS = [0, 30_000, 120_000];
+
+// ----- Failure classification --------------------------------------
+// Auth / scope / config failures never recover on their own. Retrying them
+// every 2 minutes burns quota and buries real transient failures, so a hard
+// failure pauses the pair until a human re-connects it.
+const HARD_FAILURE_PATTERNS: RegExp[] = [
+  /\b401\b/,
+  /\b403\b/,
+  /unauthoriz/i,
+  /not authorized/i,
+  /invalid[_ ]?(token|grant|client|credential)/i,
+  /token (is )?(expired|revoked|invalid)/i,
+  /permission denied/i,
+  /insufficient (scope|permission)/i,
+  /missing (refresh_token|credential|secret)/i,
+  /developer token|customer not found|CUSTOMER_NOT_FOUND/i,
+  /not configured|no connection|missing config/i,
+];
+function isHardFailure(msg: string | null): boolean {
+  if (!msg) return false;
+  return HARD_FAILURE_PATTERNS.some((re) => re.test(msg));
+}
+
 const PER_PAIR_TIMEOUT_MS = 5 * 60_000;
 // Per-tick candidate cap so a single 2-minute run can't blow past platform
 // wall-time when many pairs fail at once. Remaining pairs are picked up on
@@ -63,6 +86,8 @@ Deno.serve(async (req) => {
     .from("property_data_sources")
     .select("property_id, source, status, consecutive_failures, backoff_until")
     .in("source", ["google_ads", "ctm", "ga4", "keyword_com", "ghl"])
+    // "paused" pairs are deliberately excluded: a hard auth/config failure
+    // stops retries until someone re-connects the source.
     .in("status", ["connected", "error"]);
   if (srcErr) {
     return new Response(JSON.stringify({ error: srcErr.message }), {
@@ -152,6 +177,7 @@ Deno.serve(async (req) => {
   const date_to = isoToday();
   let recovered = 0;
   let stillFailing = 0;
+  let paused = 0;
 
   async function invokeOnce(fnName: string, property_id: string) {
     const started_at = new Date().toISOString();
@@ -179,12 +205,30 @@ Deno.serve(async (req) => {
   }
 
   const FAILURE_GRACE = 5; // free fast retries before the breaker engages
-  async function recordHealth(property_id: string, source: string, ok: boolean) {
+  async function recordHealth(
+    property_id: string,
+    source: string,
+    ok: boolean,
+    lastError?: string | null,
+  ) {
     if (ok) {
       await admin.from("property_data_sources").update({
         last_success_at: new Date().toISOString(),
         consecutive_failures: 0,
         last_failed_phase: null,
+        backoff_until: null,
+        status: "connected",
+        last_error: null,
+      }).eq("property_id", property_id).eq("source", source);
+      return;
+    }
+    // Hard failure: pause the pair outright. It stays out of every retry loop
+    // until an admin re-connects it, and Admin → Data Sources shows the reason.
+    if (isHardFailure(lastError ?? null)) {
+      await admin.from("property_data_sources").update({
+        status: "paused",
+        last_error: (lastError ?? "authorization or configuration error").slice(0, 2000),
+        last_failure_at: new Date().toISOString(),
         backoff_until: null,
       }).eq("property_id", property_id).eq("source", source);
       return;
@@ -204,6 +248,7 @@ Deno.serve(async (req) => {
     await admin.from("property_data_sources").update({
       consecutive_failures: next,
       last_failure_at: new Date().toISOString(),
+      last_error: lastError ? lastError.slice(0, 2000) : null,
       backoff_until,
     }).eq("property_id", property_id).eq("source", source);
   }
@@ -214,6 +259,8 @@ Deno.serve(async (req) => {
     const run_group_id = crypto.randomUUID();
     const pairDeadline = Date.now() + PER_PAIR_TIMEOUT_MS;
     let lastStatus: "success" | "failure" = "failure";
+    let lastError: string | null = null;
+    let hardFailed = false;
 
     for (let i = 0; i < ATTEMPT_WAITS_MS.length; i++) {
       if (i > 0) {
@@ -223,6 +270,7 @@ Deno.serve(async (req) => {
       const attempt = i + 1;
       const r = await invokeOnce(fnName, c.property_id);
       lastStatus = r.status;
+      lastError = r.error_message;
       await admin.from("sync_runs").insert({
         property_id: c.property_id,
         source: c.source,
@@ -236,9 +284,12 @@ Deno.serve(async (req) => {
         stats: { rows_written: r.rows_written, attempt, run_group_id } as never,
       });
       if (r.status === "success") break;
+      // Don't spend the remaining attempts on an error that can't recover.
+      if (isHardFailure(r.error_message)) { hardFailed = true; break; }
     }
-    await recordHealth(c.property_id, c.source, lastStatus === "success");
+    await recordHealth(c.property_id, c.source, lastStatus === "success", lastError);
     if (lastStatus === "success") recovered++;
+    else if (hardFailed) paused++;
     else stillFailing++;
   }
 
@@ -247,6 +298,7 @@ Deno.serve(async (req) => {
       candidates: candidates.length,
       recovered,
       still_failing: stillFailing,
+      paused,
       reaped: reapedCount,
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },

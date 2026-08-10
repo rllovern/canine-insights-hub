@@ -18,6 +18,7 @@ import {
 } from "@/lib/verified-sales";
 import { resolveTargetPeriod } from "@/lib/dateRange";
 import { ChartCard } from "@/components/dashboard/ChartCard";
+import { useCrmConnection } from "@/lib/crm-connection";
 import { SalesHeatmap, type HeatmapMetric } from "@/components/sales/SalesHeatmap";
 import { RevenueRunway } from "@/components/sales/RevenueRunway";
 
@@ -35,7 +36,7 @@ function fmtDate(v: string | null) {
 function toCsv(rows: SaleRecord[], propertyName: (id: string) => string, showProperty: boolean): string {
   const header = [
     ...(showProperty ? ["Property"] : []),
-    "Name", "Phone", "Email", "Created", "Sold", "Amount",
+    "Name", "Phone", "Email", "Created", "Date marked Won", "Amount",
   ];
   const escape = (v: string | number | null) => {
     if (v == null) return "";
@@ -67,6 +68,10 @@ export default function SaleRecords() {
   const to = toIsoDay(range.to);
   const { data, isLoading } = useSaleRecords(propertyIds, from, to);
   const rows = data ?? [];
+  const crm = useCrmConnection(propertyIds);
+  // Wins with no dollar figure recorded in the CRM. We never impute a value —
+  // revenue reads "No deal values recorded" instead of $0.
+  const revenueRecorded = rows.some((r) => (r.amount ?? 0) > 0);
 
   const propertyName = useMemo(() => {
     const map = new Map(properties.map((p) => [p.id, p.name]));
@@ -156,7 +161,13 @@ export default function SaleRecords() {
     <div className="space-y-4">
       <PageHeader
         title="Sale Records"
-        description={`${label} · ${format(range.from, "MMM d, yyyy")} – ${format(range.to, "MMM d, yyyy")} · ${rows.length} ${rows.length === 1 ? "sale" : "sales"}${total > 0 ? ` · ${currency.format(total)}` : ""}`}
+        description={
+          crm.noneConnected
+            ? `${label} · No CRM connected — sales cannot be reported for this location`
+            : `${label} · ${format(range.from, "MMM d, yyyy")} – ${format(range.to, "MMM d, yyyy")} · ${rows.length} ${rows.length === 1 ? "sale" : "sales"} · ${
+                revenueRecorded ? currency.format(total) : "No deal values recorded"
+              }`
+        }
         actions={
           <Button variant="outline" size="sm" onClick={download} disabled={rows.length === 0}>
             <Download className="mr-2 size-4" /> Export CSV
@@ -166,6 +177,16 @@ export default function SaleRecords() {
 
       <RestatedBadge propertyIds={propertyIds} />
 
+      {crm.noneConnected ? (
+        <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+          <p className="text-sm font-medium">No CRM connected</p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+            Sales come from Go High Level. This location has no CRM connection, so there is no sales
+            data to show — this is not a zero.
+          </p>
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         <div data-tour="sales-heatmap" className="min-w-0">
         <ChartCard
@@ -227,7 +248,7 @@ export default function SaleRecords() {
                   <th className="text-left font-medium px-3 py-2">Phone</th>
                   <th className="text-left font-medium px-3 py-2">Email</th>
                   <th className="text-left font-medium px-3 py-2">Created</th>
-                  <th className="text-left font-medium px-3 py-2">Sold</th>
+                  <th className="text-left font-medium px-3 py-2" title="Date the opportunity was moved to Won in the CRM — not necessarily the day the sale happened">Date marked Won</th>
                   <th className="text-right font-medium px-3 py-2">Amount</th>
                 </tr>
               </thead>
@@ -248,11 +269,19 @@ export default function SaleRecords() {
                   </tr>
                 ))}
               </tbody>
-              {total > 0 && (
+              {revenueRecorded ? (
                 <tfoot>
                   <tr className="border-t border-border bg-muted/30 font-semibold">
                     <td className="px-3 py-2" colSpan={showProperty ? 6 : 5}>Total</td>
                     <td className="px-3 py-2 text-right tabular-nums">{currency.format(total)}</td>
+                  </tr>
+                </tfoot>
+              ) : (
+                <tfoot>
+                  <tr className="border-t border-border bg-muted/30 text-xs text-muted-foreground">
+                    <td className="px-3 py-2" colSpan={showProperty ? 7 : 6}>
+                      No deal values recorded in the CRM for these wins.
+                    </td>
                   </tr>
                 </tfoot>
               )}
@@ -260,6 +289,8 @@ export default function SaleRecords() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -39,9 +39,11 @@ export function JourneyFunnel({
   t = t ?? EMPTY_TOTALS;
   prior = prior ?? EMPTY_TOTALS;
   const isAds = mode === "ads";
-  // Display-facing "sales" comes from the Google Sheet import (t.sales).
-  const qualityCount = t.good + t.sales;
-  const priorQualityCount = prior.good + prior.sales;
+  // The funnel is a CALL-tracking funnel: every stage must come from CTM so the
+  // parts sum to the total. CRM wins (t.sales, from ghl_opportunities) are a
+  // different population on a different timestamp and are shown separately.
+  const qualityCount = t.good + t.projected;
+  const priorQualityCount = prior.good + prior.projected;
   const cpgl = qualityCount ? t.spend / qualityCount : 0;
   const priorCpgl = priorQualityCount ? prior.spend / priorQualityCount : 0;
   const cpl = t.totalLeads ? t.spend / t.totalLeads : 0;
@@ -69,8 +71,8 @@ export function JourneyFunnel({
       </div>
       <p className="text-[11px] text-slate-500 mt-0.5">
         {isAds
-          ? "PPC Spend → PPC Records → PPC Qualified (good + sales)"
-          : "Ad Spend → Records → Qualified (good + sales)"}
+          ? "PPC Spend → PPC Records → PPC Qualified (good + projected)"
+          : "Ad Spend → Records → Qualified (good + projected)"}
       </p>
 
       {/* Single horizontal row: three stages on one baseline, long connector arrows. */}
@@ -79,7 +81,7 @@ export function JourneyFunnel({
         <Connector />
         <Stage s={{ label: isAds ? "PPC Records" : "Records", src: isAds ? "daily_metrics.record_count · Google PPC" : "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
         <Connector />
-        <QualifiedStage good={t.good} projected={t.sales} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
+        <QualifiedStage good={t.good} projected={t.projected} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
@@ -104,7 +106,7 @@ export function JourneyFunnel({
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
           tier={tier === "low-sample" ? null : tier}
         />
-        <LeadMix bad={t.bad} good={t.good} projected={t.sales} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
+        <LeadMix bad={t.bad} good={t.good} projected={t.projected} crmWins={t.sales} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
       </div>
 
       {isAds && (
@@ -149,6 +151,7 @@ function LeadMix({
   bad: number;
   good: number;
   projected: number;
+  crmWins: number;
   total: number;
   benchmarkLabel: string;
   benchmarkRate: string;
@@ -173,7 +176,11 @@ function LeadMix({
         <div className="tabular-nums">
           <span className="text-rose-600">{bad} bad</span> ·{" "}
           <span className="text-purple-600">{good} good</span> ·{" "}
-          <span className="text-amber-600">{projected} sales</span>
+          <span className="text-amber-600">{projected} projected</span>
+        </div>
+        <div className="text-[10px] text-slate-400 mt-1">
+          All three are CTM call outcomes and sum to {total}. CRM wins ({crmWins}) are counted
+          separately by Date marked Won and are not part of this mix.
         </div>
         {judged && (
           <div className={cn("mt-1 font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
@@ -206,14 +213,14 @@ function QualifiedStage({ good, projected, bad, qualityRatePct, hasBase, leadsCo
         </div>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-snug">
-        <div className="font-semibold">Qualified leads (good + sales)</div>
+        <div className="font-semibold">Qualified leads (good + projected)</div>
         <div className="mt-1 tabular-nums">
           <span className="text-purple-600 font-medium">{good} good</span>
           <span className="text-slate-400"> · </span>
-          <span className="text-amber-600 font-medium">{projected} sales</span>
+          <span className="text-amber-600 font-medium">{projected} projected</span>
         </div>
         <div className="text-slate-400 text-[10px] mt-0.5">Source: CTM scored + CTM transcript projection</div>
-        <div className="mt-1">Good and sales are parallel quality outcomes, not a sequence. Both count toward quality rate.</div>
+        <div className="mt-1">Good and projected are parallel quality outcomes, not a sequence. Both count toward quality rate.</div>
       </TooltipContent>
     </Tooltip>
   );

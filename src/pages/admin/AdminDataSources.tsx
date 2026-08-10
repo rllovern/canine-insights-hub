@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw, CheckCircle2, XCircle, AlertCircle, MinusCircle } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle2, XCircle, AlertCircle, MinusCircle, PauseCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { GhlBackfillPanel } from "@/components/data/GhlBackfillPanel";
@@ -16,6 +16,9 @@ interface HealthRow {
   last_error_message: string | null;
   last_run_status: string | null;
   last_run_at: string | null;
+  pds_status: string | null;
+  is_paused: boolean | null;
+  pause_reason: string | null;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -34,7 +37,7 @@ const SOURCE_TO_FN: Record<string, string> = {
 };
 const SOURCE_ORDER = ["ghl", "ctm", "google_ads", "ga4", "keyword_com"];
 
-type Status = "healthy" | "failing" | "stale" | "not_connected" | "never_run";
+type Status = "healthy" | "failing" | "stale" | "not_connected" | "never_run" | "paused";
 
 function relTime(iso: string | null): string {
   if (!iso) return "—";
@@ -49,6 +52,8 @@ function relTime(iso: string | null): string {
 }
 
 function rowStatus(r: HealthRow): Status {
+  // A hard auth/config failure pauses retries entirely — surface that first.
+  if (r.is_paused) return "paused";
   if (!r.is_connected) return "not_connected";
   if (!r.last_success_at) {
     return r.last_run_status === "failure" ? "failing" : "never_run";
@@ -69,6 +74,7 @@ function StatusPill({ status }: { status: Status }) {
     stale: { label: "Stale", cls: "bg-amber-500/10 text-amber-600 ring-amber-500/20", Icon: AlertCircle },
     never_run: { label: "Never run", cls: "bg-muted text-muted-foreground ring-border", Icon: MinusCircle },
     not_connected: { label: "Not connected", cls: "bg-muted text-muted-foreground ring-border", Icon: MinusCircle },
+    paused: { label: "Paused — needs reconnect", cls: "bg-destructive/15 text-destructive ring-destructive/30", Icon: PauseCircle },
   };
   const { label, cls, Icon } = map[status];
   return (
@@ -97,6 +103,12 @@ export default function AdminDataSources() {
   }, []);
 
   const grouped = useMemo(() => {
+    return groupRows(rows);
+  }, [rows]);
+
+  const pausedRows = useMemo(() => rows.filter((r) => r.is_paused), [rows]);
+
+  function groupRows(rows: HealthRow[]) {
     const g = new Map<string, HealthRow[]>();
     for (const r of rows) {
       if (!g.has(r.source)) g.set(r.source, []);
@@ -106,7 +118,7 @@ export default function AdminDataSources() {
     return SOURCE_ORDER
       .filter((s) => g.has(s))
       .map((s) => [s, g.get(s)!] as const);
-  }, [rows]);
+  }
 
   const runSync = async (source: string, propertyId: string): Promise<boolean> => {
     const fn = SOURCE_TO_FN[source];
@@ -167,6 +179,27 @@ export default function AdminDataSources() {
       </div>
 
       <GhlBackfillPanel />
+
+      {pausedRows.length > 0 && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-destructive">
+            <PauseCircle className="h-4 w-4" />
+            {pausedRows.length} integration{pausedRows.length === 1 ? "" : "s"} paused — automatic retries stopped
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            These failed with an authorization, scope, or configuration error. They will not retry until the
+            connection is fixed and re-saved.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {pausedRows.map((r) => (
+              <li key={`${r.source}:${r.property_id}`} className="text-[11px]">
+                <span className="font-medium">{r.property_name} · {SOURCE_LABELS[r.source] ?? r.source}</span>
+                <span className="text-muted-foreground"> — {r.pause_reason ?? "authorization or configuration error"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -230,8 +263,13 @@ export default function AdminDataSources() {
                               ? <span title={new Date(r.last_failure_at).toLocaleString()}>{relTime(r.last_failure_at)}</span>
                               : "—"}
                           </td>
-                          <td className="px-2 py-2 text-muted-foreground max-w-[280px] truncate" title={r.last_error_message ?? ""}>
-                            {r.last_error_message ?? "—"}
+                          <td
+                            className={cn("px-2 py-2 max-w-[280px] truncate", r.is_paused ? "text-destructive" : "text-muted-foreground")}
+                            title={r.pause_reason ?? r.last_error_message ?? ""}
+                          >
+                            {r.is_paused
+                              ? `Retries paused: ${r.pause_reason ?? "authorization or configuration error"}`
+                              : r.last_error_message ?? "—"}
                           </td>
                           <td className="px-4 py-2 text-right">
                             {r.is_connected ? (
