@@ -23,6 +23,7 @@ import {
   rowTotalLeads,
 } from "@/lib/leadModel";
 import { useWonAttribution } from "@/lib/verified-sales";
+import { usePublicToken } from "@/contexts/PublicTokenContext";
 
 const PPC_SOURCE = "Google PPC";
 
@@ -40,15 +41,21 @@ function isoDay(d: Date | string): string {
  * Properties with zero labels are unaffected. Non-PPC rows are always kept.
  */
 function useLabelRuleFilter(rows: any[]) {
+  const publicToken = usePublicToken();
   const propertyIds = useMemo(
     () => Array.from(new Set(rows.map((r) => r.property_id).filter(Boolean))),
     [rows],
   );
   const key = propertyIds.slice().sort().join(",");
   const { data } = useQuery({
-    queryKey: ["campaign-labels", key],
-    enabled: propertyIds.length > 0,
+    queryKey: ["campaign-labels", publicToken ?? key],
+    enabled: propertyIds.length > 0 || !!publicToken,
     queryFn: async () => {
+      if (publicToken) {
+        const { data, error } = await supabase.rpc("get_campaign_labels_by_report_token", { _token: publicToken });
+        if (error) throw error;
+        return (data ?? []) as { property_id: string; campaign: string }[];
+      }
       const { data, error } = await supabase
         .from("campaign_labels")
         .select("property_id, campaign")
@@ -88,15 +95,17 @@ export default function CallTracking() {
   const cfg = usePropertyMetricConfig();
   const showCompare = compareMode !== "off";
   const { propertyIds } = useScope();
+  const publicToken = usePublicToken();
 
   // Verified Sale is sourced from GHL won opportunities (attributed to a media
   // source via GHL's own attribution payload), not daily_metrics.verified_sale.
-  const wonCur = useWonAttribution(propertyIds, isoDay(range.from), isoDay(range.to));
+  const wonCur = useWonAttribution(propertyIds, isoDay(range.from), isoDay(range.to), true, publicToken);
   const wonPri = useWonAttribution(
     propertyIds,
     isoDay(compareRange.from),
     isoDay(compareRange.to),
     showCompare,
+    publicToken,
   );
 
   const series = useMemo(() => {

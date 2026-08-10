@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePropertyMetricConfig, type MetricKey } from "@/lib/property-labels";
 import { rowTotalLeads } from "@/lib/leadModel";
 import { useVerifiedSalesTotal } from "@/lib/verified-sales";
+import { usePublicToken } from "@/contexts/PublicTokenContext";
 
 // Cost / Good Lead by-source chart always renders these 4 series so missing
 // connectors (Facebook / Direct / Organic) appear as flat $0 lines instead of
@@ -26,6 +27,7 @@ export default function Dashboard({ hideAdsOverview = false }: { hideAdsOverview
   const activeProperty = scopeProperty ?? (mode === "agency" ? (properties[0] ?? null) : null);
   const { current, prior, isLoading, range, compareMode, compareRange } = useDashboard();
   const cfg = usePropertyMetricConfig();
+  const publicToken = usePublicToken();
 
   const totals = useMemo(() => sumMetrics(current), [current]);
   const prev = useMemo(() => sumMetrics(prior), [prior]);
@@ -39,8 +41,8 @@ export default function Dashboard({ hideAdsOverview = false }: { hideAdsOverview
   const isoTo = range.to.toISOString().slice(0, 10);
   const cmpFrom = compareRange.from.toISOString().slice(0, 10);
   const cmpTo = compareRange.to.toISOString().slice(0, 10);
-  const vsCur = useVerifiedSalesTotal(sheetIds, isoFrom, isoTo, !!activeProperty);
-  const vsPrev = useVerifiedSalesTotal(sheetIds, cmpFrom, cmpTo, !!activeProperty && showCompare);
+  const vsCur = useVerifiedSalesTotal(sheetIds, isoFrom, isoTo, !!activeProperty, publicToken);
+  const vsPrev = useVerifiedSalesTotal(sheetIds, cmpFrom, cmpTo, !!activeProperty && showCompare, publicToken);
   const totalsWithSheet = useMemo(
     () => ({ ...totals, verified_sale: vsCur.data ?? 0 }),
     [totals, vsCur.data],
