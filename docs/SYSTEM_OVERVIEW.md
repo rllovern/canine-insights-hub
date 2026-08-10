@@ -1066,11 +1066,15 @@ as a real result.
   (`verified-sales.ts:401-407`).
 - `lead_quality_rollup` returns `NULL`, not `0`, when the denominator is zero.
 
-**Extensions agreed but NOT yet implemented [RECALL]:** revenue must be labeled
+**Extensions agreed [RECALL — PARTIALLY CONFIRMED SHIPPED 2026-08-10]:** revenue must be labeled
 a *floor* wherever amount coverage is below 80%; where coverage is 0%
 (Colorado Springs) it must read "No deal values recorded" and never `$0`;
 expected value must be shown in **wins** rather than dollars below 80% coverage.
-**None of this exists in code today.**
+The "No deal values recorded" rendering for Colorado Springs and the
+"No CRM connected" rendering for MoCo **shipped** with the `sheet_sales`
+retirement. The sub-80% floor labeling and wins-instead-of-dollars rule are
+**still unbuilt** — and now apply to NoVA and Winchester too, whose coverage
+fell below 50% after the backfill (§8.2).
 
 ## 5.5 Disqualification tags
 
@@ -1086,10 +1090,11 @@ lands on `ghl_lead_facts.is_disqualified`,
 `suppresses_needs_first_response_by_tag`, and `disqualification_reason`, all
 written by `rebuild_lead_facts()`.
 
-**Known defect [RECALL, consistent with the DB contents]:** `sold` and
+**Known defect [RECALL — STILL UNVERIFIED against downstream impact]:** `sold` and
 `booked` — successful outcomes — disqualify a lead, which removes converted
 leads from denominators and can inflate close rates. Identified in audit,
-**not yet fixed**.
+**not yet fixed**. The 15 tag rows are [DB]-confirmed; the claimed inflation of
+close rates has **not** been measured end-to-end.
 
 ## 5.6 CTM ↔ GHL attribution and reconciliation
 
@@ -1107,24 +1112,49 @@ leads from denominators and can inflate close rates. Identified in audit,
 - **KPI reconciliation rule:** the Command header KPIs must match the source
   breakdown below them. Two exclusions implement this: `ad_source = 'GHL Won'`
   is excluded, and PPC rows are filtered against `campaign_labels` for shared ad
-  accounts (NoVA, Winchester). [CODE — `useCommandData.ts:60-118`; RECALL: this
-  was the fix for "194 vs 85 good leads" on NoVA]
+  accounts (NoVA, Winchester). [CODE — `useCommandData.ts:60-118`;
+  RECALL — CONFIRMED: this was the fix for "194 vs 85 good leads" on NoVA, and
+  the exclusion logic is present in the current code.]
 
 ## 5.7 Timezone rule
 
 Sales are bucketed by **local calendar day**, using `localDayKey` /
 `localDayBoundaryIso`, so a query's UTC boundaries cover the full local day.
-[CODE — `verified-sales.ts:13-19`] [RECALL: introduced to fix "4 sold on July 10
-in the table, 1 on the heatmap"]. The SQL side does the equivalent with
+[CODE — `verified-sales.ts:13-19`] [RECALL — CONFIRMED in code: introduced to fix
+"4 sold on July 10 in the table, 1 on the heatmap"]. The SQL side does the equivalent with
 `won_at AT TIME ZONE properties.timezone`. **Undermined by all seven properties
 carrying `America/New_York` regardless of actual location** (§8).
 
 ## 5.8 Sync failure policy
 
-Any failed sync retries until it succeeds — recovery attempts every ~2 minutes —
-then reverts to the normal cadence of every 4 hours. [RECALL: explicit
-instruction] [CODE: `resync-failed` header and eligibility logic support this;
-the actual cron registration is unverified, §9.]
+Any *transient* failure retries until it succeeds — recovery attempts every ~2
+minutes — then reverts to the normal cadence of every 4 hours. [RECALL —
+CONFIRMED and since AMENDED] Hard failures (401/403, invalid token, config
+errors) now **pause** the pair instead of retrying forever, and surface in
+Admin → Data Sources with the reason. MoCo is the current paused example.
+
+## 5.10 Batch-entry (won-date) flag [measured 2026-08-10]
+
+`won_at` is the date the operator marked the record Won in GHL — faithfully
+recorded, never derived (§8.4). Whether it is usable as a close-timing proxy is
+therefore a **per-location** question, decided by a rolling-window batch-entry
+flag rather than a global rule. Current 90-day distribution [DB]:
+
+| Property | Wins (90d) | Distinct won days | Largest single day |
+|---|---|---|---|
+| NoVA | 291 | 76 | 4.1% |
+| Winchester | 151 | 61 | 4.6% |
+| Colorado Springs | 40 | 21 | 12.5% |
+| Ashtabula | 27 | 22 | 7.4% |
+| **DFW** | **84** | **4** | **60.7%** |
+| Central IL | 1 | 1 | 100% (sample too small) |
+
+Flag rule: over a rolling 90-day window with at least 10 wins, a location is
+**batch-entry** when one calendar day holds more than 60% of wins, or when
+wins-per-active-day exceeds 3x the portfolio median. DFW trips it (21.0
+wins/active-day vs a 2.8 median); nobody else does. The flag is recomputed on
+every reconcile pass, so a location that starts marking promptly clears it
+automatically and the badge retires itself.
 
 ## 5.9 Decisions made and then reversed [RECALL]
 
