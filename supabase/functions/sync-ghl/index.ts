@@ -500,12 +500,18 @@ Deno.serve(async (req) => {
     let conversationPages = 0;
     let conversationSearchCapped = false;
     let conversationsExhausted = false;
-    while (conversationPages < MAX_CONVERSATION_SEARCH_PAGES) {
-      // Deterministic order: oldest last-message first, so skip-based paging
-      // is stable between runs instead of shifting as new messages arrive.
+    // In chunked mode a page is exactly the batch we can message-sync in one
+    // invoke, so no conversation inside a fetched page is ever dropped; the
+    // cursor picks up at the next batch on the following invoke.
+    const convPageSize = phase === "conversations" ? MAX_CONVERSATIONS_FOR_MESSAGE_SYNC : 100;
+    const convPageBudget = phase === "conversations" ? 1 : MAX_CONVERSATION_SEARCH_PAGES;
+    while (conversationPages < convPageBudget) {
+      // Deterministic order: most recent last-message first. Explicit sort is
+      // required — without it skip-based paging walks an undefined order and
+      // which conversations a run sees is not reproducible.
       const j = await ghlFetch(
         "GET",
-        `/conversations/search?locationId=${locationId}&limit=100&skip=${skip}&sortBy=last_message_date&sort=asc`,
+        `/conversations/search?locationId=${locationId}&limit=${convPageSize}&skip=${skip}&sortBy=last_message_date&sort=desc`,
         token,
       );
       const list = ((j.conversations as Json[]) ?? []);
@@ -515,9 +521,9 @@ Deno.serve(async (req) => {
       }
       conversationPages++;
       skip += list.length;
-      if (list.length < 100) { conversationsExhausted = true; break; }
+      if (list.length < convPageSize) { conversationsExhausted = true; break; }
     }
-    if (conversationPages >= MAX_CONVERSATION_SEARCH_PAGES) conversationSearchCapped = true;
+    if (conversationPages >= convPageBudget && !conversationsExhausted) conversationSearchCapped = true;
     if (phase === "conversations") {
       phaseDone = conversationsExhausted;
       cursorOut = conversationsExhausted ? null : { skip };
