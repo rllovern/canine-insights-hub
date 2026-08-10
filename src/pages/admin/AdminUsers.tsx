@@ -92,7 +92,7 @@ export default function AdminUsers() {
     property_id: string;
   }>({ email: "", display_name: "", password: "", role: "location_owner", property_id: "" });
   const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState<{ email: string; password: string; role: AppRole; property_id: string }>(
     { email: "", password: "", role: "location_owner", property_id: "" },
@@ -246,16 +246,16 @@ export default function AdminUsers() {
   };
 
   const deleteUser = async () => {
-    if (!editTarget) return;
+    if (!deleteTarget) { toast.error("No user selected"); return; }
     setDeleting(true);
     const { data, error } = await supabase.functions.invoke("admin-users", {
-      body: { action: "delete", user_id: editTarget.user_id },
+      body: { action: "delete", user_id: deleteTarget.user_id },
     });
     setDeleting(false);
     const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
     toast.success("User deleted");
-    setConfirmDelete(false);
+    setDeleteTarget(null);
     setEditTarget(null);
     load();
   };
