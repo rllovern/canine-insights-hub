@@ -192,6 +192,8 @@ export function PortfolioVerdict({
     const benchText = bench == null
       ? `Portfolio avg unavailable (${scopeLabel})`
       : `Portfolio avg ${(bench * 100).toFixed(0)}% (${scopeLabel})`;
+    const windowDays = Math.max(1, Math.round((range.to.getTime() - range.from.getTime()) / 86400000) + 1);
+    const showWindowHint = windowDays < 30 || t.totalLeads < LOW_SAMPLE_CAVEAT;
     return (
       <div className={cn(CARD_CHROME, "p-3 h-full flex flex-col")}>
         <div className="flex items-center gap-1.5">
@@ -204,7 +206,15 @@ export function PortfolioVerdict({
             </span>
           )}
         </div>
-        <div className="mt-3 flex items-center gap-4 flex-1">
+        {showWindowHint && (
+          <div className="mt-2 flex items-start gap-1.5 rounded-md bg-blue-50 px-2 py-1.5 text-[11px] leading-snug text-blue-700">
+            <Info className="size-3.5 shrink-0 mt-0.5 text-blue-500" />
+            <span>
+              Use a <strong>30-day window</strong> for the most reliable Location Verdict. Shorter ranges have fewer leads, which can make the quality rate look unusually high or low.
+            </span>
+          </div>
+        )}
+        <div className={cn("flex items-center gap-4 flex-1", showWindowHint ? "mt-2" : "mt-3")}>
           <ScoreGauge score={lowSample ? null : score} stroke={ringTone.stroke} word={lowSample ? "Low sample" : ringTone.word} wordCls={lowSample ? "text-slate-400" : ringTone.text} />
           <div className="min-w-0 flex-1">
             <div className="text-[12px] font-semibold text-slate-900 truncate">{label}</div>
