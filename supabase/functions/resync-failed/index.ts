@@ -70,6 +70,24 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ----- Stuck-run reaper --------------------------------------------
+  // Any run still marked "running" 15 minutes after it started can never
+  // finish: the parent invocation is long gone. Close it out as a failure so
+  // the health panel stops showing a phantom in-flight sync and the pair
+  // becomes eligible for recovery below.
+  const reapCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
+  const { data: reaped } = await admin
+    .from("sync_runs")
+    .update({
+      status: "failure",
+      finished_at: new Date().toISOString(),
+      error_message: "stuck run reaped: no completion recorded within 15 minutes",
+    })
+    .eq("status", "running")
+    .lt("started_at", reapCutoff)
+    .select("id");
+  const reapedCount = reaped?.length ?? 0;
+
   // Full sync runs every 4h; if the latest success is older than 5h,
   // the pair missed a cycle and needs immediate recovery.
   const fiveHoursAgo = new Date(Date.now() - 5 * 3_600_000).toISOString();
@@ -191,6 +209,7 @@ Deno.serve(async (req) => {
       candidates: candidates.length,
       recovered,
       still_failing: stillFailing,
+      reaped: reapedCount,
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
