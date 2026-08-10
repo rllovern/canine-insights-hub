@@ -5,6 +5,27 @@
 object, a metric formula, a threshold, or a business rule must update the
 relevant section in the same change. Do not let it go stale.
 
+# 0. OPEN ITEMS (nothing closes until the requester closes it)
+
+| # | Item | Asked | Status | Blocker |
+|---|------|-------|--------|---------|
+| A | Security review of public-report paths (token RPC scoping, anon grants, token lifecycle, PublicScopeBridge) | 2026-08-10 | **Reported + hardened.** Token RPCs proven token-scoped; role helpers now return false for `anon`. Token lifecycle proposal pending decision. | Awaiting decision on token expiry/rotation/rate limit |
+| B | Name the 5 (actually 7) monitoring findings | 2026-08-03 | **Reported 2026-08-10.** 4 open, 3 superseded. | Fix approval |
+| C | Corrected per-property figures 30/90/365 after the 44 retirements | 2026-08-08 | **Reported 2026-08-10.** | — |
+| D | MoCo GHL connection + backfill | Phase 1 item 5 | **Blocked.** `location_id cLpbBgAiU9bpKx2mxTVt` configured; agency token is not authorized for MoCo scope. | Needs a MoCo-specific GHL private integration token |
+| E | Item 3 — rename `won_at` to "Date marked Won" everywhere (UI, public report, CSV/exports) + closure-curve replacement proposal | 2026-08-08 | Not started | Queued behind security review |
+| F | CTM and Google Ads pagination audit | 2026-08-06 | Not started | — |
+| G | Item 4 — persisted import-cluster flags, excluded from derived baselines only | 2026-08-07 | Not started | — |
+| H | CRM Capture Rate as a named, visible metric (per property, 30/90, by channel) | 2026-08-08 | Analysis done (Winchester 52.1%); UI not built | — |
+| I | `rebuild_lead_facts` before/after deltas | 2026-08-06 | Blocked | NoVA conversation walk still running |
+| J | Weekly reconcile two-clean-pass enforcement in production cadence | 2026-08-09 | Shipped, first passes accumulating | — |
+
+**Change log addendum 2026-08-10:** role helpers (`has_role`, `is_staff`,
+`is_super_admin`, `is_all_properties_reader`, `can_access_property`,
+`viewer_can_access`) short-circuit to `false` when `auth.role() = 'anon'`.
+They remain executable by `anon` so RLS evaluates without error, but they no
+longer answer questions about other users or properties for signed-out callers.
+
 ## How to read the provenance markers
 
 Every non-obvious claim in this document carries one of:
