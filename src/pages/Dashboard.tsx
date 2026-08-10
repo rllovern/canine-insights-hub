@@ -33,7 +33,7 @@ export default function Dashboard({ hideAdsOverview = false }: { hideAdsOverview
   const prev = useMemo(() => sumMetrics(prior), [prior]);
   const showCompare = compareMode !== "off";
 
-  // Verified Sale is sourced from Google Sheets (sheet_sales), not
+  // Verified Sale is sourced from the CRM (ghl_opportunities won), not
   // daily_metrics.verified_sale. Only Call Tracking still reads the
   // daily_metrics column.
   const sheetIds = activeProperty ? [activeProperty.id] : null;

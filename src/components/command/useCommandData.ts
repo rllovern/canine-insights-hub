@@ -28,7 +28,7 @@ export type Totals = {
   projected: number;
   bad: number;
   qualityRate: number;
-  /** Sales count from the Google Sheet import (`sheet_sales`).
+  /** Won-deal count from the CRM (`ghl_opportunities`, status = 'won').
    * Distinct from `projected` (CTM AI-projected count kept only for quality-rate math). */
   sales: number;
 };

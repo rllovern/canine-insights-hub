@@ -3,6 +3,7 @@
 import { format } from "date-fns";
 import { Link, useSearchParams } from "react-router-dom";
 import { useScope } from "@/contexts/ScopeContext";
+import { useCrmConnection } from "@/lib/crm-connection";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fmtCurrency, fmtNumber } from "@/lib/metrics";
@@ -41,6 +42,7 @@ export default function Command() {
   const isAds = mode === "ads";
 
   const data = useCommandData(propertyIds, range, compareMode !== "off" ? compareRange : null);
+  const crm = useCrmConnection(propertyIds);
   const speed = useSpeed({ propertyIds, from: range.from, to: range.to });
 
   const cmpLabel = `vs ${format(new Date(data.compareRangeIso.from), "MMM d")} – ${format(new Date(data.compareRangeIso.to), "MMM d")}`;
@@ -133,18 +135,18 @@ export default function Command() {
             {ownerView ? (
               <KpiSparkCard
                 label={isAds ? "PPC Sales" : "Sales (count)"}
-                value={fmtNumber(active.sales)}
+                value={crm.noneConnected ? "No CRM connected" : fmtNumber(active.sales)}
                 current={active.sales} prior={activePrior.sales}
                 series={series("verified_sale")}
                 compareLabel={cmpLabel}
                 tip={TIPS.appointments}
                 formatValue={fmtNumber}
-                sourceTable="sheet_sales (Google Sheets import — not ad-attributed, so PPC and Business show the same total)"
+                sourceTable="ghl_opportunities where status = 'won' (CRM wins, bucketed by Date marked Won — not ad-attributed, so PPC and Business show the same total)"
               />
             ) : (
               <KpiSparkCard
                 label={isAds ? "PPC Verified Sale" : "Verified Sale"}
-                value={fmtNumber(active.revenue)}
+                value={crm.noneConnected ? "No CRM connected" : fmtNumber(active.revenue)}
                 current={active.revenue} prior={activePrior.revenue}
                 series={series("verified_sale")}
                 compareLabel={cmpLabel}
