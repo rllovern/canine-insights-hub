@@ -1143,21 +1143,28 @@ recorded, never derived (§8.4). Whether it is usable as a close-timing proxy is
 therefore a **per-location** question, decided by a rolling-window batch-entry
 flag rather than a global rule. Current 90-day distribution [DB]:
 
-| Property | Wins (90d) | Distinct won days | Largest single day |
-|---|---|---|---|
-| NoVA | 291 | 76 | 4.1% |
-| Winchester | 151 | 61 | 4.6% |
-| Colorado Springs | 40 | 21 | 12.5% |
-| Ashtabula | 27 | 22 | 7.4% |
-| **DFW** | **84** | **4** | **60.7%** |
-| Central IL | 1 | 1 | 100% (sample too small) |
+| Property | Wins (90d) | Distinct won days | Largest single day | Active-day coverage (of ~64 business days) | Flagged |
+|---|---|---|---|---|---|
+| NoVA | 291 | 76 | 4.1% | 118.8% | no |
+| Winchester | 151 | 61 | 4.6% | 95.3% | no |
+| Ashtabula | 27 | 22 | 7.4% | 34.4% | no |
+| Colorado Springs | 40 | 21 | 12.5% | 32.8% | no |
+| **DFW** | **84** | **4** | **60.7%** | **6.3%** | **yes** |
+| Central IL | 1 | 1 | 100% | 1.6% | below 10-win floor — not flagged |
+| MoCo | — | — | — | — | no CRM data |
 
-Flag rule: over a rolling 90-day window with at least 10 wins, a location is
-**batch-entry** when one calendar day holds more than 60% of wins, or when
-wins-per-active-day exceeds 3x the portfolio median. DFW trips it (21.0
-wins/active-day vs a 2.8 median); nobody else does. The flag is recomputed on
-every reconcile pass, so a location that starts marking promptly clears it
-automatically and the badge retires itself.
+Flag rule (rolling 90-day window, minimum 10 wins):
+
+1. one calendar day holds **more than 60%** of the window's wins, **or**
+2. **active-day coverage** — distinct won days / business days in the window —
+   is **below 25%**.
+
+Clause 2 replaces an earlier wins-per-active-day-versus-portfolio-median test,
+which was not scale-free and would have flagged NoVA purely for volume. Coverage
+is a ratio bounded by the calendar, so growth cannot trip it. DFW is the only
+property that trips either clause. The flag is recomputed on every reconcile
+pass, so a location that starts marking promptly clears it automatically and
+the badge retires itself.
 
 ## 5.9 Decisions made and then reversed [RECALL]
 
