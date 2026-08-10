@@ -528,6 +528,12 @@ Deno.serve(async (req) => {
       const tail = list[list.length - 1] as Json | undefined;
       const tailDate = tail ? Number(tail.lastMessageDate ?? tail.dateUpdated ?? NaN) : NaN;
       if (Number.isFinite(tailDate)) startAfterDate = tailDate;
+      // Sorted newest-first: once the page tail predates the sync window there
+      // is nothing left in range, so the phase is finished.
+      if (Number.isFinite(tailDate) && tailDate < dateFrom.getTime()) {
+        conversationsExhausted = true;
+        break;
+      }
       if (list.length < convPageSize) { conversationsExhausted = true; break; }
     }
     if (conversationPages >= convPageBudget && !conversationsExhausted) conversationSearchCapped = true;
