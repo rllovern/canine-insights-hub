@@ -27,11 +27,13 @@ Deno.serve(async (req) => {
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer /, "");
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-  const { data: userRes } = await admin.auth.getUser(jwt);
-  const user = userRes?.user;
-  if (!user) return json({ error: "Unauthorized" }, 401);
-  const { data: isInternal } = await admin.rpc("is_all_properties_reader", { _user_id: user.id });
-  if (!isInternal) return json({ error: "Forbidden" }, 403);
+  if (jwt !== SERVICE_KEY) {
+    const { data: userRes } = await admin.auth.getUser(jwt);
+    const user = userRes?.user;
+    if (!user) return json({ error: "Unauthorized" }, 401);
+    const { data: isInternal } = await admin.rpc("is_all_properties_reader", { _user_id: user.id });
+    if (!isInternal) return json({ error: "Forbidden" }, 403);
+  }
 
   const body = await req.json().catch(() => ({}));
   const propertyId = body.property_id as string | undefined;
