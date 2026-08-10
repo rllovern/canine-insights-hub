@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/data/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useScope } from "@/contexts/ScopeContext";
+import { RestatedBadge } from "@/components/reports/RestatedBadge";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import {
