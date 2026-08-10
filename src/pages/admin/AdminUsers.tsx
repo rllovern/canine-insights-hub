@@ -34,7 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil } from "lucide-react";
+import { Mail, Pencil } from "lucide-react";
 
 interface UserRow {
   user_id: string;
@@ -60,6 +60,7 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [editTarget, setEditTarget] = useState<UserRow | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     email: string;
     display_name: string;
