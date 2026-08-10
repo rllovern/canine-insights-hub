@@ -84,6 +84,28 @@ export function RestatedBadge({
 
   const latest = rows.reduce((a, b) => (new Date(b.created_at) > new Date(a.created_at) ? b : a));
 
+  // The log records one row per retired opportunity, so a single month can hold
+  // a dozen chained entries. Collapse to one line per metric + period: the
+  // client cares about the net move, not the per-record chain.
+  const groups = Object.values(
+    rows.reduce<Record<string, {
+      key: string; metric: string; period_start: string;
+      prior: number; next: number; delta: number; causes: Record<string, number>; changedAt: string;
+    }>>((acc, r) => {
+      const key = `${r.metric}|${r.period_start}`;
+      const g = (acc[key] ??= {
+        key, metric: r.metric, period_start: r.period_start,
+        prior: r.prior_value, next: r.new_value, delta: 0, causes: {}, changedAt: r.created_at,
+      });
+      g.prior = Math.max(g.prior, r.prior_value, r.new_value);
+      g.next = Math.min(g.next, r.prior_value, r.new_value);
+      g.delta += Number(r.delta);
+      g.causes[r.cause] = (g.causes[r.cause] ?? 0) + 1;
+      if (new Date(r.created_at) > new Date(g.changedAt)) g.changedAt = r.created_at;
+      return acc;
+    }, {})
+  ).sort((a, b) => (a.period_start < b.period_start ? 1 : -1));
+
   return (
     <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
       <button
@@ -93,7 +115,7 @@ export function RestatedBadge({
       >
         <History className="h-4 w-4 shrink-0" />
         <span>
-          Restated — {rows.length} figure{rows.length === 1 ? "" : "s"} in this period changed after
+          Restated — {groups.length} figure{groups.length === 1 ? "" : "s"} in this period changed after
           they were first reported. Last updated {fmtDate(latest.created_at)}.
         </span>
         <span className="ml-auto text-xs underline">{open ? "Hide" : "Details"}</span>
@@ -101,25 +123,26 @@ export function RestatedBadge({
 
       {open && (
         <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
-          {rows.map((r) => {
-            const isMoney = r.metric === "won_revenue";
+          {groups.map((g) => {
+            const isMoney = g.metric === "won_revenue";
             const fmt = (n: number) => (isMoney ? money(n) : String(n));
             return (
-              <li key={r.id} className="rounded-md bg-background/60 px-3 py-2">
+              <li key={g.key} className="rounded-md bg-background/60 px-3 py-2">
                 <div className="font-medium text-foreground">
-                  {METRIC_LABEL[r.metric] ?? r.metric} · {monthLabel(r.period_start)}
+                  {METRIC_LABEL[g.metric] ?? g.metric} · {monthLabel(g.period_start)}
                 </div>
                 <div>
-                  {fmt(r.prior_value)} → {fmt(r.new_value)}{" "}
-                  <span className={r.delta < 0 ? "text-destructive" : "text-emerald-600"}>
-                    ({r.delta > 0 ? "+" : ""}
-                    {fmt(r.delta)})
+                  {fmt(g.prior)} → {fmt(g.next)}{" "}
+                  <span className={g.delta < 0 ? "text-destructive" : "text-emerald-600"}>
+                    ({g.delta > 0 ? "+" : ""}
+                    {fmt(g.delta)})
                   </span>{" "}
-                  · changed {fmtDate(r.created_at)}
+                  · changed {fmtDate(g.changedAt)}
                 </div>
                 <div className="mt-1">
-                  {CAUSE_LABEL[r.cause] ?? r.cause}
-                  {r.cause_detail ? ` — ${r.cause_detail}` : ""}
+                  {Object.entries(g.causes)
+                    .map(([cause, n]) => `${CAUSE_LABEL[cause] ?? cause}${n > 1 ? ` (${n})` : ""}`)
+                    .join(" · ")}
                 </div>
               </li>
             );
