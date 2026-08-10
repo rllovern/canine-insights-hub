@@ -101,7 +101,13 @@ Deno.serve(async (req) => {
       password,
       email_confirm: true,
     });
-    if (cErr || !created.user) return json({ error: cErr?.message ?? "Failed to create user" }, 400);
+    if (cErr || !created.user) {
+      const msg = cErr?.message ?? "Failed to create user";
+      const friendly = /already been registered|already exists|duplicate/i.test(msg)
+        ? `An account already exists for ${email}. Edit that user instead, or use "Resend invite" to send them a set-password link.`
+        : msg;
+      return json({ error: friendly }, 400);
+    }
     const newId = created.user.id;
 
     const { error: rErr } = await admin.from("user_roles").insert({ user_id: newId, role });

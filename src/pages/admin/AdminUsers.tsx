@@ -36,6 +36,29 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Mail, Pencil } from "lucide-react";
 
+// supabase.functions.invoke() surfaces only "Edge Function returned a non-2xx
+// status code" — the useful message lives in the response body. Pull it out.
+async function fnError(
+  error: unknown,
+  data: unknown,
+): Promise<string | null> {
+  const bodyErr = (data as { error?: string } | null)?.error;
+  if (bodyErr) return bodyErr;
+  if (!error) return null;
+  const ctx = (error as { context?: Response }).context;
+  if (ctx && typeof ctx.text === "function") {
+    try {
+      const raw = await ctx.clone().text();
+      const parsed = JSON.parse(raw) as { error?: string };
+      if (parsed?.error) return parsed.error;
+      if (raw) return raw;
+    } catch {
+      /* fall through to generic message */
+    }
+  }
+  return (error as { message?: string }).message ?? "Request failed";
+}
+
 interface UserRow {
   user_id: string;
   role: AppRole;
@@ -154,7 +177,7 @@ export default function AdminUsers() {
       },
     });
     setCreating(false);
-    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
     const res = data as { invite_email_sent?: boolean; invite_email_error?: string | null } | null;
     if (res?.invite_email_sent) {
@@ -176,7 +199,7 @@ export default function AdminUsers() {
       body: { action: "resend_invite", user_id: u.user_id, app_url: window.location.origin },
     });
     setResendingId(null);
-    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
     toast.success("Set-password email sent");
     load();
@@ -215,7 +238,7 @@ export default function AdminUsers() {
 
     const { data, error } = await supabase.functions.invoke("admin-users", { body: payload });
     setSaving(false);
-    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
     toast.success("User updated");
     setEditTarget(null);
@@ -229,7 +252,7 @@ export default function AdminUsers() {
       body: { action: "delete", user_id: editTarget.user_id },
     });
     setDeleting(false);
-    const err = error?.message ?? (data as { error?: string } | null)?.error;
+    const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
     toast.success("User deleted");
     setConfirmDelete(false);
