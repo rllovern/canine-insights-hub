@@ -12,6 +12,7 @@ interface AuthCtx {
   mustChangePassword: boolean;
   securityLoading: boolean;
   refreshSecurity: () => Promise<void>;
+  clearMustChangePassword: () => void;
   signOut: () => Promise<void>;
 }
 
@@ -75,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         mustChangePassword,
         securityLoading,
         refreshSecurity: async () => { if (user) await loadSecurity(user.id); },
+        clearMustChangePassword: () => setMustChangePassword(false),
         signOut: async () => { await supabase.auth.signOut(); },
       }}
     >

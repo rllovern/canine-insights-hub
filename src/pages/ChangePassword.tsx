@@ -22,7 +22,7 @@ const LABELS = ["Too weak", "Weak", "Okay", "Strong", "Excellent"];
 
 export default function ChangePassword() {
   const navigate = useNavigate();
-  const { refreshSecurity, signOut } = useAuth();
+  const { user, refreshSecurity, clearMustChangePassword, signOut } = useAuth();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,13 +34,39 @@ export default function ChangePassword() {
     if (password.length < 8) { toast.error("Password must be at least 8 characters"); return; }
     if (password !== confirm) { toast.error("Passwords do not match"); return; }
     setLoading(true);
-    const { data, error } = await supabase.functions.invoke("set-own-password", { body: { password } });
-    setLoading(false);
-    const err = error?.message ?? (data as { error?: string } | null)?.error;
-    if (err) { toast.error(err); return; }
-    await refreshSecurity();
-    toast.success("Password updated");
-    navigate("/command", { replace: true });
+    try {
+      const { data, error } = await supabase.functions.invoke("set-own-password", { body: { password } });
+      const payload = data as { ok?: boolean; error?: string } | null;
+      const err = payload?.error ?? (error ? error.message : null);
+      if (err || !payload?.ok) {
+        setLoading(false);
+        toast.error(err || "Could not update your password. Please try again.");
+        return;
+      }
+
+      // The password change can invalidate the current access token, so re-establish
+      // a session with the new credentials before continuing.
+      const email = user?.email;
+      if (email) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInErr) {
+          setLoading(false);
+          toast.success("Password updated — please sign in with your new password");
+          await signOut();
+          navigate("/login", { replace: true });
+          return;
+        }
+      }
+
+      clearMustChangePassword();
+      await refreshSecurity();
+      toast.success("Password updated");
+      // Hard navigation guarantees the guarded routes re-evaluate with fresh state.
+      window.location.replace("/command");
+    } catch (e) {
+      setLoading(false);
+      toast.error(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+    }
   };
 
   return (
