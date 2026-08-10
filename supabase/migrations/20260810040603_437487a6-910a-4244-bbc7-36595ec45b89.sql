@@ -1,0 +1,1 @@
+ALTER TABLE public.user_security ADD COLUMN IF NOT EXISTS last_password_reset_at timestamptz;

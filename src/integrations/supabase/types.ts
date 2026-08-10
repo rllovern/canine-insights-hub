@@ -1960,18 +1960,21 @@ export type Database = {
       user_security: {
         Row: {
           created_at: string
+          last_password_reset_at: string | null
           must_change_password: boolean
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          last_password_reset_at?: string | null
           must_change_password?: boolean
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          last_password_reset_at?: string | null
           must_change_password?: boolean
           updated_at?: string
           user_id?: string
