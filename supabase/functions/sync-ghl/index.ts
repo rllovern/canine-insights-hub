@@ -496,7 +496,11 @@ Deno.serve(async (req) => {
       }
     }
     const convMap = new Map<string, Json>();
-    let skip = Number(cursorIn?.skip ?? 0) || 0;
+    // GHL's /conversations/search IGNORES `skip` entirely (verified against the
+    // live API: skip=0/35/70 all return the same page). The only working cursor
+    // is startAfterDate, walked with an explicit deterministic sort.
+    let startAfterDate: number | null = cursorIn?.startAfterDate != null
+      ? Number(cursorIn.startAfterDate) : null;
     let conversationPages = 0;
     let conversationSearchCapped = false;
     let conversationsExhausted = false;
@@ -509,9 +513,10 @@ Deno.serve(async (req) => {
       // Deterministic order: most recent last-message first. Explicit sort is
       // required — without it skip-based paging walks an undefined order and
       // which conversations a run sees is not reproducible.
+      const cursorParam = startAfterDate != null ? `&startAfterDate=${startAfterDate}` : "";
       const j = await ghlFetch(
         "GET",
-        `/conversations/search?locationId=${locationId}&limit=${convPageSize}&skip=${skip}&sortBy=last_message_date&sort=desc`,
+        `/conversations/search?locationId=${locationId}&limit=${convPageSize}&sortBy=last_message_date&sort=desc${cursorParam}`,
         token,
       );
       const list = ((j.conversations as Json[]) ?? []);
@@ -520,13 +525,15 @@ Deno.serve(async (req) => {
         if (id) convMap.set(id, conv);
       }
       conversationPages++;
-      skip += list.length;
+      const tail = list[list.length - 1] as Json | undefined;
+      const tailDate = tail ? Number(tail.lastMessageDate ?? tail.dateUpdated ?? NaN) : NaN;
+      if (Number.isFinite(tailDate)) startAfterDate = tailDate;
       if (list.length < convPageSize) { conversationsExhausted = true; break; }
     }
     if (conversationPages >= convPageBudget && !conversationsExhausted) conversationSearchCapped = true;
     if (phase === "conversations") {
       phaseDone = conversationsExhausted;
-      cursorOut = conversationsExhausted ? null : { skip };
+      cursorOut = conversationsExhausted ? null : { startAfterDate };
     }
     const contactSet = new Set(contactIds);
     const targetedConversationSamples: Json[] = [];
@@ -539,7 +546,7 @@ Deno.serve(async (req) => {
     // not end up with zero local messages.
     // Only worth doing on the first invoke of the phase — later invokes are
     // walking the location-wide cursor and would repeat the same lookups.
-    const targetedBudget = (phase === "all" || Number(cursorIn?.skip ?? 0) === 0)
+    const targetedBudget = (phase === "all" || cursorIn?.startAfterDate == null)
       ? MAX_TARGETED_CONVERSATION_LOOKUPS : 0;
     for (const cid of contactIds.slice(0, targetedBudget)) {
       const alreadyHasConversation = Array.from(convMap.values()).some((conv) => String((conv as Json).contactId ?? "") === cid);
