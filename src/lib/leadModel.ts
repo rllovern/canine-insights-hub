@@ -55,6 +55,79 @@ export function qualityTier(rate: number, base: number): QualityTier {
   return "red";
 }
 
+/**
+ * Wilson score interval for a binomial proportion. Volume-aware: wide at low
+ * n, tight at high n. z = 1.645 → 90% two-sided.
+ */
+export function wilsonInterval(successes: number, n: number, z = 1.645): { lower: number; upper: number } {
+  if (!n || n <= 0) return { lower: 0, upper: 1 };
+  const p = Math.min(1, Math.max(0, successes / n));
+  const z2 = z * z;
+  const denom = 1 + z2 / n;
+  const center = (p + z2 / (2 * n)) / denom;
+  const margin = (z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))) / denom;
+  return {
+    lower: Math.max(0, center - margin),
+    upper: Math.min(1, center + margin),
+  };
+}
+
+export type Confidence = "low" | "moderate" | "high";
+
+export function confidenceLevel(n: number): Confidence {
+  if (n >= 150) return "high";
+  if (n >= 50) return "moderate";
+  return "low";
+}
+
+export function confidenceLabel(n: number): string {
+  return `${n} lead${n === 1 ? "" : "s"} · ${confidenceLevel(n)} confidence`;
+}
+
+/** Show the interval alongside the rate while the sample is still thin. */
+export const SHOW_INTERVAL_UNDER = 30;
+
+export type QualityGrade = {
+  tier: QualityTier;
+  rate: number;
+  lower: number;
+  upper: number;
+  n: number;
+  confidence: Confidence;
+  showInterval: boolean;
+};
+
+/**
+ * Volume-aware grading. Targets are unchanged (55% green / 45% amber) — what
+ * changes is what gets compared to them:
+ *  - red only when the 90% upper bound is still below the amber target
+ *    (i.e. the sample is large enough to prove underperformance)
+ *  - green when the point estimate clears green and the lower bound is not
+ *    below the amber target
+ *  - everything else is amber
+ */
+export function gradeQuality(counts: LeadCounts): QualityGrade {
+  const n = totalLeads(counts);
+  const rate = qualityRate(counts);
+  const { lower, upper } = wilsonInterval(qualityNumerator(counts), n);
+  const confidence = confidenceLevel(n);
+  const showInterval = n < SHOW_INTERVAL_UNDER;
+
+  let tier: QualityTier;
+  if (n < LOW_SAMPLE_BASE) tier = "low-sample";
+  else if (upper < QUALITY_TARGETS.amber) tier = "red";
+  else if (rate >= QUALITY_TARGETS.green && lower >= QUALITY_TARGETS.amber) tier = "green";
+  else if (rate >= QUALITY_TARGETS.green) tier = "green";
+  else tier = "amber";
+
+  return { tier, rate, lower, upper, n, confidence, showInterval };
+}
+
+/** "27–63%" range text for a grade. */
+export function formatRange(g: { lower: number; upper: number }): string {
+  return `${(g.lower * 100).toFixed(0)}–${(g.upper * 100).toFixed(0)}%`;
+}
+
 /** Canonical UI label for the projected-sale tier. Never "expected sales". */
 export const PROJECTED_LABEL = "Sales";
 
