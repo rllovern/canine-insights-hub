@@ -46,6 +46,8 @@ export function MultiLineChart({ data, sources, fmt = (n) => String(n), height =
         <Tooltip
           cursor={cursorStyle}
           contentStyle={tooltipStyle}
+          wrapperStyle={{ zIndex: 50 }}
+          allowEscapeViewBox={{ x: true, y: true }}
           labelStyle={{ fontWeight: 600, marginBottom: 2 }}
           labelFormatter={(l) => fmtDate(l as string)}
           formatter={(v: any, name: any) => [fmt(Number(v)), name]}
@@ -76,6 +78,8 @@ export function SingleLineChart({ data, dataKey, label, color = "hsl(var(--chart
         <Tooltip
           cursor={cursorStyle}
           contentStyle={tooltipStyle}
+          wrapperStyle={{ zIndex: 50 }}
+          allowEscapeViewBox={{ x: true, y: true }}
           labelStyle={{ fontWeight: 600, marginBottom: 2 }}
           labelFormatter={(l) => fmtDate(l as string)}
           formatter={(v: any, name: any) => [fmt(Number(v)), name === prevLabel ? prevLabel : label]}
