@@ -2373,6 +2373,13 @@ export type Database = {
         Args: { _from: string; _property_id: string; _to: string }
         Returns: number
       }
+      crm_connection_status: {
+        Args: { _property_ids?: string[] }
+        Returns: {
+          connected: boolean
+          property_id: string
+        }[]
+      }
       get_api_health_summary: {
         Args: never
         Returns: {
