@@ -21,7 +21,6 @@ import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { usePropertyMetricConfig } from "@/lib/property-labels";
 import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
-  rowTotalLeads,
 } from "@/lib/leadModel";
 import { useWonAttribution } from "@/lib/verified-sales";
 import { usePublicToken } from "@/contexts/PublicTokenContext";
@@ -232,7 +231,34 @@ function Row({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{children}</div>;
 }
 
+/**
+ * Performance-report tables only: CTM counts a Spam disposition inside
+ * `bad_leads` as well as `spam`. Here (and nowhere else in the app) we split
+ * them into mutually exclusive buckets so the row reconciles to Records:
+ * No Entry + Spam + Bad + Good (+ Unclassified) = Records.
+ */
+function reconcileRow(r: any, splitSpam: boolean) {
+  const records = Number(r.record_count ?? 0);
+  const spam = Number(r.spam ?? 0);
+  const noEntry = Number(r.no_entry ?? 0);
+  const good = Number(r.good_leads ?? 0);
+  const badRaw = Number(r.bad_leads ?? 0);
+  const bad = splitSpam ? Math.max(0, badRaw - spam) : badRaw;
+  const counted = noEntry + good + bad + (splitSpam ? spam : 0);
+  return {
+    bad_leads: bad,
+    unclassified: Math.max(0, records - counted),
+  };
+}
+
 function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }) {
+  if (colKey === "unclassified") {
+    return (
+      <TableCell className="text-right tabular-nums text-muted-foreground">
+        <div title="Scored but uncategorized records — shown so the row sums to Records.">{fmtNumber(row?.[colKey] ?? 0)}</div>
+      </TableCell>
+    );
+  }
   if (colKey === "verified_sale") {
     return (
       <TableCell className="text-right tabular-nums">
@@ -272,7 +298,7 @@ function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource 
   const withTotals = (rows: any[], won: Record<string, number>) => {
     const mapped = rows.map((r: any) => ({
       ...r,
-      total_leads: rowTotalLeads(r),
+      ...reconcileRow(r, splitSpam),
       verified_sale: won[r.ad_source] ?? 0,
     }));
     // Sources that only have wins (incl. Unattributed) still need a row so the
@@ -281,15 +307,17 @@ function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource 
     for (const [src, wins] of Object.entries(won)) {
       if (seen.has(src) || !wins) continue;
       mapped.push({
-        ad_source: src, record_count: 0, no_entry: 0, spam: 0, total_leads: 0,
-        bad_leads: 0, good_leads: 0, verified_sale: wins,
+        ad_source: src, record_count: 0, no_entry: 0, spam: 0,
+        bad_leads: 0, good_leads: 0, unclassified: 0, verified_sale: wins,
       });
     }
     return mapped;
   };
+  const splitSpam = !cfg?.isHidden("spam");
   const curT = withTotals(cur, wonBySource ?? {});
   const preT = withTotals(pre, wonPrevBySource ?? {});
   const preMapT = new Map(preT.map((r: any) => [r.ad_source, r]));
+  const showUnclassified = curT.some((r: any) => (r.unclassified ?? 0) > 0);
 
   const sorted = [...curT].sort((a: any, b: any) => {
     const av = a[sortKey] ?? 0; const bv = b[sortKey] ?? 0;
@@ -300,9 +328,9 @@ function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource 
     { key: "record_count", label: "Records" },
     { key: "no_entry", label: "No Entry" },
     ...(cfg?.isHidden("spam") ? [] : [{ key: "spam", label: cfg?.label("spam") ?? "Spam" }]),
-    { key: "total_leads", label: "Total Leads" },
     ...(cfg?.isHidden("bad_leads") ? [] : [{ key: "bad_leads", label: cfg?.label("bad_leads") ?? "Bad Leads" }]),
     ...(cfg?.isHidden("good_leads") ? [] : [{ key: "good_leads", label: cfg?.label("good_leads") ?? "Good Leads" }]),
+    ...(showUnclassified ? [{ key: "unclassified", label: "Unclassified" }] : []),
     ...(cfg?.isHidden("verified_sale") ? [] : [{ key: "verified_sale", label: cfg?.label("verified_sale") ?? "Verified Sale" }]),
   ];
 
@@ -350,9 +378,10 @@ function CampaignTable({ current, prior, cfg }: any) {
   // out (it's a sales-disposition feed, not a media source). PPC rows are
   // filtered by campaign_labels so shared accounts only surface their own
   // campaigns.
+  const splitSpam = !cfg?.isHidden("spam");
   const withTotals = (rows: any[]) => rows.map((r: any) => ({
     ...r,
-    total_leads: rowTotalLeads(r),
+    ...reconcileRow(r, splitSpam),
   }));
   const curFiltered = useLabelRuleFilter(current);
   const preFiltered = useLabelRuleFilter(prior);
@@ -368,15 +397,17 @@ function CampaignTable({ current, prior, cfg }: any) {
 
   // Verified Sale is attributed at source level only (GHL wins carry a session
   // source, not a campaign), so it isn't shown in the campaign breakdown.
-  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads"].filter((c) => {
+  const showUnclassified = cur.some((r: any) => (r.unclassified ?? 0) > 0);
+  const cols = ["record_count", "no_entry", "spam", "bad_leads", "good_leads", "unclassified"].filter((c) => {
     if (c === "spam" && cfg?.isHidden("spam")) return false;
     if (c === "bad_leads" && cfg?.isHidden("bad_leads")) return false;
     if (c === "good_leads" && cfg?.isHidden("good_leads")) return false;
+    if (c === "unclassified" && !showUnclassified) return false;
     return true;
   });
   const labels: Record<string, string> = {
     record_count: "Records", no_entry: "No Entry",
-    spam: cfg?.label("spam") ?? "Spam", total_leads: "Total Leads",
+    spam: cfg?.label("spam") ?? "Spam", unclassified: "Unclassified",
     bad_leads: cfg?.label("bad_leads") ?? "Bad Leads",
     good_leads: cfg?.label("good_leads") ?? "Good Leads",
     verified_sale: cfg?.label("verified_sale") ?? "Verified Sale",
