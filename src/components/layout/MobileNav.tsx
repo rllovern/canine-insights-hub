@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Menu, Settings, LogOut, ChevronDown } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -24,10 +24,22 @@ import {
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const { signOut, user } = useAuth();
   const { effectiveRole, isStaff, isSuperAdmin, isLocationOwner } = usePreviewMode();
   const loc = useLocation();
   const nav = useNavigate();
+
+  // Safety: clear any stray modal pointer-events lock left behind on close.
+  useEffect(() => {
+    if (!open) {
+      const t = window.setTimeout(() => {
+        if (document.body.style.pointerEvents === "none") document.body.style.pointerEvents = "";
+      }, 400);
+      return () => window.clearTimeout(t);
+    }
+  }, [open]);
+
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
 
   const isMinimal = isLocationOwner || effectiveRole === "owner";
@@ -89,6 +101,7 @@ export function MobileNav() {
         </Button>
       </SheetTrigger>
       <SheetContent
+        ref={contentRef}
         side="left"
         className="w-[280px] p-0 bg-sidebar text-sidebar-foreground border-sidebar-border flex flex-col"
       >
@@ -96,7 +109,7 @@ export function MobileNav() {
           <BrandMark variant="onDark" />
         </div>
         <div className="px-3 pt-3">
-          <ScopeSelector />
+          <ScopeSelector container={contentRef.current} onScopeChange={() => setOpen(false)} />
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
           <GroupLabel>Executive View</GroupLabel>
