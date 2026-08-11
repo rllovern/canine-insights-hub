@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { pacingVerdict, runRateVerdict, PACING_SCOPE_NOTE } from "@/lib/budgetPacing";
 
 type BudgetRow = {
   id: string;
@@ -29,16 +30,6 @@ type LabelRow = { property_id: string; campaign: string; label_name: string };
 const fmtUSD = (n: number | null | undefined) =>
   n == null || !isFinite(n) ? "—" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n >= 100 ? 0 : 2 });
 const fmtPct = (n: number | null) => (n == null || !isFinite(n) ? "—" : `${Math.round(n * 100)}%`);
-
-// Red (far from 100%) → yellow (near) → green (≈100%). Used for % Spend & Proj Run Rate.
-function paceTone(pct: number | null): string {
-  if (pct == null || !isFinite(pct)) return "bg-muted/30 text-muted-foreground";
-  const dist = Math.abs(pct - 1); // 0 = perfect, 1 = 100% off
-  if (dist <= 0.05) return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
-  if (dist <= 0.15) return "bg-lime-500/15 text-lime-700 dark:text-lime-300";
-  if (dist <= 0.3) return "bg-amber-500/15 text-amber-700 dark:text-amber-300";
-  return "bg-red-500/15 text-red-700 dark:text-red-300";
-}
 
 function monthOptions(): { value: string; label: string }[] {
   const out: { value: string; label: string }[] = [];
