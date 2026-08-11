@@ -180,15 +180,14 @@ export function PortfolioVerdict({
 
   if (mode !== "agency") {
     const t = totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0, sales: 0 };
-    const tier = qualityTier(t.qualityRate, t.totalLeads);
+    const grade = gradeQuality({ bad: t.bad, good: t.good, projected: t.projected });
+    const tier = grade.tier;
     const lowSample = tier === "low-sample"; // < LOW_SAMPLE_BASE (8) — suppress
-    const provisional = !lowSample && t.totalLeads < LOW_SAMPLE_CAVEAT; // 8–14 — caveat
-    const judged = locationVerdict(t, provisional);
-    // Provisional samples must never drive a pass/fail color or fire alerts.
-    // Render the gauge in a neutral slate tone, with a "small sample" caveat tag.
-    const ringTone = provisional
-      ? { stroke: "#94a3b8", text: "text-slate-500", word: "Small sample" }
-      : tier === "red" ? { stroke: "#f43f5e", text: "text-rose-600", word: "Critical" }
+    const judged = locationVerdict(t, grade);
+    // Grade already accounts for volume (Wilson interval), so the ring color
+    // always agrees with the reason text.
+    const ringTone =
+      tier === "red" ? { stroke: "#f43f5e", text: "text-rose-600", word: "Critical" }
       : tier === "amber" ? { stroke: "#f59e0b", text: "text-amber-600", word: "Warning" }
       : { stroke: "#10b981", text: "text-emerald-600", word: "Good" };
     const score = Math.round((t.qualityRate || 0) * 100);
@@ -205,9 +204,9 @@ export function PortfolioVerdict({
           <h3 className="text-sm font-semibold text-slate-900">Location Verdict</h3>
           <Tooltip><TooltipTrigger asChild><button type="button"><Info className="size-3.5 text-slate-400" /></button></TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.portfolioVerdict}</TooltipContent></Tooltip>
-          {provisional && (
-            <span className="ml-auto inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Small sample
+          {!lowSample && grade.confidence !== "high" && (
+            <span className="ml-auto inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-slate-500">
+              {confidenceLabel(grade.n)}
             </span>
           )}
         </div>
