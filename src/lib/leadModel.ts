@@ -117,7 +117,6 @@ export function gradeQuality(counts: LeadCounts): QualityGrade {
   if (n < LOW_SAMPLE_BASE) tier = "low-sample";
   else if (upper < QUALITY_TARGETS.amber) tier = "red";
   else if (rate >= QUALITY_TARGETS.green && lower >= QUALITY_TARGETS.amber) tier = "green";
-  else if (rate >= QUALITY_TARGETS.green) tier = "green";
   else tier = "amber";
 
   return { tier, rate, lower, upper, n, confidence, showInterval };
