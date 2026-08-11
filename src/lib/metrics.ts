@@ -143,3 +143,45 @@ export const SOURCE_COLORS: Record<string, string> = {
   "Referral": "hsl(var(--chart-7))",
   "Other": "hsl(var(--chart-8))",
 };
+
+/* ---------------------------------------------------------------------------
+ * Directional-arrow severity
+ * Small adverse moves shouldn't read as an emergency to a location owner.
+ * Favorable → green, negligible → grey, adverse < 40% → amber, ≥ 40% → red.
+ * ------------------------------------------------------------------------ */
+export const DELTA_RED_THRESHOLD_PCT = 40;
+
+export type DeltaTone = "good" | "caution" | "bad" | "neutral";
+
+/**
+ * @param pct percent change (e.g. -12.5 for a 12.5% drop). Pass null when the
+ *            magnitude isn't reliably known (low-sample absolute deltas) —
+ *            adverse direction then renders amber, never red.
+ */
+export function deltaTone(
+  pct: number | null | undefined,
+  opts: { invert?: boolean; direction?: number; deadband?: number } = {},
+): DeltaTone {
+  const { invert = false, deadband = 0.05 } = opts;
+  const dir = opts.direction ?? (pct ?? 0);
+  if (pct != null && Math.abs(pct) <= deadband) return "neutral";
+  if (pct == null && (dir === 0 || Number.isNaN(dir))) return "neutral";
+  const favorable = invert ? dir < 0 : dir >= 0;
+  if (favorable) return "good";
+  if (pct == null) return "caution";
+  return Math.abs(pct) >= DELTA_RED_THRESHOLD_PCT ? "bad" : "caution";
+}
+
+export const DELTA_TONE_CLASS: Record<DeltaTone, string> = {
+  good: "text-emerald-600 dark:text-emerald-400",
+  caution: "text-amber-600 dark:text-amber-400",
+  bad: "text-rose-600 dark:text-rose-400",
+  neutral: "text-muted-foreground",
+};
+
+export const DELTA_TONE_CHIP: Record<DeltaTone, string> = {
+  good: "bg-success/10 text-success ring-success/20",
+  caution: "bg-amber-500/10 text-amber-600 ring-amber-500/20",
+  bad: "bg-destructive/10 text-destructive ring-destructive/20",
+  neutral: "bg-muted text-muted-foreground ring-border",
+};
