@@ -21,7 +21,6 @@ import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { usePropertyMetricConfig } from "@/lib/property-labels";
 import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
 import {
-  rowTotalLeads,
 } from "@/lib/leadModel";
 import { useWonAttribution } from "@/lib/verified-sales";
 import { usePublicToken } from "@/contexts/PublicTokenContext";
