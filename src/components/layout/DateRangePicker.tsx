@@ -167,31 +167,33 @@ export function DateRangePicker() {
     setOpen(false);
   }
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="h-9 gap-2 bg-card font-medium shadow-sm">
-          <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs tabular-nums">{triggerLabel}</span>
-          {compareMode !== "off" && (
-            <>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                vs {fmtShort(compareRange.from)} – {fmtShort(compareRange.to)}
-              </span>
-            </>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={6}
-        className="w-auto p-0 z-50 bg-popover"
-      >
-        <div className="flex">
-          {/* Left: presets */}
-          <div className="flex w-56 flex-col border-r border-border">
-            <div className="flex-1 overflow-auto p-1.5">
+  const isMobile = useIsMobile();
+  const compact = isMobile;
+
+  const trigger = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-9 max-w-full gap-2 overflow-hidden bg-card font-medium shadow-sm"
+    >
+      <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate text-xs tabular-nums">{triggerLabel}</span>
+      {compareMode !== "off" && !compact && (
+        <>
+          <span className="text-muted-foreground">·</span>
+          <span className="truncate text-[11px] text-muted-foreground tabular-nums">
+            vs {fmtShort(compareRange.from)} – {fmtShort(compareRange.to)}
+          </span>
+        </>
+      )}
+    </Button>
+  );
+
+  const body = (
+    <div className={cn(compact ? "flex flex-col" : "flex")}>
+          {/* Presets + options */}
+          <div className={cn("flex flex-col", compact ? "w-full border-b border-border" : "w-56 border-r border-border")}>
+            <div className={cn("flex-1 overflow-auto p-1.5", compact && "grid grid-cols-2 gap-1")}>
               <button
                 onClick={() => setDraftPreset("custom")}
                 className={cn(
@@ -274,8 +276,8 @@ export function DateRangePicker() {
             )}
           </div>
 
-          {/* Right: date inputs + calendar */}
-          <div className="flex w-[560px] flex-col p-3">
+          {/* Date inputs + calendar */}
+          <div className={cn("flex flex-col p-3", compact ? "w-full" : "w-[560px]")}>
             <div className="grid grid-cols-2 gap-3">
               <DateField
                 label="Start date"
@@ -348,7 +350,7 @@ export function DateRangePicker() {
                   compare_start: "bg-destructive text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground focus:bg-destructive focus:text-destructive-foreground",
                   compare_end: "bg-destructive text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground focus:bg-destructive focus:text-destructive-foreground",
                 }}
-                numberOfMonths={2}
+                numberOfMonths={compact ? 1 : 2}
                 className="p-0 pointer-events-auto"
               />
             </div>
@@ -358,7 +360,29 @@ export function DateRangePicker() {
               <Button size="sm" onClick={apply}>Apply</Button>
             </div>
           </div>
-        </div>
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerTrigger asChild>{trigger}</DrawerTrigger>
+        <DrawerContent className="max-h-[90vh] bg-popover">
+          <div className="overflow-y-auto overscroll-contain px-1 pb-4">{body}</div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-auto max-w-[calc(100vw-1rem)] p-0 z-50 bg-popover"
+      >
+        {body}
       </PopoverContent>
     </Popover>
   );
