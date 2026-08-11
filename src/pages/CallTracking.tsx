@@ -235,7 +235,7 @@ function Row({ children }: { children: React.ReactNode }) {
  * Performance-report tables only: CTM counts a Spam disposition inside
  * `bad_leads` as well as `spam`. Here (and nowhere else in the app) we split
  * them into mutually exclusive buckets so the row reconciles to Records:
- * No Entry + Spam + Bad + Good (+ Unclassified) = Records.
+ * No Entry + Spam + Bad + Good (+ Misc) = Records.
  */
 function reconcileRow(r: any, splitSpam: boolean) {
   const records = Number(r.record_count ?? 0);
@@ -255,7 +255,7 @@ function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }
   if (colKey === "unclassified") {
     return (
       <TableCell className="text-right tabular-nums text-muted-foreground">
-        <div title="Scored but uncategorized records — shown so the row sums to Records.">{fmtNumber(row?.[colKey] ?? 0)}</div>
+        <div title="Misc records — shown so the row sums to Records.">{fmtNumber(row?.[colKey] ?? 0)}</div>
       </TableCell>
     );
   }
@@ -330,7 +330,7 @@ function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource 
     ...(cfg?.isHidden("spam") ? [] : [{ key: "spam", label: cfg?.label("spam") ?? "Spam" }]),
     ...(cfg?.isHidden("bad_leads") ? [] : [{ key: "bad_leads", label: cfg?.label("bad_leads") ?? "Bad Leads" }]),
     ...(cfg?.isHidden("good_leads") ? [] : [{ key: "good_leads", label: cfg?.label("good_leads") ?? "Good Leads" }]),
-    ...(showUnclassified ? [{ key: "unclassified", label: "Unclassified" }] : []),
+    ...(showUnclassified ? [{ key: "unclassified", label: "Misc" }] : []),
     ...(cfg?.isHidden("verified_sale") ? [] : [{ key: "verified_sale", label: cfg?.label("verified_sale") ?? "Verified Sale" }]),
   ];
 
@@ -407,7 +407,7 @@ function CampaignTable({ current, prior, cfg }: any) {
   });
   const labels: Record<string, string> = {
     record_count: "Records", no_entry: "No Entry",
-    spam: cfg?.label("spam") ?? "Spam", unclassified: "Unclassified",
+    spam: cfg?.label("spam") ?? "Spam", unclassified: "Misc",
     bad_leads: cfg?.label("bad_leads") ?? "Bad Leads",
     good_leads: cfg?.label("good_leads") ?? "Good Leads",
     verified_sale: cfg?.label("verified_sale") ?? "Verified Sale",
