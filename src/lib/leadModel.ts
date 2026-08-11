@@ -128,7 +128,7 @@ export function formatRange(g: { lower: number; upper: number }): string {
 }
 
 /** Canonical UI label for the projected-sale tier. Never "expected sales". */
-export const PROJECTED_LABEL = "Sales";
+export const PROJECTED_LABEL = "projected-sale calls";
 
 /** Tailwind color helpers so every page styles the same tier the same way. */
 export const TIER_TEXT: Record<QualityTier, string> = {
