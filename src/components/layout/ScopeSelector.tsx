@@ -8,7 +8,13 @@ import { useProperties } from "@/contexts/PropertyContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { cn } from "@/lib/utils";
 
-export function ScopeSelector() {
+export function ScopeSelector({
+  container,
+  onScopeChange,
+}: {
+  container?: HTMLElement | null;
+  onScopeChange?: () => void;
+} = {}) {
   const { mode, propertyId, setScope, label } = useScope();
   const { properties } = useProperties();
   const { isAllPropertiesReader, isLocationOwner } = usePreviewMode();
@@ -44,15 +50,21 @@ export function ScopeSelector() {
           <ChevronsUpDown className="size-4 shrink-0 text-white/45" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" sideOffset={6} className="w-72 p-0 z-50 bg-popover">
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        container={container}
+        className="w-[min(18rem,calc(100vw-3rem))] p-0 z-50 bg-popover"
+        onOpenAutoFocus={(e) => { if (container) e.preventDefault(); }}
+      >
         <Command>
           <CommandInput placeholder="Search location…" className="h-9" />
-          <CommandList>
+          <CommandList className="max-h-[60vh]">
             <CommandEmpty>No matches.</CommandEmpty>
             <CommandGroup heading="Scope">
               <CommandItem
                 value="__agency__"
-                onSelect={() => { setScope({ mode: "agency" }); setOpen(false); }}
+                onSelect={() => { setScope({ mode: "agency" }); setOpen(false); onScopeChange?.(); }}
               >
                 <Globe2 className="size-3.5 mr-2 text-primary" />
                 <span>{agencyLabel}</span>
@@ -65,7 +77,7 @@ export function ScopeSelector() {
                 <CommandItem
                   key={p.id}
                   value={`${p.name} ${p.slug}`}
-                  onSelect={() => { setScope({ mode: "property", propertyId: p.id }); setOpen(false); }}
+                  onSelect={() => { setScope({ mode: "property", propertyId: p.id }); setOpen(false); onScopeChange?.(); }}
                 >
                   <Building2 className="size-3.5 mr-2 text-muted-foreground" />
                   <span className="truncate">{p.name}</span>
