@@ -215,7 +215,7 @@ export default function Keywords() {
                         ) : change > 0 ? (
                           <span className="inline-flex items-center text-success"><ArrowUp className="size-3 mr-0.5" />{change}</span>
                         ) : change < 0 ? (
-                          <span className="inline-flex items-center text-destructive"><ArrowDown className="size-3 mr-0.5" />{Math.abs(change)}</span>
+                          <span className="inline-flex items-center text-warning"><ArrowDown className="size-3 mr-0.5" />{Math.abs(change)}</span>
                         ) : (
                           <span className="inline-flex items-center text-muted-foreground"><Minus className="size-3" /></span>
                         )}

@@ -3,7 +3,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis
 import { ArrowDown, ArrowUp, Info, Minus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { safeDelta } from "@/lib/metrics";
+import { safeDelta, deltaTone, DELTA_TONE_CLASS } from "@/lib/metrics";
 import { format as fmtDate, parseISO } from "date-fns";
 import { CARD_CHROME } from "./cardChrome";
 
@@ -44,17 +44,17 @@ export function KpiSparkCard({
 
   let deltaNode: ReactNode = null;
   if (d.kind === "pct") {
-    const positive = invertDelta ? d.value < 0 : d.value >= 0;
+    const tone = deltaTone(d.value, { invert: invertDelta });
     deltaNode = (
-      <span className={cn("inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold", positive ? "text-emerald-600" : "text-rose-600")}>
+      <span className={cn("inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold", DELTA_TONE_CLASS[tone])}>
         {d.value >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
         {Math.abs(d.value).toFixed(1)}%
       </span>
     );
   } else if (d.kind === "low-sample") {
-    const positive = invertDelta ? d.abs < 0 : d.abs >= 0;
+    const tone = deltaTone(null, { invert: invertDelta, direction: d.abs });
     deltaNode = (
-      <span className={cn("inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold", positive ? "text-emerald-600" : "text-rose-600")}>
+      <span className={cn("inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold", DELTA_TONE_CLASS[tone])}>
         {d.abs >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
         {d.abs >= 0 ? "+" : ""}{fmt(Math.abs(d.abs))}
       </span>
