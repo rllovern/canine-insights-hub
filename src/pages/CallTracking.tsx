@@ -272,7 +272,7 @@ function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource 
   const withTotals = (rows: any[], won: Record<string, number>) => {
     const mapped = rows.map((r: any) => ({
       ...r,
-      total_leads: rowTotalLeads(r),
+      ...reconcileRow(r, splitSpam),
       verified_sale: won[r.ad_source] ?? 0,
     }));
     // Sources that only have wins (incl. Unattributed) still need a row so the
@@ -281,15 +281,17 @@ function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource 
     for (const [src, wins] of Object.entries(won)) {
       if (seen.has(src) || !wins) continue;
       mapped.push({
-        ad_source: src, record_count: 0, no_entry: 0, spam: 0, total_leads: 0,
-        bad_leads: 0, good_leads: 0, verified_sale: wins,
+        ad_source: src, record_count: 0, no_entry: 0, spam: 0,
+        bad_leads: 0, good_leads: 0, unclassified: 0, verified_sale: wins,
       });
     }
     return mapped;
   };
+  const splitSpam = !cfg?.isHidden("spam");
   const curT = withTotals(cur, wonBySource ?? {});
   const preT = withTotals(pre, wonPrevBySource ?? {});
   const preMapT = new Map(preT.map((r: any) => [r.ad_source, r]));
+  const showUnclassified = curT.some((r: any) => (r.unclassified ?? 0) > 0);
 
   const sorted = [...curT].sort((a: any, b: any) => {
     const av = a[sortKey] ?? 0; const bv = b[sortKey] ?? 0;
@@ -300,9 +302,9 @@ function SourceOutcomeTable({ current, prior, cfg, wonBySource, wonPrevBySource 
     { key: "record_count", label: "Records" },
     { key: "no_entry", label: "No Entry" },
     ...(cfg?.isHidden("spam") ? [] : [{ key: "spam", label: cfg?.label("spam") ?? "Spam" }]),
-    { key: "total_leads", label: "Total Leads" },
     ...(cfg?.isHidden("bad_leads") ? [] : [{ key: "bad_leads", label: cfg?.label("bad_leads") ?? "Bad Leads" }]),
     ...(cfg?.isHidden("good_leads") ? [] : [{ key: "good_leads", label: cfg?.label("good_leads") ?? "Good Leads" }]),
+    ...(showUnclassified ? [{ key: "unclassified", label: "Unclassified" }] : []),
     ...(cfg?.isHidden("verified_sale") ? [] : [{ key: "verified_sale", label: cfg?.label("verified_sale") ?? "Verified Sale" }]),
   ];
 
