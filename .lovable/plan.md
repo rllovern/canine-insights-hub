@@ -1,18 +1,21 @@
-# Fix Qualified Leads coloring in the journey funnel
+# Arrow direction rules: up is green everywhere except the "less is better" metrics
 
-The "Qualified Leads" stage currently turns red whenever bad calls outnumber good calls — it ignores the quality target entirely. With 8 qualified out of 18 (44%, above the 30% benchmark), it should read as healthy, not red.
+Confirmed rule for every directional arrow on the site:
+
+- Upward movement is green for all normal metrics (Records, Total Leads, Good Leads, Qualified Calls, Verified Sales, Revenue, etc.) — no matter how small the move.
+- Downward movement on those metrics is amber under 40% and red only at 40% or more.
+- The only exceptions are the "less is better" metrics — Spam, Bad Leads, No Entry, and cost-type metrics (Ad Spend, CPL, CPGL, CPM, CPC). There the logic flips: down is green, up is amber under 40% and red at 40% or more.
 
 ## Changes
 
-1. **Qualified Leads stage color** — grade by quality rate against the shared targets instead of good-vs-bad counts:
-   - ≥ 30% (green target) → green
-   - 25–30% → amber
-   - < 25% → red
-   - Below the low-sample base, or no base → neutral slate (no judgment)
-2. **Lead Mix tile** — replace its separate hardcoded "good share ≥ 20%" benchmark with the same 30% / 25% target bands so the two tiles can't disagree, and use amber rather than red for the near-miss band. Tooltip text updates to match.
+1. **Centralize the exception list.** Today each surface decides "invert" on its own (`bad_leads | no_entry | spam` hardcoded in the call-tracking table, `invertDelta` flags scattered across the dashboard and command pages). Move this to a single `isLessIsBetterMetric(key)` helper next to the delta-tone helper so no surface can drift.
+2. **Repoint every delta site to that helper**, so any metric not on the exception list always renders green on an up arrow.
+3. **Audit and correct any mismatches** found while repointing — any column or KPI currently flagged inverted that isn't a spam/bad-lead/no-entry/cost metric gets un-inverted.
+4. Tooltip copy on the "less is better" columns notes that a decrease is the favorable direction, so the green-down arrow isn't confusing.
 
 ## Technical details
 
-- In `src/components/command/JourneyFunnel.tsx`, use the existing `qualityTier(rate, base)` from `src/lib/leadModel.ts` (which already encodes `QUALITY_TARGETS` green 0.30 / amber 0.25 and `LOW_SAMPLE_BASE`) to drive the number class in `QualifiedStage` and `LeadMix`, mapping green/amber/red/low-sample to the semantic success / warning / destructive / muted tokens.
-- `QualifiedStage` needs the quality rate and its base (total leads) passed through; it already receives `qualityRatePct` and `hasBase`, so add the lead base for the low-sample check.
-- No metric math changes — this is presentation only.
+- Add `LESS_IS_BETTER` metric-key set and `isLessIsBetterMetric()` to `src/lib/metrics.ts`, alongside the existing `deltaTone` / `DELTA_TONE_CLASS` helpers.
+- Update `CellOut` in `src/pages/CallTracking.tsx` to derive `invert` from the helper instead of the inline key comparison.
+- Verify the `invertDelta` usages in `src/pages/Dashboard.tsx` (Cost, CPM, CPC), `src/pages/Command.tsx`, and the `SubKpi` cost tiles in `src/components/command/JourneyFunnel.tsx` all correspond to genuine cost metrics; leave them inverted, drop the flag anywhere it doesn't.
+- Presentation only — no metric math changes.
