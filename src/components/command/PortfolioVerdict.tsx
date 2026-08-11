@@ -222,6 +222,10 @@ export function PortfolioVerdict({
           <div className="min-w-0 flex-1">
             <div className="text-[12px] font-semibold text-slate-900 truncate">{label}</div>
             <p className="mt-1 text-[12px] text-slate-600 leading-snug">{judged.reason}</p>
+            <p className="mt-1.5 text-[11px] text-slate-500 leading-snug">
+              {grade.n} leads · {t.qualifiedCalls} qualified calls ·{" "}
+              {t.sales > 0 ? `${t.sales} verified sales` : "0 verified sales recorded"}
+            </p>
             <p className="mt-2 text-[10.5px] text-slate-400 leading-snug">
               Target ≥{(QUALITY_TARGETS.green * 100).toFixed(0)}% · {benchText}
             </p>
