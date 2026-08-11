@@ -202,32 +202,40 @@ export function PortfolioVerdict({
         <div className="flex items-center gap-1.5">
           <h3 className="text-sm font-semibold text-slate-900">Location Verdict</h3>
           <Tooltip><TooltipTrigger asChild><button type="button"><Info className="size-3.5 text-slate-400" /></button></TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.portfolioVerdict}</TooltipContent></Tooltip>
+            <TooltipContent className="max-w-xs text-xs leading-snug space-y-1.5">
+              <p>{TIPS.portfolioVerdict}</p>
+              <p>{judged.reason}</p>
+              <p>{benchText}</p>
+              {showWindowHint && (
+                <p>
+                  Use a 30-day window for the most reliable verdict. Shorter ranges have
+                  fewer leads, which can make the quality rate look unusually high or low.
+                </p>
+              )}
+            </TooltipContent></Tooltip>
           {!lowSample && grade.confidence !== "high" && (
             <span className="ml-auto inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-slate-500">
               {confidenceLabel(grade.n)}
             </span>
           )}
         </div>
-        {showWindowHint && (
-          <div className="mt-2 flex items-start gap-1.5 rounded-md bg-blue-50 px-2 py-1.5 text-[11px] leading-snug text-blue-700">
-            <Info className="size-3.5 shrink-0 mt-0.5 text-blue-500" />
-            <span>
-              Use a <strong>30-day window</strong> for the most reliable Location Verdict. Shorter ranges have fewer leads, which can make the quality rate look unusually high or low.
-            </span>
-          </div>
-        )}
-        <div className={cn("flex items-center gap-4 flex-1", showWindowHint ? "mt-2" : "mt-3")}>
+        <div className="mt-3 flex items-center gap-4 flex-1">
           <ScoreGauge score={lowSample ? null : score} stroke={ringTone.stroke} word={lowSample ? "Low sample" : ringTone.word} wordCls={lowSample ? "text-slate-400" : ringTone.text} />
           <div className="min-w-0 flex-1">
             <div className="text-[12px] font-semibold text-slate-900 truncate">{label}</div>
-            <p className="mt-1 text-[12px] text-slate-600 leading-snug">{judged.reason}</p>
-            <p className="mt-1.5 text-[11px] text-slate-500 leading-snug">
-              {grade.n} leads · {t.qualifiedCalls} qualified calls ·{" "}
-              {t.sales > 0 ? `${t.sales} verified sales` : "0 verified sales recorded"}
+            <p className="mt-1.5 text-[12px] text-slate-600 leading-snug">
+              {lowSample ? (
+                <>Quality not yet meaningful · {grade.n} leads</>
+              ) : (
+                <>
+                  <span className="font-semibold text-slate-900">Quality {formatQualityRate(grade.rate)}</span>
+                  {grade.showInterval ? ` (${formatRange(grade)})` : ""}
+                  {" · "}Target ≥{(QUALITY_TARGETS.green * 100).toFixed(0)}%
+                </>
+              )}
             </p>
-            <p className="mt-2 text-[10.5px] text-slate-400 leading-snug">
-              Target ≥{(QUALITY_TARGETS.green * 100).toFixed(0)}% · {benchText}
+            <p className="mt-1.5 text-[11px] text-slate-500 leading-snug">
+              {grade.n} leads · {t.qualifiedCalls} qualified · {t.sales} verified sales
             </p>
           </div>
         </div>
