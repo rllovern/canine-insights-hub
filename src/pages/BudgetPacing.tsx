@@ -362,9 +362,6 @@ export default function BudgetPacing() {
                         {fmtPct(c.pctSpend)}
                       </span>
                     )}
-                    <div className="mt-0.5 text-[11px] font-normal text-muted-foreground">
-                      {c.pace.tone === "none" ? "" : c.pace.label}
-                    </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.yesterday)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.activeBudget)}</TableCell>
@@ -399,13 +396,6 @@ export default function BudgetPacing() {
           </TableBody>
         </Table>
       </div>
-
-      <p className="text-xs text-muted-foreground">
-        {PACING_SCOPE_NOTE} % Spend is graded on the gap in percentage points between spend-to-date and time elapsed: within 5 points is on pace, within 15 is slightly off, beyond 15 is off pace.
-      </p>
-      <p className="text-xs text-muted-foreground">
-        Projection = month-to-date spend + average of last 5 days × days remaining in month. Active Budget and Campaign Label filter use enabled Google Ads campaigns and their labels (last sync).
-      </p>
     </div>
   );
 }
