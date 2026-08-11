@@ -140,3 +140,13 @@ export function runRateVerdict(projection: number, budget: number | null | undef
   const tooltip = `${pct1(ratio)} of budget projected for the full month — ${label.toLowerCase()} (${abs.toFixed(1)} points ${ahead ? "over" : "under"} 100%).`;
   return { tone, className: TONE_CLASS[tone], label, tooltip, gapPoints };
 }
+/**
+ * Local Services (LSA) and other Google-auto-generated campaigns carry their own
+ * separate budget and should not roll into the PPC active budget / pacing math.
+ */
+const EXCLUDED_CAMPAIGN_RE = /^localservicescampaign[:\s]|systemgenerated|^local services/i;
+
+export function isExcludedCampaign(name: string | null | undefined): boolean {
+  if (!name) return false;
+  return EXCLUDED_CAMPAIGN_RE.test(name.trim());
+}

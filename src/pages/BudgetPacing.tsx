@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import { pacingVerdict, runRateVerdict } from "@/lib/budgetPacing";
+import { pacingVerdict, runRateVerdict, isExcludedCampaign } from "@/lib/budgetPacing";
 
 type BudgetRow = {
   id: string;
@@ -202,7 +202,10 @@ export default function BudgetPacing() {
 
     return rows.map((r) => {
       const inScope = metrics.filter(
-        (m) => m.property_id === r.property_id && matchesLabel(r.property_id, m.campaign, r.campaign_label),
+        (m) =>
+          m.property_id === r.property_id &&
+          !isExcludedCampaign(m.campaign) &&
+          matchesLabel(r.property_id, m.campaign, r.campaign_label),
       );
       const inMonth = inScope.filter((m) => m.date >= fromISO && m.date <= toIso);
       const spends = inMonth.reduce((a, m) => a + Number(m.cost || 0), 0);
@@ -212,9 +215,18 @@ export default function BudgetPacing() {
       const avgLast5 = last5Total / 5;
 
       const activeBudgetRows = budgets.filter(
-        (b) => b.property_id === r.property_id && b.status === "ENABLED" && matchesLabel(r.property_id, b.campaign, r.campaign_label),
+        (b) =>
+          b.property_id === r.property_id &&
+          b.status === "ENABLED" &&
+          !isExcludedCampaign(b.campaign) &&
+          matchesLabel(r.property_id, b.campaign, r.campaign_label),
       );
       const activeBudget = activeBudgetRows.length ? activeBudgetRows.reduce((a, b) => a + Number(b.daily_budget || 0), 0) : null;
+      const activeBudgetTooltip = activeBudgetRows.length
+        ? `Counted campaigns:\n${activeBudgetRows
+            .map((b) => `• ${b.campaign} — ${fmtUSD(Number(b.daily_budget || 0))}/day`)
+            .join("\n")}\n\nLocal Services / auto-generated campaigns are excluded.`
+        : "No enabled PPC campaigns match this budget row. Local Services / auto-generated campaigns are excluded.";
 
       const pctSpend = r.monthly_budget > 0 ? spends / r.monthly_budget : null;
       const targetDaily = range.daysRemaining > 0 ? Math.max(0, r.monthly_budget - spends) / range.daysRemaining : null;
@@ -224,7 +236,7 @@ export default function BudgetPacing() {
       const pace = pacingVerdict(spends, Number(r.monthly_budget), range.daysElapsed, range.totalDays);
       const runRate = runRateVerdict(projection, Number(r.monthly_budget));
 
-      return { row: r, spends, pctSpend, yesterday, activeBudget, targetDaily, projection, projRunRate, pace, runRate };
+      return { row: r, spends, pctSpend, yesterday, activeBudget, activeBudgetTooltip, targetDaily, projection, projRunRate, pace, runRate };
     });
   }, [rows, metrics, budgets, labelIndex, range]);
 
@@ -364,7 +376,9 @@ export default function BudgetPacing() {
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.yesterday)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmtUSD(c.activeBudget)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <span className="cursor-help" title={c.activeBudgetTooltip}>{fmtUSD(c.activeBudget)}</span>
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.targetDaily)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.projection)}</TableCell>
                   <TableCell className="text-right tabular-nums">
