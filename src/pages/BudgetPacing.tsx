@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { pacingVerdict, runRateVerdict, PACING_SCOPE_NOTE } from "@/lib/budgetPacing";
 
 type BudgetRow = {
   id: string;
@@ -29,16 +30,6 @@ type LabelRow = { property_id: string; campaign: string; label_name: string };
 const fmtUSD = (n: number | null | undefined) =>
   n == null || !isFinite(n) ? "—" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n >= 100 ? 0 : 2 });
 const fmtPct = (n: number | null) => (n == null || !isFinite(n) ? "—" : `${Math.round(n * 100)}%`);
-
-// Red (far from 100%) → yellow (near) → green (≈100%). Used for % Spend & Proj Run Rate.
-function paceTone(pct: number | null): string {
-  if (pct == null || !isFinite(pct)) return "bg-muted/30 text-muted-foreground";
-  const dist = Math.abs(pct - 1); // 0 = perfect, 1 = 100% off
-  if (dist <= 0.05) return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
-  if (dist <= 0.15) return "bg-lime-500/15 text-lime-700 dark:text-lime-300";
-  if (dist <= 0.3) return "bg-amber-500/15 text-amber-700 dark:text-amber-300";
-  return "bg-red-500/15 text-red-700 dark:text-red-300";
-}
 
 function monthOptions(): { value: string; label: string }[] {
   const out: { value: string; label: string }[] = [];
@@ -230,7 +221,10 @@ export default function BudgetPacing() {
       const projection = range.isCurrent ? spends + avgLast5 * range.daysRemaining : spends;
       const projRunRate = r.monthly_budget > 0 ? projection / r.monthly_budget : null;
 
-      return { row: r, spends, pctSpend, yesterday, activeBudget, targetDaily, projection, projRunRate };
+      const pace = pacingVerdict(spends, Number(r.monthly_budget), range.daysElapsed, range.totalDays);
+      const runRate = runRateVerdict(projection, Number(r.monthly_budget));
+
+      return { row: r, spends, pctSpend, yesterday, activeBudget, targetDaily, projection, projRunRate, pace, runRate };
     });
   }, [rows, metrics, budgets, labelIndex, range]);
 
@@ -358,18 +352,35 @@ export default function BudgetPacing() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.spends)}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    <span className={cn("inline-block min-w-[3.5rem] rounded px-2 py-0.5 text-xs font-medium", paceTone(c.pctSpend))}>
-                      {fmtPct(c.pctSpend)}
-                    </span>
+                    {c.pace.tone === "none" ? (
+                      <span className="text-xs text-muted-foreground" title={c.pace.tooltip}>No budget configured</span>
+                    ) : (
+                      <span
+                        title={c.pace.tooltip}
+                        className={cn("inline-block min-w-[3.5rem] cursor-help rounded px-2 py-0.5 text-xs font-medium", c.pace.className)}
+                      >
+                        {fmtPct(c.pctSpend)}
+                      </span>
+                    )}
+                    <div className="mt-0.5 text-[11px] font-normal text-muted-foreground">
+                      {c.pace.tone === "none" ? "" : c.pace.label}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.yesterday)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.activeBudget)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.targetDaily)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.projection)}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    <span className={cn("inline-block min-w-[3.5rem] rounded px-2 py-0.5 text-xs font-medium", paceTone(c.projRunRate))}>
-                      {fmtPct(c.projRunRate)}
-                    </span>
+                    {c.runRate.tone === "none" ? (
+                      <span className="text-xs text-muted-foreground" title={c.runRate.tooltip}>No budget configured</span>
+                    ) : (
+                      <span
+                        title={c.runRate.tooltip}
+                        className={cn("inline-block min-w-[3.5rem] cursor-help rounded px-2 py-0.5 text-xs font-medium", c.runRate.className)}
+                      >
+                        {fmtPct(c.projRunRate)}
+                      </span>
+                    )}
                   </TableCell>
                   {isSuperAdmin && (
                     <TableCell>
@@ -389,6 +400,9 @@ export default function BudgetPacing() {
         </Table>
       </div>
 
+      <p className="text-xs text-muted-foreground">
+        {PACING_SCOPE_NOTE} % Spend is graded on the gap in percentage points between spend-to-date and time elapsed: within 5 points is on pace, within 15 is slightly off, beyond 15 is off pace.
+      </p>
       <p className="text-xs text-muted-foreground">
         Projection = month-to-date spend + average of last 5 days × days remaining in month. Active Budget and Campaign Label filter use enabled Google Ads campaigns and their labels (last sync).
       </p>
