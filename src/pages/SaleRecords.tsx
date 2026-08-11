@@ -176,7 +176,7 @@ export default function SaleRecords() {
                   : isRevenueFloor
                     ? `at least ${currency.format(total)} — ${coverageNote}`
                     : currency.format(total)
-              }`
+              }${crm.isError ? " · CRM connection status unavailable" : ""}`
         }
         actions={
           <Button variant="outline" size="sm" onClick={download} disabled={rows.length === 0}>
