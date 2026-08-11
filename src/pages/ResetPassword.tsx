@@ -13,9 +13,22 @@ function hasRecoveryPayload() {
   return Boolean(hash.get("access_token") || hash.get("token_hash") || search.get("code") || search.get("token_hash"));
 }
 
+// Invite links carry ?welcome=1 (set by admin-users) or type=invite from
+// GoTrue. New users get welcome copy instead of "reset your password".
+function isInviteLink() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const search = new URLSearchParams(window.location.search);
+  return (
+    search.get("welcome") === "1" ||
+    hash.get("type") === "invite" ||
+    search.get("type") === "invite"
+  );
+}
+
 export default function ResetPassword() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"checking" | "ready" | "invalid">("checking");
+  const [invite] = useState(isInviteLink);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -66,25 +79,35 @@ export default function ResetPassword() {
     if (err) { toast.error(err); return; }
     // Burn the recovery session so the same link can't be reused.
     await supabase.auth.signOut();
-    toast.success("Password updated — sign in with your new password");
+    toast.success(invite ? "Password set — sign in to continue" : "Password updated — sign in with your new password");
     navigate("/login", { replace: true });
   };
 
   return (
     <AuthShell
-      title={status === "ready" ? "Choose a new password" : "Reset link unavailable"}
+      title={
+        status === "ready"
+          ? invite
+            ? "Welcome to RSK9 Insights"
+            : "Choose a new password"
+          : invite
+            ? "Invitation link unavailable"
+            : "Reset link unavailable"
+      }
       subtitle={
         status === "ready"
-          ? "Enter a new password for your account."
+          ? invite
+            ? "Set a password to finish setting up your account. Inside you'll find your ad spend, lead quality, and sales performance in one place."
+            : "Enter a new password for your account."
           : status === "checking"
-            ? "Checking your reset link…"
+            ? invite ? "Checking your invitation link…" : "Checking your reset link…"
             : "This link has already been used or has expired. Request a new one to continue."
       }
     >
       {status === "ready" ? (
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="reset-password">New password</Label>
+            <Label htmlFor="reset-password">{invite ? "Password" : "New password"}</Label>
             <Input id="reset-password" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <div className="space-y-1.5">
@@ -92,7 +115,7 @@ export default function ResetPassword() {
             <Input id="reset-confirm" type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Saving…" : "Update password"}
+            {loading ? "Saving…" : invite ? "Set password" : "Update password"}
           </Button>
         </form>
       ) : status === "checking" ? null : (
