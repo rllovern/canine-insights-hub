@@ -21,6 +21,7 @@ import {
   formatQualityRate,
   PROJECTED_LABEL,
 } from "@/lib/leadModel";
+import { gradeQuality, formatRange, confidenceLabel, type QualityGrade } from "@/lib/leadModel";
 
 type Row = {
   property_id: string;
@@ -44,28 +45,31 @@ function statusClasses(verdict: "critical" | "warning" | "good") {
     : "text-emerald-600 bg-emerald-500";
 }
 
-function locationVerdict(totals: Totals, provisional: boolean) {
-  const tier = qualityTier(totals.qualityRate, totals.totalLeads);
+function locationVerdict(totals: Totals, grade: QualityGrade) {
   const verdict: "critical" | "warning" | "good" =
-    tier === "red" ? "critical" : tier === "amber" ? "warning" : "good";
-  if (tier === "low-sample") {
+    grade.tier === "red" ? "critical" : grade.tier === "amber" ? "warning" : "good";
+  if (grade.tier === "low-sample") {
     return {
       verdict: "good" as const,
-      reason: `Low sample (${totals.totalLeads} leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ leads.`,
+      reason: `Low sample (${grade.n} leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ leads.`,
     };
   }
-  const rateText = formatQualityRate(totals.qualityRate);
-  const targetText = `${(QUALITY_TARGETS.green * 100).toFixed(0)}% green / ${(QUALITY_TARGETS.amber * 100).toFixed(0)}% amber`;
+  const rateText = formatQualityRate(grade.rate);
   const mix = `${totals.bad} bad · ${totals.good} good · ${totals.projected} ${PROJECTED_LABEL}`;
-  const caveat = provisional
-    ? ` Small sample (${totals.totalLeads} leads) — provisional; not used for pass/fail.`
+  const rangeText = grade.showInterval
+    ? ` (range ${formatRange(grade)} on ${grade.n} leads)`
     : "";
-  const reason = provisional
-    ? `Quality ${rateText} on a small sample of ${totals.totalLeads} leads. Mix: ${mix}.${caveat}`
-    : verdict === "good"
-      ? `Quality ${rateText} meets the ${(QUALITY_TARGETS.green * 100).toFixed(0)}% target. Mix: ${mix}.`
-      : `Quality ${rateText} is below the ${targetText} target. Mix: ${mix}.`;
-  return { verdict, reason };
+  const head =
+    grade.tier === "green"
+      ? `Quality ${rateText}${rangeText} clears the ${(QUALITY_TARGETS.green * 100).toFixed(0)}% target.`
+      : grade.tier === "red"
+        ? `Quality ${rateText}${rangeText} is below the ${(QUALITY_TARGETS.amber * 100).toFixed(0)}% floor even allowing for volume.`
+        : `Quality ${rateText}${rangeText} sits between the ${(QUALITY_TARGETS.amber * 100).toFixed(0)}% floor and the ${(QUALITY_TARGETS.green * 100).toFixed(0)}% target.`;
+  const tail =
+    grade.tier !== "red" && grade.rate < QUALITY_TARGETS.amber
+      ? " Volume is too thin to call this critical yet."
+      : "";
+  return { verdict, reason: `${head} Mix: ${mix}.${tail}` };
 }
 
 export function PortfolioVerdict({
@@ -154,12 +158,13 @@ export function PortfolioVerdict({
         const total = canonicalTotalLeads(v);
         if (total === 0) continue;
         const rate = canonicalQualityRate(v);
-        const tier = qualityTier(rate, total);
+        const grade = gradeQuality(v);
+        const tier = grade.tier;
         const verdict = tierToVerdict(tier);
         const reason =
           tier === "low-sample"
             ? `Low sample · ${total} leads (need ${LOW_SAMPLE_BASE}+)`
-            : `Quality ${formatQualityRate(rate)} · ${v.bad} bad / ${v.good} good / ${v.projected} AI-proj`;
+            : `Quality ${formatQualityRate(rate)}${grade.showInterval ? ` (range ${formatRange(grade)}, ${total} leads)` : ""} · ${v.bad} bad / ${v.good} good / ${v.projected} AI-proj`;
         rows.push({ property_id, name: v.name, total, bad: v.bad, good: v.good, projected: v.projected, rate, tier, verdict, reason });
       }
       const order = { critical: 0, warning: 1, good: 2 } as const;
