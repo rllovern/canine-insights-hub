@@ -355,10 +355,12 @@ export function DateRangePicker() {
               />
             </div>
 
-            <div className="mt-3 flex items-center justify-end gap-2 border-t border-border pt-3">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button size="sm" onClick={apply}>Apply</Button>
-            </div>
+            {!compact && (
+              <div className="mt-3 flex items-center justify-end gap-2 border-t border-border pt-3">
+                <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button size="sm" onClick={apply}>Apply</Button>
+              </div>
+            )}
           </div>
     </div>
   );
@@ -368,7 +370,11 @@ export function DateRangePicker() {
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerTrigger asChild>{trigger}</DrawerTrigger>
         <DrawerContent className="max-h-[90vh] bg-popover">
-          <div className="overflow-y-auto overscroll-contain px-1 pb-4">{body}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">{body}</div>
+          <div className="flex items-center justify-end gap-2 border-t border-border p-3">
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={apply}>Apply</Button>
+          </div>
         </DrawerContent>
       </Drawer>
     );
