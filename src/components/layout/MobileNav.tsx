@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Menu, Settings, LogOut, ChevronDown } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -24,7 +24,7 @@ import {
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
-  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
   const { signOut, user } = useAuth();
   const { effectiveRole, isStaff, isSuperAdmin, isLocationOwner } = usePreviewMode();
   const loc = useLocation();
@@ -101,7 +101,7 @@ export function MobileNav() {
         </Button>
       </SheetTrigger>
       <SheetContent
-        ref={contentRef}
+        ref={setContentEl}
         side="left"
         className="w-[280px] p-0 bg-sidebar text-sidebar-foreground border-sidebar-border flex flex-col"
       >
@@ -109,7 +109,7 @@ export function MobileNav() {
           <BrandMark variant="onDark" />
         </div>
         <div className="px-3 pt-3">
-          <ScopeSelector container={contentRef.current} onScopeChange={() => setOpen(false)} />
+          <ScopeSelector container={contentEl} onScopeChange={() => setOpen(false)} />
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
           <GroupLabel>Executive View</GroupLabel>
