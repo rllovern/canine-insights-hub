@@ -379,9 +379,10 @@ function CampaignTable({ current, prior, cfg }: any) {
   // out (it's a sales-disposition feed, not a media source). PPC rows are
   // filtered by campaign_labels so shared accounts only surface their own
   // campaigns.
+  const splitSpam = !cfg?.isHidden("spam");
   const withTotals = (rows: any[]) => rows.map((r: any) => ({
     ...r,
-    total_leads: rowTotalLeads(r),
+    ...reconcileRow(r, splitSpam),
   }));
   const curFiltered = useLabelRuleFilter(current);
   const preFiltered = useLabelRuleFilter(prior);
@@ -397,15 +398,17 @@ function CampaignTable({ current, prior, cfg }: any) {
 
   // Verified Sale is attributed at source level only (GHL wins carry a session
   // source, not a campaign), so it isn't shown in the campaign breakdown.
-  const cols = ["record_count", "no_entry", "spam", "total_leads", "bad_leads", "good_leads"].filter((c) => {
+  const showUnclassified = cur.some((r: any) => (r.unclassified ?? 0) > 0);
+  const cols = ["record_count", "no_entry", "spam", "bad_leads", "good_leads", "unclassified"].filter((c) => {
     if (c === "spam" && cfg?.isHidden("spam")) return false;
     if (c === "bad_leads" && cfg?.isHidden("bad_leads")) return false;
     if (c === "good_leads" && cfg?.isHidden("good_leads")) return false;
+    if (c === "unclassified" && !showUnclassified) return false;
     return true;
   });
   const labels: Record<string, string> = {
     record_count: "Records", no_entry: "No Entry",
-    spam: cfg?.label("spam") ?? "Spam", total_leads: "Total Leads",
+    spam: cfg?.label("spam") ?? "Spam", unclassified: "Unclassified",
     bad_leads: cfg?.label("bad_leads") ?? "Bad Leads",
     good_leads: cfg?.label("good_leads") ?? "Good Leads",
     verified_sale: cfg?.label("verified_sale") ?? "Verified Sale",
