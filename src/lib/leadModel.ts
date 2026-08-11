@@ -30,7 +30,7 @@ export const qualityRate = (c: LeadCounts) => {
 };
 
 /** Absolute, fixed quality targets. Never derived from any single location. */
-export const QUALITY_TARGETS = { green: 0.55, amber: 0.45 } as const;
+export const QUALITY_TARGETS = { green: 0.30, amber: 0.25 } as const;
 
 /**
  * Small-sample floor. Below this we suppress the rate entirely (genuinely

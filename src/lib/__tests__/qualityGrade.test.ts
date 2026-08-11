@@ -8,18 +8,26 @@ describe("gradeQuality", () => {
     expect(gradeQuality(counts(3, 7)).tier).toBe("low-sample");
   });
 
-  it("does not call 44% critical on 18 leads", () => {
-    const g = gradeQuality(counts(8, 18));
+  it("grades 44% on 18 leads as good under the 30% benchmark", () => {
+    expect(gradeQuality(counts(8, 18)).tier).toBe("green");
+  });
+
+  it("does not call a thin sample below target critical", () => {
+    const g = gradeQuality(counts(3, 18));
     expect(g.tier).toBe("amber");
-    expect(g.upper).toBeGreaterThan(0.45);
+    expect(g.upper).toBeGreaterThan(0.25);
   });
 
   it("calls sustained underperformance red at volume", () => {
-    expect(gradeQuality(counts(36, 120)).tier).toBe("red");
+    expect(gradeQuality(counts(18, 120)).tier).toBe("red");
+  });
+
+  it("grades a just-under-target large sample amber", () => {
+    expect(gradeQuality(counts(27, 100)).tier).toBe("amber");
   });
 
   it("grades a strong large sample green", () => {
-    expect(gradeQuality(counts(60, 100)).tier).toBe("green");
+    expect(gradeQuality(counts(40, 100)).tier).toBe("green");
   });
 
   it("narrows the interval as n grows", () => {
