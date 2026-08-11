@@ -12,6 +12,8 @@ export interface CrmConnection {
   /** true when nothing in scope has a CRM — sales cannot be reported at all */
   noneConnected: boolean;
   isLoading: boolean;
+  /** true when the backend could not answer — status is unknown, NOT "disconnected" */
+  isError: boolean;
 }
 
 export function useCrmConnection(propertyIds: string[] | null, enabled = true): CrmConnection {
@@ -19,28 +21,33 @@ export function useCrmConnection(propertyIds: string[] | null, enabled = true): 
     enabled,
     queryKey: ["crm-connection", propertyIds?.join(",") ?? "all"],
     staleTime: 5 * 60 * 1000,
+    retry: 1,
     queryFn: async () => {
-      let sel = supabase
-        .from("property_data_sources")
-        .select("property_id, is_connected, status")
-        .eq("source", "ghl");
-      if (propertyIds) sel = sel.in("property_id", propertyIds);
-      const { data, error } = await sel;
-      if (error) return { connected: [] as string[], all: propertyIds ?? [] };
-      const connected = (data ?? [])
-        .filter((r) => r.is_connected && r.status !== "paused")
-        .map((r) => r.property_id as string);
-      return { connected, all: propertyIds ?? (data ?? []).map((r) => r.property_id as string) };
+      // Security-definer RPC: readable by every role that can see the property,
+      // so CRM status never depends on staff-only table access. Errors are
+      // thrown (never swallowed) — an unanswered request must not be rendered
+      // as "No CRM connected".
+      const { data, error } = await supabase.rpc("crm_connection_status", {
+        _property_ids: propertyIds ?? undefined,
+      });
+      if (error) throw error;
+      const rows = (data ?? []) as { property_id: string; connected: boolean }[];
+      const connected = rows.filter((r) => r.connected).map((r) => r.property_id);
+      return { connected, all: propertyIds ?? rows.map((r) => r.property_id) };
     },
   });
 
   const connectedIds = q.data?.connected ?? [];
   const all = q.data?.all ?? propertyIds ?? [];
   const unconnectedIds = all.filter((id) => !connectedIds.includes(id));
+  // Only a successful answer may claim "no CRM". Loading and error states keep
+  // the normal value on screen.
+  const answered = q.isSuccess;
   return {
     connectedIds,
     unconnectedIds,
-    noneConnected: !q.isLoading && all.length > 0 && connectedIds.length === 0,
-    isLoading: q.isLoading,
+    noneConnected: answered && all.length > 0 && connectedIds.length === 0,
+    isLoading: q.isPending,
+    isError: q.isError,
   };
 }
