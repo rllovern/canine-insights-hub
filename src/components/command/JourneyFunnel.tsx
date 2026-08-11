@@ -323,17 +323,17 @@ function DeltaBadge({ d, invert }: { d: import("@/lib/metrics").SafeDelta; inver
     return <span className="inline-flex items-center text-[10.5px] text-slate-400 gap-0.5"><Minus className="h-3 w-3" />no prior</span>;
   }
   if (d.kind === "low-sample") {
-    const positive = invert ? d.abs < 0 : d.abs >= 0;
+    const tone = deltaTone(null, { invert, direction: d.abs });
     return (
-      <span className={cn("inline-flex items-center text-[10.5px] font-semibold gap-0.5", positive ? "text-emerald-600" : "text-rose-600")}>
+      <span className={cn("inline-flex items-center text-[10.5px] font-semibold gap-0.5", DELTA_TONE_CLASS[tone])}>
         {d.abs >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
         {d.abs >= 0 ? "+" : ""}{d.abs.toFixed(1)}
       </span>
     );
   }
-  const positive = invert ? d.value < 0 : d.value >= 0;
+  const tone = deltaTone(d.value, { invert });
   return (
-    <span className={cn("inline-flex items-center text-[11px] font-semibold", positive ? "text-emerald-600" : "text-rose-600")}>
+    <span className={cn("inline-flex items-center text-[11px] font-semibold", DELTA_TONE_CLASS[tone])}>
       {d.value >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
       {Math.abs(d.value).toFixed(1)}%
     </span>
