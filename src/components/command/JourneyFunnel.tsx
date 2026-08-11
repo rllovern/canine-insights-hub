@@ -1,6 +1,6 @@
 import { Megaphone, PhoneCall, Award, ArrowRight, ArrowUp, ArrowDown, Info, Minus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { fmtCurrency, fmtNumber, safeDelta } from "@/lib/metrics";
+import { fmtCurrency, fmtNumber, safeDelta, deltaTone, DELTA_TONE_CLASS } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 import type { CommandMode, CommandTargets, Totals } from "./useCommandData";
 import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";

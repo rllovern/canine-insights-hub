@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { deltaTone, DELTA_TONE_CHIP } from "@/lib/metrics";
 
 interface KPICardProps {
   label: string;
@@ -12,6 +13,7 @@ interface KPICardProps {
 
 export function KPICard({ label, value, delta, hint, icon }: KPICardProps) {
   const positive = (delta ?? 0) >= 0;
+  const tone = deltaTone(delta ?? 0);
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-center justify-between">
@@ -26,9 +28,7 @@ export function KPICard({ label, value, delta, hint, icon }: KPICardProps) {
           <span
             className={cn(
               "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-medium ring-1 ring-inset",
-              positive
-                ? "bg-success/10 text-success ring-success/20"
-                : "bg-destructive/10 text-destructive ring-destructive/20",
+              DELTA_TONE_CHIP[tone],
             )}
           >
             {positive ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}

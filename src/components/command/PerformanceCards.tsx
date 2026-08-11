@@ -55,7 +55,7 @@ const TONE: Record<Tone, string> = {
 };
 
 function Rail({
-  label, value, pct, goal, tone, deltaText, deltaPositive, goalText,
+  label, value, pct, goal, tone, deltaText, deltaPositive, deltaPct, goalText,
 }: {
   label: string;
   value: string;
@@ -64,6 +64,7 @@ function Rail({
   tone: Tone;
   deltaText?: string;
   deltaPositive?: boolean;
+  deltaPct?: number | null;
   goalText?: string;
 }) {
   return (
@@ -75,7 +76,7 @@ function Rail({
       <div className="mt-0.5 flex items-baseline justify-between">
         <div className="text-sm font-bold tabular-nums text-slate-900">{value}</div>
         {deltaText && (
-          <span className={cn("inline-flex items-center gap-0.5 text-[10.5px] font-semibold", deltaPositive ? "text-emerald-600" : "text-rose-600")}>
+          <span className={cn("inline-flex items-center gap-0.5 text-[10.5px] font-semibold", DELTA_TONE_CLASS[deltaPositive ? "good" : deltaTone(deltaPct ?? null, { direction: -1 })])}>
             {deltaPositive ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
             {deltaText}
           </span>

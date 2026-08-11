@@ -51,7 +51,7 @@ function SummaryCards({
         const DirIcon = dir === "up" ? ArrowUp : dir === "down" ? ArrowDown : dir === "flat" ? Minus : null;
         const dirClass =
           dir === "up" ? "text-emerald-600 dark:text-emerald-400"
-          : dir === "down" ? "text-destructive"
+          : dir === "down" ? "text-warning"
           : "text-muted-foreground";
         const actionable = !!c.action_payload && !!onAction;
         return (
