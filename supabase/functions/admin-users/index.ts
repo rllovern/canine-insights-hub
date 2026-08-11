@@ -54,21 +54,43 @@ async function handle(req: Request): Promise<Response> {
   const body = await req.json().catch(() => ({}));
   const action = body.action as string | undefined;
 
-  // Sends the built-in password-recovery email so a new user can set their own
-  // password. Uses the anon client because resetPasswordForEmail is a public
-  // auth endpoint (the service client would bypass mail delivery).
-  const sendInviteEmail = async (email: string, appUrl?: string) => {
-    const redirectTo = `${(appUrl ?? "").replace(/\/+$/, "")}/reset-password`;
+  const inviteRedirect = (appUrl?: string) =>
+    appUrl ? `${appUrl.replace(/\/+$/, "")}/reset-password?welcome=1` : undefined;
+  const recoveryRedirect = (appUrl?: string) =>
+    appUrl ? `${appUrl.replace(/\/+$/, "")}/reset-password` : undefined;
+
+  // Sends the built-in password-recovery email. Used for people who already
+  // signed in at least once — same email they'd get from "Forgot password".
+  // Uses the anon client because resetPasswordForEmail is a public auth
+  // endpoint (the service client would bypass mail delivery).
+  const sendRecoveryEmail = async (email: string, appUrl?: string) => {
+    const redirectTo = recoveryRedirect(appUrl);
     const anon = createClient(SUPABASE_URL, ANON_KEY);
     const { error } = await anon.auth.resetPasswordForEmail(
       email,
-      appUrl ? { redirectTo } : undefined,
+      redirectTo ? { redirectTo } : undefined,
+    );
+    if (error) {
+      console.error("recovery email failed", email, error.message);
+      return { sent: false, kind: "recovery" as const, error: error.message };
+    }
+    return { sent: true, kind: "recovery" as const, error: null as string | null };
+  };
+
+  // Sends the built-in *invitation* email — distinct subject and wording from
+  // the password-reset email, so a brand new user is never greeted with
+  // "Reset your password". inviteUserByEmail also creates the auth user.
+  const sendInviteEmail = async (email: string, appUrl?: string) => {
+    const redirectTo = inviteRedirect(appUrl);
+    const { data, error } = await admin.auth.admin.inviteUserByEmail(
+      email,
+      redirectTo ? { redirectTo } : undefined,
     );
     if (error) {
       console.error("invite email failed", email, error.message);
-      return { sent: false, error: error.message };
+      return { sent: false, kind: "invite" as const, error: error.message, user_id: null as string | null };
     }
-    return { sent: true, error: null as string | null };
+    return { sent: true, kind: "invite" as const, error: null as string | null, user_id: data.user?.id ?? null };
   };
 
   if (action === "list") {
@@ -103,19 +125,44 @@ async function handle(req: Request): Promise<Response> {
       return json({ error: "Location Owner requires an assigned property" }, 400);
     }
 
-    const { data: created, error: cErr } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
-    if (cErr || !created.user) {
-      const msg = cErr?.message ?? "Failed to create user";
-      const friendly = /already been registered|already exists|duplicate/i.test(msg)
-        ? `An account already exists for ${email}. Edit that user instead, or use "Resend invite" to send them a set-password link.`
-        : msg;
-      return json({ error: friendly }, 400);
+    // When we're emailing the person, create the account *through* the invite
+    // endpoint so GoTrue delivers the invitation template (not the recovery
+    // one), then stamp on the temp password admins use as a fallback.
+    let newId: string;
+    let invite_email_sent = false;
+    let invite_email_error: string | null = null;
+
+    if (send_invite_email) {
+      const res = await sendInviteEmail(email, app_url);
+      if (!res.sent || !res.user_id) {
+        const msg = res.error ?? "Failed to create user";
+        const friendly = /already been registered|already exists|duplicate/i.test(msg)
+          ? `An account already exists for ${email}. Edit that user instead, or use "Resend invite" to send them a set-password link.`
+          : msg;
+        return json({ error: friendly }, 400);
+      }
+      newId = res.user_id;
+      invite_email_sent = true;
+      const { error: pErr } = await admin.auth.admin.updateUserById(newId, {
+        password,
+        email_confirm: true,
+      });
+      if (pErr) invite_email_error = pErr.message;
+    } else {
+      const { data: created, error: cErr } = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+      if (cErr || !created.user) {
+        const msg = cErr?.message ?? "Failed to create user";
+        const friendly = /already been registered|already exists|duplicate/i.test(msg)
+          ? `An account already exists for ${email}. Edit that user instead, or use "Resend invite" to send them a set-password link.`
+          : msg;
+        return json({ error: friendly }, 400);
+      }
+      newId = created.user.id;
     }
-    const newId = created.user.id;
 
     const { error: rErr } = await admin.from("user_roles").insert({ user_id: newId, role });
     if (rErr) return json({ error: rErr.message }, 500);
@@ -129,14 +176,6 @@ async function handle(req: Request): Promise<Response> {
         .from("viewer_property_access")
         .insert({ user_id: newId, property_id });
       if (aErr) return json({ error: aErr.message }, 500);
-    }
-
-    let invite_email_sent = false;
-    let invite_email_error: string | null = null;
-    if (send_invite_email) {
-      const res = await sendInviteEmail(email, app_url);
-      invite_email_sent = res.sent;
-      invite_email_error = res.error;
     }
 
     return json({ ok: true, user_id: newId, invite_email_sent, invite_email_error });
@@ -154,9 +193,19 @@ async function handle(req: Request): Promise<Response> {
       .from("user_security")
       .upsert({ user_id, must_change_password: true }, { onConflict: "user_id" });
 
-    const res = await sendInviteEmail(target.user.email, app_url);
+    // Never-signed-in accounts get the invitation email again; anyone who has
+    // already used the app gets the ordinary reset link.
+    const neverSignedIn = !target.user.last_sign_in_at;
+    let res = neverSignedIn
+      ? await sendInviteEmail(target.user.email, app_url)
+      : await sendRecoveryEmail(target.user.email, app_url);
+    // The invite endpoint refuses addresses it already created; fall back so
+    // the person still receives a working link.
+    if (!res.sent && res.kind === "invite") {
+      res = await sendRecoveryEmail(target.user.email, app_url);
+    }
     if (!res.sent) return json({ error: res.error ?? "Failed to send email" }, 400);
-    return json({ ok: true, invite_email_sent: true });
+    return json({ ok: true, invite_email_sent: true, email_kind: res.kind });
   }
 
   if (action === "update") {
