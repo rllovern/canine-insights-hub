@@ -393,8 +393,9 @@ export default function AdminUsers() {
             Require this person to set their own password at first sign-in
           </label>
           <p className="text-xs text-muted-foreground">
-            The new user is emailed a secure link to set their own password. The temporary password above is a
-            backup you can share if the email doesn't arrive — use "Resend invite" on their row to try again.
+            The new user gets an invitation email with a secure link to set their own password (not a password-reset
+            email). The temporary password above is a backup you can share if the email doesn't arrive — use
+            "Resend invite" on their row to try again.
           </p>
         </section>
       )}
