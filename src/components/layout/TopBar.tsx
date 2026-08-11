@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { AppRole } from "@/lib/types";
 import { TourHelpButton } from "@/components/tour/TourHelpButton";
+import { MobileNav } from "./MobileNav";
 
 const PREVIEW_ROLE_LABELS: Record<Exclude<AppRole, "internal" | "viewer">, string> = {
   super_admin: "Super Admin",
@@ -31,7 +32,9 @@ export function TopBar() {
   return (
     <header className="shrink-0 border-b border-border bg-card sticky top-0 z-30">
       <div className="min-h-16 px-4 py-3 sm:px-6 sm:py-0 flex flex-wrap items-center gap-2 sm:gap-4">
-        <div className="basis-full sm:basis-auto flex-1 min-w-0">
+        <div className="flex basis-full sm:basis-auto flex-1 min-w-0 items-center gap-2">
+          <MobileNav />
+          <div className="min-w-0 flex-1">
           <h1 className="text-[18px] font-semibold tracking-tight truncate text-foreground flex items-center gap-2">
             {mode === "agency" ? <Globe2 className="size-4 text-primary" /> : <Building2 className="size-4 text-primary" />}
             {label}
@@ -44,6 +47,7 @@ export function TopBar() {
                 vs {format(compareRange.from, "MMM d")} – {format(compareRange.to, "MMM d, yyyy")}
               </span>
             )}
+          </div>
           </div>
         </div>
 

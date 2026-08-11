@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, PhoneCall, Settings, LogOut, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, ChevronDown, Database, Sheet, Receipt } from "lucide-react";
+import { Settings, LogOut, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
@@ -7,46 +7,18 @@ import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { ScopeSelector } from "./ScopeSelector";
 import { SourceHealthPanel } from "./SourceHealthPanel";
-
-type NavItem = {
-  key: string;
-  to: string;
-  label: string;
-  icon: typeof BarChart3;
-  external?: boolean;
-  /** Show only to Super Admin + Admin (internal staff). */
-  staffOnly?: boolean;
-  /** Show only to Super Admin. */
-  superAdminOnly?: boolean;
-};
-
-const COMMAND_ITEM: NavItem = { key: "command", to: "/command", label: "Command", icon: LayoutDashboard };
-
-const BUDGET_ITEM: NavItem = { key: "budget", to: "/budget", label: "Budget Pacing", icon: Wallet };
-
-const SALES_ITEM: NavItem = { key: "sales", to: "/sales", label: "Sale Records", icon: Receipt };
-
-const MONITOR_ITEMS: NavItem[] = [
-  { key: "dashboard", to: "/dashboard", label: "PPC Overview", icon: BarChart3 },
-  { key: "calls", to: "/calls", label: "Call Tracking", icon: PhoneCall },
-  { key: "lead-performance", to: "/lead-performance", label: "Lead Performance", icon: Target },
-];
-
-const DELIVER_ITEMS: NavItem[] = [
-  { key: "client-reports", to: "/admin/client-reports", label: "Performance Reports", icon: FileSearch, staffOnly: true, external: true },
-  { key: "reports", to: "/reports", label: "Reports", icon: FileText },
-];
-
-const JARVIS_ITEM: NavItem = { key: "jarvis", to: "/assistant", label: "Jarvis", icon: Sparkles };
-
-const ADMIN_ITEMS: NavItem[] = [
-  { key: "clients", to: "/admin/properties", label: "Clients", icon: Users, staffOnly: true },
-  { key: "users", to: "/admin/users", label: "Users", icon: Users, superAdminOnly: true },
-  { key: "pipeline-mapping", to: "/admin/pipeline-mapping", label: "Pipeline Mapping", icon: GitBranch, superAdminOnly: true },
-  { key: "sla-settings", to: "/admin/sla-settings", label: "SLA Settings", icon: Timer, superAdminOnly: true },
-  { key: "data-sources", to: "/admin/data-sources", label: "Data Sources", icon: Database, superAdminOnly: true },
-  { key: "settings", to: "/admin/settings", label: "Settings", icon: Settings, superAdminOnly: true },
-];
+import {
+  ADMIN_ITEMS,
+  BUDGET_ITEM,
+  COMMAND_ITEM,
+  DELIVER_ITEMS,
+  JARVIS_ITEM,
+  MONITOR_ITEMS,
+  SALES_ITEM,
+  applyNavOrder,
+  filterVisibleItems,
+  type NavItem,
+} from "./navItems";
 
 export function Sidebar() {
   const { signOut, user } = useAuth();
@@ -62,23 +34,9 @@ export function Sidebar() {
   const showRichNav = isStaff && !isMinimal;
 
   const filterVisible = (items: NavItem[]) =>
-    items.filter((i) => {
-      if (i.superAdminOnly && !isSuperAdmin) return false;
-      if (i.staffOnly && !isStaff) return false;
-      return true;
-    });
+    filterVisibleItems(items, { isStaff, isSuperAdmin });
 
-  const applyOrder = (groupKey: string, items: NavItem[]) => {
-    try {
-      const raw = localStorage.getItem(`nav-order:${groupKey}`);
-      if (!raw) return items;
-      const order: string[] = JSON.parse(raw);
-      const map = new Map(items.map((i) => [i.key, i]));
-      const ordered: NavItem[] = [];
-      order.forEach((k) => { const it = map.get(k); if (it) { ordered.push(it); map.delete(k); } });
-      return [...ordered, ...map.values()];
-    } catch { return items; }
-  };
+  const applyOrder = applyNavOrder;
 
   const [monitorItems, setMonitorItems] = useState<NavItem[]>(() => applyOrder("monitor", filterVisible(MONITOR_ITEMS)));
   const [deliverItems, setDeliverItems] = useState<NavItem[]>(() => applyOrder("deliver", filterVisible(DELIVER_ITEMS)));
