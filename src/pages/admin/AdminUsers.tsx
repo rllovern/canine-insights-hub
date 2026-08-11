@@ -181,7 +181,7 @@ export default function AdminUsers() {
     if (err) { toast.error(err); return; }
     const res = data as { invite_email_sent?: boolean; invite_email_error?: string | null } | null;
     if (res?.invite_email_sent) {
-      toast.success("User created — set-password email sent");
+      toast.success("User created — invitation email sent");
     } else {
       toast.success("User created", {
         description: res?.invite_email_error
@@ -201,7 +201,8 @@ export default function AdminUsers() {
     setResendingId(null);
     const err = await fnError(error, data);
     if (err) { toast.error(err); return; }
-    toast.success("Set-password email sent");
+    const kind = (data as { email_kind?: string } | null)?.email_kind;
+    toast.success(kind === "recovery" ? "Password reset email sent" : "Invitation email sent");
     load();
   };
 
