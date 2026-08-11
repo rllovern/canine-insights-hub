@@ -83,13 +83,7 @@ export function RevenueRunway({ data, actualTotal, target, forecast, asOfDate, i
         <Stat
           label="% to target"
           value={percentDisplay}
-          tone={
-            t == null || t === 0
-              ? "muted"
-              : (percentToTarget as number) >= 1
-                ? "up"
-                : "down"
-          }
+          tone="muted"
           caption={targetIsZero ? "No prior-period Good Leads" : undefined}
         />
       </div>
@@ -188,12 +182,8 @@ export function RevenueRunway({ data, actualTotal, target, forecast, asOfDate, i
   );
 }
 
-function Stat({ label, value, tone, caption }: { label: string; value: string; tone: "primary" | "muted" | "up" | "down"; caption?: string }) {
-  const color =
-    tone === "primary" ? "text-foreground" :
-    tone === "up" ? "text-emerald-500" :
-    tone === "down" ? "text-rose-500" :
-    "text-muted-foreground";
+function Stat({ label, value, tone, caption }: { label: string; value: string; tone: "primary" | "muted"; caption?: string }) {
+  const color = tone === "primary" ? "text-foreground" : "text-muted-foreground";
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
