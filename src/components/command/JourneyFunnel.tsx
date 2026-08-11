@@ -13,6 +13,14 @@ import {
   formatQualityRate,
 } from "@/lib/leadModel";
 
+/** Quality tier → text color. */
+const TIER_TEXT: Record<string, string> = {
+  green: "text-success",
+  amber: "text-warning",
+  red: "text-destructive",
+  "low-sample": "text-slate-900",
+};
+
 function pct(num: number, den: number) {
   if (!den) return "—";
   return `${((num / den) * 100).toFixed(1)}%`;
@@ -81,7 +89,7 @@ export function JourneyFunnel({
         <Connector />
         <Stage s={{ label: isAds ? "PPC Records" : "Records", src: isAds ? "daily_metrics.record_count · Google PPC" : "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
         <Connector />
-        <QualifiedStage good={t.good} projected={t.projected} bad={t.bad} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
+        <QualifiedStage good={t.good} projected={t.projected} bad={t.bad} qualityRate={t.qualityRate} base={t.totalLeads} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
@@ -157,11 +165,12 @@ function LeadMix({
   benchmarkLabel: string;
   benchmarkRate: string;
 }) {
-  // Benchmark: at least 20% of total leads must be "good" (excluding sales).
+  // Benchmark: share of good leads against the shared quality targets.
   const goodShare = total > 0 ? good / total : 0;
   const judged = total > 0;
-  const pass = goodShare >= 0.2;
-  const numCls = !judged ? "text-slate-900" : pass ? "text-emerald-600" : "text-rose-600";
+  const tier = qualityTier(goodShare, total);
+  const pass = goodShare >= QUALITY_TARGETS.green;
+  const numCls = !judged ? "text-slate-900" : TIER_TEXT[tier];
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -184,8 +193,8 @@ function LeadMix({
           separately by Date marked Won and are not part of this mix.
         </div>
         {judged && (
-          <div className={cn("mt-1 font-semibold tabular-nums", pass ? "text-emerald-600" : "text-rose-600")}>
-            Good share {(goodShare * 100).toFixed(1)}% · target ≥ 20% {pass ? "✓" : "✕"}
+          <div className={cn("mt-1 font-semibold tabular-nums", TIER_TEXT[tier])}>
+            Good share {(goodShare * 100).toFixed(1)}% · target ≥ {(QUALITY_TARGETS.green * 100).toFixed(0)}% {pass ? "✓" : "✕"}
           </div>
         )}
         <div className="text-[10px] text-slate-400 mt-1">{benchmarkLabel} benchmark {benchmarkRate}</div>
@@ -194,11 +203,11 @@ function LeadMix({
   );
 }
 
-function QualifiedStage({ good, projected, bad, qualityRatePct, hasBase, leadsConvPct }: { good: number; projected: number; bad: number; qualityRatePct: number; hasBase: boolean; leadsConvPct: number }) {
+function QualifiedStage({ good, projected, bad, qualityRate, base, qualityRatePct, hasBase, leadsConvPct }: { good: number; projected: number; bad: number; qualityRate: number; base: number; qualityRatePct: number; hasBase: boolean; leadsConvPct: number }) {
   const total = good + projected;
-  const moreGood = good > bad;
-  const moreBad = bad > good;
-  const numCls = moreGood ? "text-emerald-600" : moreBad ? "text-rose-600" : "text-slate-900";
+  // Grade against the shared quality target (green >= 30%, amber >= 25%),
+  // not a good-vs-bad head count.
+  const numCls = !hasBase ? "text-slate-900" : TIER_TEXT[qualityTier(qualityRate, base)];
   return (
     <Tooltip>
       <TooltipTrigger asChild>
