@@ -13,7 +13,6 @@ import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 import { CARD_CHROME } from "./cardChrome";
 import {
   qualityRate as canonicalQualityRate,
-  qualityTier,
   totalLeads as canonicalTotalLeads,
   QUALITY_TARGETS,
   LOW_SAMPLE_BASE,
@@ -21,6 +20,7 @@ import {
   formatQualityRate,
   PROJECTED_LABEL,
 } from "@/lib/leadModel";
+import { gradeQuality, formatRange, confidenceLabel, type QualityGrade } from "@/lib/leadModel";
 
 type Row = {
   property_id: string;
@@ -44,28 +44,31 @@ function statusClasses(verdict: "critical" | "warning" | "good") {
     : "text-emerald-600 bg-emerald-500";
 }
 
-function locationVerdict(totals: Totals, provisional: boolean) {
-  const tier = qualityTier(totals.qualityRate, totals.totalLeads);
+function locationVerdict(totals: Totals, grade: QualityGrade) {
   const verdict: "critical" | "warning" | "good" =
-    tier === "red" ? "critical" : tier === "amber" ? "warning" : "good";
-  if (tier === "low-sample") {
+    grade.tier === "red" ? "critical" : grade.tier === "amber" ? "warning" : "good";
+  if (grade.tier === "low-sample") {
     return {
       verdict: "good" as const,
-      reason: `Low sample (${totals.totalLeads} leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ leads.`,
+      reason: `Low sample (${grade.n} leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ leads.`,
     };
   }
-  const rateText = formatQualityRate(totals.qualityRate);
-  const targetText = `${(QUALITY_TARGETS.green * 100).toFixed(0)}% green / ${(QUALITY_TARGETS.amber * 100).toFixed(0)}% amber`;
+  const rateText = formatQualityRate(grade.rate);
   const mix = `${totals.bad} bad · ${totals.good} good · ${totals.projected} ${PROJECTED_LABEL}`;
-  const caveat = provisional
-    ? ` Small sample (${totals.totalLeads} leads) — provisional; not used for pass/fail.`
+  const rangeText = grade.showInterval
+    ? ` (range ${formatRange(grade)} on ${grade.n} leads)`
     : "";
-  const reason = provisional
-    ? `Quality ${rateText} on a small sample of ${totals.totalLeads} leads. Mix: ${mix}.${caveat}`
-    : verdict === "good"
-      ? `Quality ${rateText} meets the ${(QUALITY_TARGETS.green * 100).toFixed(0)}% target. Mix: ${mix}.`
-      : `Quality ${rateText} is below the ${targetText} target. Mix: ${mix}.`;
-  return { verdict, reason };
+  const head =
+    grade.tier === "green"
+      ? `Quality ${rateText}${rangeText} clears the ${(QUALITY_TARGETS.green * 100).toFixed(0)}% target.`
+      : grade.tier === "red"
+        ? `Quality ${rateText}${rangeText} is below the ${(QUALITY_TARGETS.amber * 100).toFixed(0)}% floor even allowing for volume.`
+        : `Quality ${rateText}${rangeText} sits between the ${(QUALITY_TARGETS.amber * 100).toFixed(0)}% floor and the ${(QUALITY_TARGETS.green * 100).toFixed(0)}% target.`;
+  const tail =
+    grade.tier !== "red" && grade.rate < QUALITY_TARGETS.amber
+      ? " Volume is too thin to call this critical yet."
+      : "";
+  return { verdict, reason: `${head} Mix: ${mix}.${tail}` };
 }
 
 export function PortfolioVerdict({
@@ -154,12 +157,13 @@ export function PortfolioVerdict({
         const total = canonicalTotalLeads(v);
         if (total === 0) continue;
         const rate = canonicalQualityRate(v);
-        const tier = qualityTier(rate, total);
+        const grade = gradeQuality(v);
+        const tier = grade.tier;
         const verdict = tierToVerdict(tier);
         const reason =
           tier === "low-sample"
             ? `Low sample · ${total} leads (need ${LOW_SAMPLE_BASE}+)`
-            : `Quality ${formatQualityRate(rate)} · ${v.bad} bad / ${v.good} good / ${v.projected} AI-proj`;
+            : `Quality ${formatQualityRate(rate)}${grade.showInterval ? ` (range ${formatRange(grade)}, ${total} leads)` : ""} · ${v.bad} bad / ${v.good} good / ${v.projected} AI-proj`;
         rows.push({ property_id, name: v.name, total, bad: v.bad, good: v.good, projected: v.projected, rate, tier, verdict, reason });
       }
       const order = { critical: 0, warning: 1, good: 2 } as const;
@@ -175,15 +179,14 @@ export function PortfolioVerdict({
 
   if (mode !== "agency") {
     const t = totals ?? { spend: 0, calls: 0, qualifiedCalls: 0, appointments: 0, revenue: 0, totalLeads: 0, good: 0, projected: 0, bad: 0, qualityRate: 0, sales: 0 };
-    const tier = qualityTier(t.qualityRate, t.totalLeads);
+    const grade = gradeQuality({ bad: t.bad, good: t.good, projected: t.projected });
+    const tier = grade.tier;
     const lowSample = tier === "low-sample"; // < LOW_SAMPLE_BASE (8) — suppress
-    const provisional = !lowSample && t.totalLeads < LOW_SAMPLE_CAVEAT; // 8–14 — caveat
-    const judged = locationVerdict(t, provisional);
-    // Provisional samples must never drive a pass/fail color or fire alerts.
-    // Render the gauge in a neutral slate tone, with a "small sample" caveat tag.
-    const ringTone = provisional
-      ? { stroke: "#94a3b8", text: "text-slate-500", word: "Small sample" }
-      : tier === "red" ? { stroke: "#f43f5e", text: "text-rose-600", word: "Critical" }
+    const judged = locationVerdict(t, grade);
+    // Grade already accounts for volume (Wilson interval), so the ring color
+    // always agrees with the reason text.
+    const ringTone =
+      tier === "red" ? { stroke: "#f43f5e", text: "text-rose-600", word: "Critical" }
       : tier === "amber" ? { stroke: "#f59e0b", text: "text-amber-600", word: "Warning" }
       : { stroke: "#10b981", text: "text-emerald-600", word: "Good" };
     const score = Math.round((t.qualityRate || 0) * 100);
@@ -200,9 +203,9 @@ export function PortfolioVerdict({
           <h3 className="text-sm font-semibold text-slate-900">Location Verdict</h3>
           <Tooltip><TooltipTrigger asChild><button type="button"><Info className="size-3.5 text-slate-400" /></button></TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs leading-snug">{TIPS.portfolioVerdict}</TooltipContent></Tooltip>
-          {provisional && (
-            <span className="ml-auto inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Small sample
+          {!lowSample && grade.confidence !== "high" && (
+            <span className="ml-auto inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-slate-500">
+              {confidenceLabel(grade.n)}
             </span>
           )}
         </div>
