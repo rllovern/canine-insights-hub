@@ -233,6 +233,13 @@ function Row({ children }: { children: React.ReactNode }) {
 }
 
 function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }) {
+  if (colKey === "unclassified") {
+    return (
+      <TableCell className="text-right tabular-nums text-muted-foreground">
+        <div title="Scored but uncategorized records — shown so the row sums to Records.">{fmtNumber(row?.[colKey] ?? 0)}</div>
+      </TableCell>
+    );
+  }
   if (colKey === "verified_sale") {
     return (
       <TableCell className="text-right tabular-nums">
