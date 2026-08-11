@@ -244,7 +244,11 @@ function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }
   return (
     <TableCell className="text-right tabular-nums">
       <div>{fmtNumber(row?.[colKey])}</div>
-      {prev && <Delta value={pctChange(row?.[colKey], prev?.[colKey] ?? 0)} invert={invert} />}
+      {prev && (
+        <span title={invert ? "Lower is better for this metric — a decrease shows green." : undefined}>
+          <Delta value={pctChange(row?.[colKey], prev?.[colKey] ?? 0)} invert={invert} />
+        </span>
+      )}
     </TableCell>
   );
 }
