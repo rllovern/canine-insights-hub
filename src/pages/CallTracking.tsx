@@ -232,6 +232,26 @@ function Row({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{children}</div>;
 }
 
+/**
+ * Performance-report tables only: CTM counts a Spam disposition inside
+ * `bad_leads` as well as `spam`. Here (and nowhere else in the app) we split
+ * them into mutually exclusive buckets so the row reconciles to Records:
+ * No Entry + Spam + Bad + Good (+ Unclassified) = Records.
+ */
+function reconcileRow(r: any, splitSpam: boolean) {
+  const records = Number(r.record_count ?? 0);
+  const spam = Number(r.spam ?? 0);
+  const noEntry = Number(r.no_entry ?? 0);
+  const good = Number(r.good_leads ?? 0);
+  const badRaw = Number(r.bad_leads ?? 0);
+  const bad = splitSpam ? Math.max(0, badRaw - spam) : badRaw;
+  const counted = noEntry + good + bad + (splitSpam ? spam : 0);
+  return {
+    bad_leads: bad,
+    unclassified: Math.max(0, records - counted),
+  };
+}
+
 function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }) {
   if (colKey === "unclassified") {
     return (
