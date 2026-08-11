@@ -173,15 +173,15 @@ export function deltaTone(
 }
 
 export const DELTA_TONE_CLASS: Record<DeltaTone, string> = {
-  good: "text-emerald-600 dark:text-emerald-400",
-  caution: "text-amber-600 dark:text-amber-400",
-  bad: "text-rose-600 dark:text-rose-400",
+  good: "text-success",
+  caution: "text-warning",
+  bad: "text-destructive",
   neutral: "text-muted-foreground",
 };
 
 export const DELTA_TONE_CHIP: Record<DeltaTone, string> = {
   good: "bg-success/10 text-success ring-success/20",
-  caution: "bg-amber-500/10 text-amber-600 ring-amber-500/20",
+  caution: "bg-warning/10 text-warning ring-warning/20",
   bad: "bg-destructive/10 text-destructive ring-destructive/20",
   neutral: "bg-muted text-muted-foreground ring-border",
 };
