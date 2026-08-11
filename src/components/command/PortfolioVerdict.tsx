@@ -13,7 +13,6 @@ import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 import { CARD_CHROME } from "./cardChrome";
 import {
   qualityRate as canonicalQualityRate,
-  qualityTier,
   totalLeads as canonicalTotalLeads,
   QUALITY_TARGETS,
   LOW_SAMPLE_BASE,
