@@ -13,6 +13,7 @@ import {
 } from "@/lib/metrics";
 import { calc } from "@/lib/data-sources";
 import { Delta } from "@/components/ui/Delta";
+import { isLessIsBetterMetric } from "@/lib/metrics";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -239,7 +240,7 @@ function CellOut({ colKey, row, prev }: { colKey: string; row: any; prev?: any }
       </TableCell>
     );
   }
-  const invert = colKey === "bad_leads" || colKey === "no_entry" || colKey === "spam";
+  const invert = isLessIsBetterMetric(colKey);
   return (
     <TableCell className="text-right tabular-nums">
       <div>{fmtNumber(row?.[colKey])}</div>

@@ -185,3 +185,16 @@ export const DELTA_TONE_CHIP: Record<DeltaTone, string> = {
   bad: "bg-destructive/10 text-destructive ring-destructive/20",
   neutral: "bg-muted text-muted-foreground ring-border",
 };
+
+/**
+ * "Less is better" metrics — the only ones where a downward arrow is green.
+ * Everything else renders green on any upward movement.
+ */
+export const LESS_IS_BETTER = new Set([
+  "bad_leads", "no_entry", "spam",
+  "cost", "spend", "cpl", "cpgl", "cpm", "cpc", "cost_per_lead", "cost_per_call",
+]);
+
+export function isLessIsBetterMetric(key: string): boolean {
+  return LESS_IS_BETTER.has(key.toLowerCase());
+}
