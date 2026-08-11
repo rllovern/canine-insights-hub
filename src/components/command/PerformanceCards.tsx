@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Info, ArrowUp, ArrowDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { deltaTone, DELTA_TONE_CLASS } from "@/lib/metrics";
 import type { Totals } from "./useCommandData";
 import { TIPS } from "./tooltips";
 import { CARD_CHROME } from "./cardChrome";
