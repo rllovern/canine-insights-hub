@@ -1390,6 +1390,103 @@ function buildTools(ctx: Ctx) {
       }),
     }),
 
+    get_trend_windows: tool({
+      description:
+        "Comparison windows for any 'is this normal / why is it down / how does this compare' question: this month to date vs last month same window, previous 30 days vs the 30 before that, year to date, last year same period, and trailing 12 months by month. Call this before characterizing any change over time.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+      }),
+      execute: wrap(ctx, "get_trend_windows", async (i) => {
+        const id = resolveProperty(ctx, i.property_id);
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const d = (x: Date) => x.toISOString().slice(0, 10);
+        const now = new Date();
+        const day = now.getUTCDate();
+        const y = now.getUTCFullYear();
+        const m = now.getUTCMonth();
+        const shift = (base: Date, days: number) => new Date(base.getTime() + days * 86400_000);
+        const lastMonthEndSameDay = new Date(Date.UTC(y, m, 0));
+        const lastMonthDays = lastMonthEndSameDay.getUTCDate();
+        const windows: Record<string, { from: string; to: string }> = {
+          this_month_to_date: { from: d(new Date(Date.UTC(y, m, 1))), to: d(now) },
+          last_month_full: { from: d(new Date(Date.UTC(y, m - 1, 1))), to: d(lastMonthEndSameDay) },
+          last_month_same_window: {
+            from: d(new Date(Date.UTC(y, m - 1, 1))),
+            to: d(new Date(Date.UTC(y, m - 1, Math.min(day, lastMonthDays)))),
+          },
+          previous_30_days: { from: d(shift(now, -30)), to: d(now) },
+          prior_30_days: { from: d(shift(now, -60)), to: d(shift(now, -31)) },
+          year_to_date: { from: d(new Date(Date.UTC(y, 0, 1))), to: d(now) },
+          last_year_same_period: {
+            from: d(new Date(Date.UTC(y - 1, 0, 1))),
+            to: d(new Date(Date.UTC(y - 1, m, day))),
+          },
+        };
+        const entries = Object.entries(windows);
+        const results = await Promise.all(entries.map(([, w]) =>
+          ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: w.from, _to: w.to })
+        ));
+        const out: Record<string, unknown> = {};
+        entries.forEach(([k, w], idx) => {
+          out[k] = { range: w, data: results[idx].data ?? null, error: results[idx].error?.message ?? null };
+        });
+        const months: Array<{ month: string; data: unknown }> = [];
+        for (let back = 11; back >= 0; back--) {
+          const start = new Date(Date.UTC(y, m - back, 1));
+          const end = new Date(Date.UTC(y, m - back + 1, 0));
+          const { data } = await ctx.supabase.rpc("ai_assistant_context", {
+            _property_id: id, _from: d(start), _to: d(end > now ? now : end),
+          });
+          months.push({ month: d(start).slice(0, 7), data: data ?? null });
+        }
+        return { property_id: id, windows: out, trailing_12_months_by_month: months };
+      }),
+    }),
+
+    get_source_health: tool({
+      description:
+        "Freshness and failure state of every connected data feed for a property (ads, call tracking, CRM, analytics): connected flag, last sync time, hours since last sync, and the latest sync run status. Call this before blaming a drop on performance — a stale feed looks exactly like a decline.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+      }),
+      execute: wrap(ctx, "get_source_health", async (i) => {
+        const id = resolveProperty(ctx, i.property_id);
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const [{ data: srcs }, { data: runs }] = await Promise.all([
+          ctx.supabase.from("property_data_sources")
+            .select("source,is_connected,last_synced_at").eq("property_id", id),
+          ctx.supabase.from("sync_runs")
+            .select("source,status,started_at,finished_at,error_message")
+            .eq("property_id", id).order("started_at", { ascending: false }).limit(60),
+        ]);
+        const latest = new Map<string, Record<string, unknown>>();
+        for (const r of (runs ?? []) as Array<Record<string, unknown>>) {
+          const k = String(r.source);
+          if (!latest.has(k)) latest.set(k, r);
+        }
+        const nowMs = Date.now();
+        const sources = ((srcs ?? []) as Array<Record<string, unknown>>).map((s) => {
+          const last = s.last_synced_at ? new Date(String(s.last_synced_at)).getTime() : null;
+          const run = latest.get(String(s.source)) ?? null;
+          return {
+            source: s.source,
+            is_connected: s.is_connected,
+            last_synced_at: s.last_synced_at ?? null,
+            hours_since_sync: last ? Math.round(((nowMs - last) / 3_600_000) * 10) / 10 : null,
+            latest_run_status: run?.status ?? null,
+            latest_run_error: run?.error_message ?? null,
+            stale: last ? nowMs - last > 12 * 3_600_000 : true,
+          };
+        });
+        return {
+          property_id: id,
+          sources,
+          any_stale: sources.some((s) => s.is_connected && s.stale),
+          any_failing: sources.some((s) => s.latest_run_status && String(s.latest_run_status) !== "success"),
+        };
+      }),
+    }),
+
     get_client_summary_context: tool({
       description:
         "Collect the facts needed to write a CLIENT-SAFE summary: wins, risks, performance deltas, lead flow, lead handling summary, account stability, planned next steps, internal caveats. Use BEFORE writing a client_summary report.",
