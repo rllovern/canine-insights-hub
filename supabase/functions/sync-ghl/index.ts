@@ -1029,7 +1029,9 @@ Deno.serve(async (req) => {
   if (runs("contacts") && !failedLabels.has("contacts")) ranPhases.push("contacts");
   if (runs("conversations") && !failedLabels.has("conversations_messages")) ranPhases.push("conversations");
   if (runs("appointments") && !failedLabels.has("appointments")) ranPhases.push("appointments");
-  if (!blockingErrors.length) ranPhases.push("all");
+  // Only a full run may refresh the "all" marker — a single-phase invoke must
+  // not make the whole source look fresh to the watchdog.
+  if (!blockingErrors.length && phase === "all") ranPhases.push("all");
   for (const p of ranPhases) {
     await admin.from("sync_watermarks").upsert({
       property_id, source: "ghl", phase: p,
@@ -1037,7 +1039,7 @@ Deno.serve(async (req) => {
       last_error: null, consecutive_failures: 0, paused_reason: null, next_attempt_at: null,
     } as never, { onConflict: "property_id,source,phase" });
   }
-  if (blockingErrors.length) {
+  if (blockingErrors.length && phase === "all") {
     await admin.from("sync_watermarks").upsert({
       property_id, source: "ghl", phase: "all",
       last_attempt_at: nowIso,
