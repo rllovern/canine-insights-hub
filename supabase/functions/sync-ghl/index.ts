@@ -267,7 +267,7 @@ Deno.serve(async (req) => {
   // wall-time limit. `phase: "all"` (the default) preserves the legacy
   // single-invoke behaviour used by the manual sync button.
   const PHASES = [
-    "users", "pipelines", "contacts", "conversations",
+    "users", "pipelines", "contacts", "opportunities_recent", "conversations",
     "opportunities", "appointments", "tasks", "finalize",
   ] as const;
   type Phase = typeof PHASES[number];
@@ -286,7 +286,26 @@ Deno.serve(async (req) => {
   const invokeStartedMs = Date.now();
   const budgetMs = Math.min(MAX_BUDGET_MS, Math.max(5_000, Number(body.budget_ms ?? DEFAULT_BUDGET_MS)));
   const budgetLeftMs = () => budgetMs - (Date.now() - invokeStartedMs);
-  const haveBudget = (reserveMs = 8_000) => budgetLeftMs() > reserveMs;
+  // Per-phase budget slices. In `phase: "all"` mode every phase used to share
+  // one pool in code order, so conversations (a history-enrichment step) could
+  // consume the entire budget and starve opportunities — which silently froze
+  // the Won feed while the run still reported success. Each phase now gets a
+  // capped slice; a dedicated phase invoke still gets the whole budget.
+  const PHASE_SHARE: Record<string, number> = {
+    contacts: 0.25,
+    opportunities_recent: 0.2,
+    conversations: 0.25,
+    opportunities: 0.3,
+    appointments: 0.15,
+  };
+  let phaseStartedMs = Date.now();
+  let phaseCapMs = budgetMs;
+  const beginPhase = (p: string) => {
+    phaseStartedMs = Date.now();
+    phaseCapMs = phase === "all" ? budgetMs * (PHASE_SHARE[p] ?? 1) : budgetMs;
+  };
+  const haveBudget = (reserveMs = 8_000) =>
+    budgetLeftMs() > reserveMs && (Date.now() - phaseStartedMs) < phaseCapMs;
 
   const { data: pds, error: pdsErr } = await admin
     .from("property_data_sources")
