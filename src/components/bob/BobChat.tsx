@@ -435,6 +435,12 @@ export function BobChat() {
                 title="Hi, I'm Bob — ask me anything about your marketing"
                 description="I look at your ads, calls, leads and sales, and explain what they actually mean in plain English."
               >
+                <div className="space-y-1">
+                  <h3 className="font-medium text-sm">Hi, I'm Bob — your marketing analyst</h3>
+                  <p className="text-muted-foreground text-sm">
+                    I look at your ads, calls, leads and sales, and explain what they actually mean in plain English.
+                  </p>
+                </div>
                 <div className="mt-4 grid gap-2 w-full max-w-md">
                   {QUICK_PROMPTS.map((p) => (
                     <button
