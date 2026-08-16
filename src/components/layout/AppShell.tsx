@@ -2,7 +2,7 @@ import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { DashboardProvider } from "@/contexts/DashboardContext";
-import { JarvisCommandBar } from "@/components/jarvis/JarvisCommandBar";
+import { BobCommandBar } from "@/components/bob/BobCommandBar";
 import { TourProvider } from "@/contexts/TourContext";
 import { TourOverlay } from "@/components/tour/TourOverlay";
 
@@ -18,7 +18,7 @@ export function AppShell() {
             <Outlet />
           </main>
         </div>
-        <JarvisCommandBar />
+        <BobCommandBar />
       </div>
       <TourOverlay />
       </TourProvider>

@@ -19,7 +19,7 @@ type Props = {
  * button that deep-links to /assistant with prompt + scope params, inheriting
  * the current property + date range when not explicitly overridden.
  */
-export function AskJarvisButton({
+export function AskBobButton({
   prompt,
   label = "Ask Jarvis",
   range,
@@ -60,4 +60,4 @@ export function AskJarvisButton({
   );
 }
 
-export default AskJarvisButton;
+export default AskBobButton;

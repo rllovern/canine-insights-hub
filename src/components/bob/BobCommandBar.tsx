@@ -23,7 +23,7 @@ const NAV = [
   { label: "Jarvis (Assistant)", to: "/assistant", icon: Sparkles },
 ];
 
-export function JarvisCommandBar() {
+export function BobCommandBar() {
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
   const { activeProperty } = useScope();
@@ -83,4 +83,4 @@ export function JarvisCommandBar() {
   );
 }
 
-export default JarvisCommandBar;
+export default BobCommandBar;

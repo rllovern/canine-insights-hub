@@ -14,7 +14,7 @@ import { DataQualityRail } from "@/components/lead-perf/DataQualityRail";
 import { DrillSheet } from "@/components/lead-perf/DrillSheet";
 import { useSpeed, useHandling, usePipeline, useQuality } from "@/components/lead-perf/hooks";
 import { DrillIssue, WINDOW_TOOLTIP } from "@/lib/leadPerf";
-import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
+import { AskBobButton } from "@/components/bob/AskBobButton";
 
 function SectionLabel({ title, hint, right }: { title: string; hint?: string; right?: React.ReactNode }) {
   return (
@@ -66,7 +66,7 @@ export default function LeadPerformance() {
           </Tooltip>
           <Badge variant="outline" className="text-[10px]">AI = automation (v1)</Badge>
           <Badge variant="outline" className="text-[10px]">Showed/no-show provisional</Badge>
-          <AskJarvisButton
+          <AskBobButton
             range={range}
             propertyId={propertyId ?? undefined}
             prompt="Generate a lead performance report for the current scope and date range. Surface speed-to-lead, action-queue volume, and where leads are stalling."

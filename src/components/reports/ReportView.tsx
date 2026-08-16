@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { exportNodeToPdf } from "@/lib/exportPdf";
 import type {
   ReportSchema, ChartSpec, TableSpec, TableColumn, SummaryCard, Recommendation, Severity,
-} from "@/lib/jarvis/reportSchema";
+} from "@/lib/reports/reportSchema";
 
 const toneClasses: Record<NonNullable<SummaryCard["tone"]>, string> = {
   neutral: "border-border",

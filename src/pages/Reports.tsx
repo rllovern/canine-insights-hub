@@ -15,12 +15,12 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProperties } from "@/contexts/PropertyContext";
-import { ReportView } from "@/components/jarvis/report/ReportView";
-import type { ReportSchema } from "@/lib/jarvis/reportSchema";
-import { isReportSchema } from "@/lib/jarvis/reportSchema";
+import { ReportView } from "@/components/reports/ReportView";
+import type { ReportSchema } from "@/lib/reports/reportSchema";
+import { isReportSchema } from "@/lib/reports/reportSchema";
 import { Star, ExternalLink, Trash2, MessageSquare } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
+import { AskBobButton } from "@/components/bob/AskBobButton";
 
 type ReportRow = {
   id: string;
@@ -127,7 +127,7 @@ export default function Reports() {
         title="Reports"
         description="Saved Jarvis reports and recent runs."
         actions={
-          <AskJarvisButton
+          <AskBobButton
             prompt="Generate a fresh report for the active property. Ask me what kind if it's ambiguous."
             label="New report with Jarvis"
             variant="default"

@@ -30,8 +30,8 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { History } from "lucide-react";
-import { ReportView } from "@/components/jarvis/report/ReportView";
-import { isReportSchema, type ReportSchema } from "@/lib/jarvis/reportSchema";
+import { ReportView } from "@/components/reports/ReportView";
+import { isReportSchema, type ReportSchema } from "@/lib/reports/reportSchema";
 import jarvisMark from "@/assets/jarvis-mark.png";
 import { toast } from "@/hooks/use-toast";
 
@@ -116,7 +116,7 @@ function extractReports(messages: UIMessage[]): ReportRef[] {
   return reports;
 }
 
-export function JarvisChat() {
+export function BobChat() {
   const { session } = useAuth();
   const { activeProperty, properties } = useProperties();
   // We keep useProperties() for the list, and use scope as the source of truth
@@ -620,4 +620,4 @@ export function JarvisChat() {
   );
 }
 
-export default JarvisChat;
+export default BobChat;
