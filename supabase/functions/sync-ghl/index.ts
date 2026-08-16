@@ -379,6 +379,7 @@ Deno.serve(async (req) => {
 
   // ===== 1. USERS ===================================================
   if (runs("users")) await safe("users", async () => {
+    beginPhase("users");
     const j = await ghlFetch("GET", `/users/?locationId=${locationId}`, token);
     const users = ((j.users as Json[]) ?? []);
     const rows = users.map((u) => ({
@@ -395,6 +396,7 @@ Deno.serve(async (req) => {
 
   // ===== 2. PIPELINES + STAGES + MAPPING SEED =======================
   if (runs("pipelines")) await safe("pipelines", async () => {
+    beginPhase("pipelines");
     const j = await ghlFetch("GET", `/opportunities/pipelines?locationId=${locationId}`, token);
     const pipelines = ((j.pipelines as Json[]) ?? []);
 
