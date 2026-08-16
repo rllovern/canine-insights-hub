@@ -1019,6 +1019,32 @@ Deno.serve(async (req) => {
   const failedPhase = blockingErrors.length
     ? String(blockingErrors[0]).split(":")[0]
     : null;
+
+  // ---- Freshness watermarks -------------------------------------------
+  // The watchdog judges on these, not on run status, so a phase that silently
+  // wrote nothing cannot masquerade as healthy.
+  const nowIso = new Date().toISOString();
+  const failedLabels = new Set(blockingErrors.map((m) => String(m).split(":")[0]));
+  const ranPhases: string[] = [];
+  if (runs("contacts") && !failedLabels.has("contacts")) ranPhases.push("contacts");
+  if (runs("conversations") && !failedLabels.has("conversations_messages")) ranPhases.push("conversations");
+  if (runs("appointments") && !failedLabels.has("appointments")) ranPhases.push("appointments");
+  if (!blockingErrors.length) ranPhases.push("all");
+  for (const p of ranPhases) {
+    await admin.from("sync_watermarks").upsert({
+      property_id, source: "ghl", phase: p,
+      last_fresh_at: nowIso, last_attempt_at: nowIso,
+      last_error: null, consecutive_failures: 0, paused_reason: null, next_attempt_at: null,
+    } as never, { onConflict: "property_id,source,phase" });
+  }
+  if (blockingErrors.length) {
+    await admin.from("sync_watermarks").upsert({
+      property_id, source: "ghl", phase: "all",
+      last_attempt_at: nowIso,
+      last_error: blockingErrors.join(" | ").slice(0, 1000),
+    } as never, { onConflict: "property_id,source,phase" });
+  }
+
   await admin
     .from("property_data_sources")
     .update({
