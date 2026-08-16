@@ -19,7 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { usePropertyMetricConfig } from "@/lib/property-labels";
-import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
+import { AskBobButton } from "@/components/bob/AskBobButton";
 import {
 } from "@/lib/leadModel";
 import { useWonAttribution } from "@/lib/verified-sales";

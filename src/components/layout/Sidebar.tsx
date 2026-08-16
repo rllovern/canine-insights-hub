@@ -12,7 +12,7 @@ import {
   BUDGET_ITEM,
   COMMAND_ITEM,
   DELIVER_ITEMS,
-  JARVIS_ITEM,
+  BOB_ITEM,
   MONITOR_ITEMS,
   SALES_ITEM,
   applyNavOrder,
@@ -30,7 +30,7 @@ export function Sidebar() {
   const isMinimal = isLocationOwner || effectiveRole === "owner";
   // Admin group visible only to internal staff (Super Admin + Admin).
   const showAdminSection = isStaff && !isMinimal;
-  // Full monitoring / deliver / jarvis groups only for internal staff.
+  // Full monitoring / deliver / assistant groups only for internal staff.
   const showRichNav = isStaff && !isMinimal;
 
   const filterVisible = (items: NavItem[]) =>
@@ -251,7 +251,7 @@ export function Sidebar() {
           </>
         )}
 
-        {showRichNav && renderItem(JARVIS_ITEM, { accent: true })}
+        {showRichNav && renderItem(BOB_ITEM, { accent: true })}
 
         {showAdminSection && adminItems.length > 0 && (
           <>

@@ -188,7 +188,7 @@ export const TOUR_STEPS: TourStep[] = [
     roles: STAFF_ROLES,
     route: "/assistant",
     target: t("page-root"),
-    title: "Jarvis, your assistant",
+    title: "Bob, your assistant",
     body: "Ask questions in normal words, like \"how many good leads did Nova get last month?\" and it answers using your real data.",
   },
   {

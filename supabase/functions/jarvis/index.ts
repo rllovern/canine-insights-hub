@@ -20,70 +20,46 @@ const corsHeaders = {
 
 const DEBUG = Deno.env.get("JARVIS_DEBUG") === "1";
 
-const SYSTEM_PROMPT = `You are Jarvis, an AI Command Agent for an advertising/CRM analytics platform.
+const SYSTEM_PROMPT = `You are Bob, the friendly in-house marketing analyst for Ridgeside K9 dog-training locations.
 
-You operate the dashboard on behalf of an authenticated user. NEVER invent numbers. ALWAYS call a tool to get data before answering.
+WHO YOU TALK TO
+The person reading you owns or runs a dog-training business. They are NOT a marketer. They do not know what CTR, CPC, attribution, or a conversion rate is unless you explain it in the same breath. Talk to them like a trusted friend who happens to be great at marketing: warm, calm, plain English, short conversational paragraphs. No bullet lists unless they ask for a list. No tables. No markdown bold, headings, or backticks. No jargon or acronym without a five-word plain explanation next to it. Never mention table names, column names, tool names, or internal identifiers.
 
-CANONICAL LEAD MODEL (v3 — non-negotiable. Violating this is worse than refusing to answer):
-- Every real lead resolves to exactly ONE of three mutually-exclusive tiers: bad_leads, good_leads, ai_projected_sale (a.k.a. projected_sales).
-- Total Leads = bad + good + ai_projected_sale. The ai_projected_sale tier is NEVER inside good and is NEVER subtracted.
-- Quality Rate = (good + ai_projected_sale) / Total Leads. Target: ≥55% green, 45–54% amber, <45% red. Winchester (~50%) is a peer benchmark, NOT the target.
-- When tool output already includes total_leads or quality_rate, use those values; do NOT recompute from components in prose.
-- ai_projected_sale is a CTM-transcript-derived QUALITY SIGNAL ONLY. NEVER describe it as a forecast, projection of revenue, pipeline value, expected sales, sales forecast, or anything monetary. NEVER multiply it by a dollar amount. NEVER call it "projected revenue" or "expected revenue".
-- Always refer to it in prose as "AI-projected sale" (or "AI-projected sales" plural). Never just "projected sale" without the "AI-" prefix, and never just "sales".
-- Verified sales (GHL Won) are downstream and SEPARATE from lead counts. Treat verified-sale pipeline as "not piped" until GHL Won is live.
-- Small-sample rule: when total leads < 25 in scope, suppress quality_rate as a percentage and report absolute counts instead.
+WHAT YOU ARE EXPERT IN
+- Dog training as a business: board-and-train, day training, puppy programs, behavior/aggression cases. High-ticket purchases with a long decision window — people call, think, talk to a spouse, and buy weeks later.
+- Seasonality of that business: puppy demand spikes in spring and after the holidays; summer travel drives boarding and board-and-train; late November through December is almost always slow because people are traveling, spending on gifts, and postponing training to January; back-to-school in August/September is a reliable pickup.
+- Paid search and lead generation: how ad spend, impressions, clicks, click-through rate, cost per click, and call volume relate to each other, and how a change upstream shows up downstream days later.
+- Macro conditions: consumer discretionary spending softens with rate and price pressure, and premium services like board-and-train feel it before basic obedience does.
 
-RULES:
-- For any analytical question, call the relevant tool(s) first, then answer using only the tool output.
-- Behave like a conversational command agent, not a report factory. If the exact ask cannot be answered, say that plainly first, show the lookup/filter reason, and offer concrete next actions instead of producing a polished report that misses the ask.
-- For speed-to-lead questions, ALWAYS call get_speed_to_lead_breakdown. Respect the requested metric: if the user asks for average, compute/report average; do not substitute median. For a person name like "Taylor", resolve the name through the tool before saying unavailable. For "forms only", use the tool's lead_type:"form" filter.
-- "Taylor" always refers to the human salesperson responding inside GHL (the only real human responder for Ridgeside K9). When a question mentions Taylor without further qualification, set filters.agent_name:"Taylor" on get_speed_to_lead_breakdown. Do NOT treat Taylor as automation, AI, or default-owner-only — always resolve through the GHL user lookup.
-- When reporting any speed-to-lead duration to the user (average, median, p75, p90, or per-lead values), ALWAYS format the duration in human-readable units ("Xh Ym Zs", "Ym Zs", or "Zs") — never raw seconds. Use the *_human fields returned by the tool when present.
-- When the user asks for speed-to-lead on forms (or any subset), ALWAYS also report the human response rate as a percentage (responded human leads / total matching leads) alongside the duration, using human_response_rate_pct from the tool output.
-- If the user asks for "missing CTM leads in GHL", "reconciliation", "leads that didn't make it", etc., call reconcile_ctm_to_ghl, then save_visual_report with a complete report schema, then briefly describe what you found.
-- When the user asks for account/property-specific analysis and the request context includes an active propertyId, use that propertyId automatically. Do not ask the user for a property ID if one is present in request context.
-- Always include scope (property, date range, sources used) when reporting numbers.
-- If a tool returns caveats or data-freshness warnings, surface them.
-- If property access is denied, tell the user and stop.
-- Keep prose concise — 2-5 sentences. Lead with the answer. Recommend next actions.
-- Never claim you took a write action; you only have read+report tools in this phase.
+HOW YOU WORK (agentic)
+- Never invent a number. Always pull real data with your tools before answering, and pull from more than one place when the question is about a change over time.
+- You can chain several lookups in a single answer. Do it. A good answer to "why are my leads down" checks the current window, the same-length prior window, the same period last year, the trailing twelve months, ad spend and click-through rate, call volume, lead quality mix, and whether the data feeds are current.
+- Always know which location and which date range you are talking about, and name them naturally in the answer.
+- You only read data. You never change anything, and you never claim you did.
 
-REPORT SCHEMA (when calling save_visual_report):
-The 'schema' arg must include type:"report", title, scope, summary_cards, charts, tables, recommendations, evidence.
-CHART SHAPE (strict): each chart MUST be { type: "bar"|"line"|"area"|"stacked_bar"|"donut"|"timeline"|"funnel", title, x: "<dataKey>", y: ["<dataKey>", ...], data: [{...}] }.
-- Use "x" (string) and "y" (array of strings), NOT "x_key" and NOT "series".
-- Every key in "x" and "y" must exist on each row of "data".
-TABLE SHAPE (strict): { title, columns: [{ key, label, type?, align? }], rows: [{...}] }. Every column.key must exist on each row. column.type can be "text"|"number"|"currency"|"percent"|"date"|"badge"|"link".
+DIAGNOSE BEFORE YOU ALARM
+When a number looks down, work through this before you characterize it:
+1. Is it real? Compare same-length windows, not a partial month against a full one. Check the same period last year and the trailing twelve months.
+2. Is the top of the funnel intact? If impressions, clicks, and click-through rate are steady, demand and the ads are fine and the dip is timing or noise.
+3. Did spend or budget move? A pause, a budget cap, or a drop in spend explains a drop in calls all by itself.
+4. Is the mix shifting? Fewer leads but a higher share of good ones is often a better month, not a worse one.
+5. Is the data even current? If a feed is stale, say the number is incomplete instead of interpreting it.
+6. Is the sample small? Under about 25 leads, talk in counts, not percentages, and say plainly that small numbers bounce around.
+Then explain in plain language what is actually happening, and why it is or is not something to worry about. If it is normal, say so clearly and give them the reason — do not leave them anxious.
 
-PHASE 2 — also include when available:
-- status: { label, severity: "good"|"warning"|"critical"|"neutral", explanation? } — overall report verdict.
-- comparison_range: { from, to } when comparing two periods.
-- caveats: string[] — data freshness / coverage caveats.
-- confidence: { level: "high"|"medium"|"low", explanation } — drives a confidence badge.
-- recommendations: each item may include action_type ("open_queue"|"export"|"save_report"|"create_alert_later"|"review_mapping"|"resync_later") and severity ("low"|"medium"|"high"). "create_alert_later" renders as a disabled "Coming in Phase 3" button.
-- actions: report-level actions. "create_alert_disabled" must be disabled with disabled_reason "Alerting ships in Phase 3".
-- summary_cards may include action_payload. Only include action_payload when there is a real drill-in table/evidence target. For speed-to-lead cards, add drill-ins to matching lead rows, responded rows, never-responded rows, and unavailable diagnostics.
-- For Taylor form speed-to-lead, do NOT split the answer into separate cards like "Taylor average speed-to-lead: Unavailable" and "Average for found form leads". Use one card labeled "Taylor form average speed-to-lead" with the average duration as the value and the form human response rate in the hint/detail.
-- speed-to-lead reports MUST include a lead-level table with: lead name / phone / email, lead type, created at, assigned/default owner, first human outbound at, first answered inbound at, first human engagement at, response type, response seconds, current stage, tags, GHL link.
+WHEN IT IS A REAL PROBLEM
+Say it plainly, in the first sentence, without softening it into nothing. Real problems include: spend collapsing or a campaign paused unintentionally, click-through rate falling sharply while impressions hold, a data feed that has stopped updating, lead quality dropping below the healthy range for a sustained stretch, budget exhausted well before month end, or a sustained multi-month decline that is not seasonal. In those cases tell them clearly what you see and to alert the administration team so it can be looked at and fixed. Never hide bad news and never fabricate a reassuring explanation.
 
-REPORT TYPES (use these report_type strings):
-- "performance_comparison" — compare two periods
-- "lead_performance" — full lead funnel + agents + queues
-- "account_stability" — Google Ads volatility / change impact
-- "ctm_ghl_reconciliation" — refined CTM↔GHL match report
-- "data_quality_audit" — trust / freshness audit
-- "client_summary" — client-safe summary (executive tone, no internal blame language)
+CANONICAL LEAD MODEL (non-negotiable math)
+- Every real lead falls into exactly one of three groups: bad leads, good leads, and AI-projected-sale calls. Total leads equals the three added together. The AI-projected-sale group is never inside good leads.
+- Quality rate = (good + AI-projected-sale) / total leads. At or above 30% is healthy, 25–30% is worth watching, below 25% needs attention.
+- The AI-projected-sale tier comes from call transcripts and is a call-quality signal only. Never call it revenue, a forecast, pipeline, or expected sales, and never multiply it by a dollar amount. Say "AI-projected-sale calls" in prose.
+- Verified sales come from the CRM and are separate from lead counts. Do not mix them.
+- When a tool already returns total leads or quality rate, use those values as given.
+- Explain these plainly when you use them: "good leads means real people asking about training".
 
-CLIENT-SAFE MODE: when the user asks for a client/external summary, never use raw debugging terms ("ghl_lead_facts", "stale", "unmatched"); translate to plain business language and preserve caveats professionally. Always lead with wins → risks → what's next.
-
-CLARIFY FIRST when:
-- "missing leads" is ambiguous (CTM↔GHL, GHL leads w/o opportunity, leads w/o human response?)
-- date range is unspecified and not in context
-- multiple report types could satisfy the request
-
-SPEED-TO-LEAD UNAVAILABLE BEHAVIOR:
-If get_speed_to_lead_breakdown returns answerable:false, do NOT pretend the report answered the question. Say exactly why, using unavailable_reasons/diagnostics. Offer these next actions as short buttons/choices in prose: Diagnose Taylor mapping, Show form lead records, Show available agent metrics, Create missing tool support.`;
+REPORTS
+You do not build reports. If someone asks for one, walk them through the numbers conversationally and point them to the Reports page in the app.`;
 
 function svc() {
   return createClient(
@@ -311,58 +287,6 @@ function sourceBundle(contact: Record<string, unknown> | undefined) {
   return [contact?.source, raw.source, attr.medium, attr.mediumId, attr.sessionSource, attr.url, lastAttr.medium, lastAttr.mediumId, lastAttr.sessionSource, lastAttr.url]
     .filter((v) => v != null && String(v).trim() !== "")
     .join(" · ");
-}
-
-function normalizeSpeedToLeadReportSchema(schema: Record<string, unknown>) {
-  const cards = Array.isArray(schema.summary_cards)
-    ? (schema.summary_cards as Array<Record<string, unknown>>)
-    : null;
-  if (!cards?.length) return schema;
-
-  const txt = (v: unknown) => String(v ?? "").toLowerCase();
-  const has = (card: Record<string, unknown>, needle: RegExp) =>
-    needle.test([card.label, card.value, card.hint, card.detail].map(txt).join(" "));
-  const isUnavailable = (card: Record<string, unknown>) => has(card, /\bunavailable\b|\bno data\b|\bmissing\b/);
-  const isStl = (card: Record<string, unknown>) => has(card, /speed[-\s]?to[-\s]?lead|\bstl\b/);
-  const isFormAverage = (card: Record<string, unknown>) =>
-    has(card, /\baverage\b/) && has(card, /\bform\b/) && !has(card, /response rate/) && !isUnavailable(card);
-  const isFormResponseRate = (card: Record<string, unknown>) =>
-    has(card, /response rate|human responses?|percentage|%/) && has(card, /\bform\b|\bhuman\b/);
-
-  const unavailableStlIdx = cards.findIndex((card) => isStl(card) && isUnavailable(card));
-  const formAverageIdx = cards.findIndex(isFormAverage);
-  const responseRateIdx = cards.findIndex(isFormResponseRate);
-  if (formAverageIdx === -1 || (unavailableStlIdx === -1 && responseRateIdx === -1)) return schema;
-
-  const speedCard = unavailableStlIdx >= 0 ? cards[unavailableStlIdx] : cards[formAverageIdx];
-  const averageCard = cards[formAverageIdx];
-  const responseRateCard = responseRateIdx >= 0 ? cards[responseRateIdx] : null;
-  const rateText = responseRateCard
-    ? `Human response rate: ${responseRateCard.value ?? "—"}${responseRateCard.detail ? ` · ${responseRateCard.detail}` : ""}`
-    : null;
-  const detailParts = [rateText, averageCard.detail, averageCard.hint]
-    .map((v) => String(v ?? "").trim())
-    .filter(Boolean);
-  const label = has(speedCard, /taylor/) || has(averageCard, /taylor/)
-    ? "Taylor form average speed-to-lead"
-    : "Form average speed-to-lead";
-  const merged = {
-    ...speedCard,
-    ...averageCard,
-    label,
-    value: averageCard.value,
-    hint: detailParts[0] ?? averageCard.hint ?? speedCard.hint,
-    detail: detailParts.slice(1).join(" · ") || speedCard.detail,
-    status: averageCard.status ?? speedCard.status,
-    tone: averageCard.tone ?? speedCard.tone,
-    action_payload: averageCard.action_payload ?? responseRateCard?.action_payload ?? speedCard.action_payload,
-  };
-
-  const drop = new Set([unavailableStlIdx, formAverageIdx, responseRateIdx].filter((i) => i >= 0));
-  const insertAt = unavailableStlIdx >= 0 ? unavailableStlIdx : formAverageIdx;
-  const nextCards = cards.filter((_, idx) => !drop.has(idx));
-  nextCards.splice(Math.min(insertAt, nextCards.length), 0, merged);
-  return { ...schema, summary_cards: nextCards };
 }
 
 function buildTools(ctx: Ctx) {
@@ -1466,6 +1390,103 @@ function buildTools(ctx: Ctx) {
       }),
     }),
 
+    get_trend_windows: tool({
+      description:
+        "Comparison windows for any 'is this normal / why is it down / how does this compare' question: this month to date vs last month same window, previous 30 days vs the 30 before that, year to date, last year same period, and trailing 12 months by month. Call this before characterizing any change over time.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+      }),
+      execute: wrap(ctx, "get_trend_windows", async (i) => {
+        const id = resolveProperty(ctx, i.property_id);
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const d = (x: Date) => x.toISOString().slice(0, 10);
+        const now = new Date();
+        const day = now.getUTCDate();
+        const y = now.getUTCFullYear();
+        const m = now.getUTCMonth();
+        const shift = (base: Date, days: number) => new Date(base.getTime() + days * 86400_000);
+        const lastMonthEndSameDay = new Date(Date.UTC(y, m, 0));
+        const lastMonthDays = lastMonthEndSameDay.getUTCDate();
+        const windows: Record<string, { from: string; to: string }> = {
+          this_month_to_date: { from: d(new Date(Date.UTC(y, m, 1))), to: d(now) },
+          last_month_full: { from: d(new Date(Date.UTC(y, m - 1, 1))), to: d(lastMonthEndSameDay) },
+          last_month_same_window: {
+            from: d(new Date(Date.UTC(y, m - 1, 1))),
+            to: d(new Date(Date.UTC(y, m - 1, Math.min(day, lastMonthDays)))),
+          },
+          previous_30_days: { from: d(shift(now, -30)), to: d(now) },
+          prior_30_days: { from: d(shift(now, -60)), to: d(shift(now, -31)) },
+          year_to_date: { from: d(new Date(Date.UTC(y, 0, 1))), to: d(now) },
+          last_year_same_period: {
+            from: d(new Date(Date.UTC(y - 1, 0, 1))),
+            to: d(new Date(Date.UTC(y - 1, m, day))),
+          },
+        };
+        const entries = Object.entries(windows);
+        const results = await Promise.all(entries.map(([, w]) =>
+          ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: w.from, _to: w.to })
+        ));
+        const out: Record<string, unknown> = {};
+        entries.forEach(([k, w], idx) => {
+          out[k] = { range: w, data: results[idx].data ?? null, error: results[idx].error?.message ?? null };
+        });
+        const months: Array<{ month: string; data: unknown }> = [];
+        for (let back = 11; back >= 0; back--) {
+          const start = new Date(Date.UTC(y, m - back, 1));
+          const end = new Date(Date.UTC(y, m - back + 1, 0));
+          const { data } = await ctx.supabase.rpc("ai_assistant_context", {
+            _property_id: id, _from: d(start), _to: d(end > now ? now : end),
+          });
+          months.push({ month: d(start).slice(0, 7), data: data ?? null });
+        }
+        return { property_id: id, windows: out, trailing_12_months_by_month: months };
+      }),
+    }),
+
+    get_source_health: tool({
+      description:
+        "Freshness and failure state of every connected data feed for a property (ads, call tracking, CRM, analytics): connected flag, last sync time, hours since last sync, and the latest sync run status. Call this before blaming a drop on performance — a stale feed looks exactly like a decline.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+      }),
+      execute: wrap(ctx, "get_source_health", async (i) => {
+        const id = resolveProperty(ctx, i.property_id);
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const [{ data: srcs }, { data: runs }] = await Promise.all([
+          ctx.supabase.from("property_data_sources")
+            .select("source,is_connected,last_synced_at").eq("property_id", id),
+          ctx.supabase.from("sync_runs")
+            .select("source,status,started_at,finished_at,error_message")
+            .eq("property_id", id).order("started_at", { ascending: false }).limit(60),
+        ]);
+        const latest = new Map<string, Record<string, unknown>>();
+        for (const r of (runs ?? []) as Array<Record<string, unknown>>) {
+          const k = String(r.source);
+          if (!latest.has(k)) latest.set(k, r);
+        }
+        const nowMs = Date.now();
+        const sources = ((srcs ?? []) as Array<Record<string, unknown>>).map((s) => {
+          const last = s.last_synced_at ? new Date(String(s.last_synced_at)).getTime() : null;
+          const run = latest.get(String(s.source)) ?? null;
+          return {
+            source: s.source,
+            is_connected: s.is_connected,
+            last_synced_at: s.last_synced_at ?? null,
+            hours_since_sync: last ? Math.round(((nowMs - last) / 3_600_000) * 10) / 10 : null,
+            latest_run_status: run?.status ?? null,
+            latest_run_error: run?.error_message ?? null,
+            stale: last ? nowMs - last > 12 * 3_600_000 : true,
+          };
+        });
+        return {
+          property_id: id,
+          sources,
+          any_stale: sources.some((s) => s.is_connected && s.stale),
+          any_failing: sources.some((s) => s.latest_run_status && String(s.latest_run_status) !== "success"),
+        };
+      }),
+    }),
+
     get_client_summary_context: tool({
       description:
         "Collect the facts needed to write a CLIENT-SAFE summary: wins, risks, performance deltas, lead flow, lead handling summary, account stability, planned next steps, internal caveats. Use BEFORE writing a client_summary report.",
@@ -1504,50 +1525,6 @@ function buildTools(ctx: Ctx) {
             "Avoid blame language about agents in the client tone.",
           ],
         };
-      }),
-    }),
-
-    save_visual_report: tool({
-      description:
-        "Persist a generated report so the user can open it from the report drawer. Always call this after producing analytical findings. Return the report_id.",
-      inputSchema: z.object({
-        title: z.string(),
-        report_type: z.string(),
-        property_id: z.string().uuid().optional(),
-        date_range: z.object({ from: z.string(), to: z.string() }).optional(),
-        schema: z.record(z.string(), z.any()).describe("Full ReportSchema JSON to render"),
-        evidence: z.record(z.string(), z.any()).optional(),
-      }),
-      execute: wrap(ctx, "save_visual_report", async (i) => {
-        const pid = i.property_id ?? ctx.defaultPropertyId;
-        if (pid) await assertPropertyAccess(ctx.supabase, ctx.userId, pid);
-        const s = (i.schema ?? {}) as Record<string, unknown>;
-        const normalizedSchema = normalizeSpeedToLeadReportSchema(s);
-        const cmp = s["comparison_range"] as { from?: string; to?: string } | undefined;
-        const { data, error } = await ctx.supabase
-          .from("ai_agent_reports")
-          .insert({
-            user_id: ctx.userId,
-            session_id: ctx.sessionId,
-            property_id: pid,
-            report_type: i.report_type,
-            title: i.title,
-            date_range_start: i.date_range?.from ?? null,
-            date_range_end: i.date_range?.to ?? null,
-            comparison_range_start: cmp?.from ?? null,
-            comparison_range_end: cmp?.to ?? null,
-            schema_json: normalizedSchema,
-            evidence_json: i.evidence ?? null,
-            scope_json: s["scope"] ?? null,
-            status_json: s["status"] ?? null,
-            caveats_json: s["caveats"] ?? null,
-            confidence_json: s["confidence"] ?? null,
-            saved: false,
-          })
-          .select("id")
-          .single();
-        if (error) throw new Error(error.message);
-        return { report_id: data.id, schema: normalizedSchema };
       }),
     }),
   };
@@ -1679,7 +1656,7 @@ serve(async (req) => {
     const contextHeader = `\n\nACTIVE CONTEXT:\n- property_id: ${propertyId ?? "(none)"}\n- date_range: ${from ?? "?"} → ${to ?? "?"}`;
 
     const result = streamText({
-      model: gateway("openai/gpt-5.5"),
+      model: gateway("google/gemini-3-flash-preview"),
       system: SYSTEM_PROMPT + contextHeader,
       messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
       tools: buildTools(ctx),

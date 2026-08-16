@@ -15,12 +15,12 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProperties } from "@/contexts/PropertyContext";
-import { ReportView } from "@/components/jarvis/report/ReportView";
-import type { ReportSchema } from "@/lib/jarvis/reportSchema";
-import { isReportSchema } from "@/lib/jarvis/reportSchema";
+import { ReportView } from "@/components/reports/ReportView";
+import type { ReportSchema } from "@/lib/reports/reportSchema";
+import { isReportSchema } from "@/lib/reports/reportSchema";
 import { Star, ExternalLink, Trash2, MessageSquare } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { AskJarvisButton } from "@/components/jarvis/AskJarvisButton";
+import { AskBobButton } from "@/components/bob/AskBobButton";
 
 type ReportRow = {
   id: string;
@@ -125,11 +125,11 @@ export default function Reports() {
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       <PageHeader
         title="Reports"
-        description="Saved Jarvis reports and recent runs."
+        description="Saved reports and recent runs."
         actions={
-          <AskJarvisButton
+          <AskBobButton
             prompt="Generate a fresh report for the active property. Ask me what kind if it's ambiguous."
-            label="New report with Jarvis"
+            label="Ask Bob about this"
             variant="default"
           />
         }
@@ -173,7 +173,7 @@ export default function Reports() {
       ) : filtered.length === 0 ? (
         <EmptyState
           title="No reports yet"
-          description="Run Jarvis from the dashboard or the assistant to generate your first report."
+          description="Reports generated previously appear here."
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -209,7 +209,7 @@ export default function Reports() {
                 {r.session_id && (
                   <Button size="sm" variant="outline" asChild>
                     <Link to={`/assistant?session=${r.session_id}`}>
-                      <MessageSquare className="size-3.5" /> In Jarvis
+                      <MessageSquare className="size-3.5" /> In chat
                     </Link>
                   </Button>
                 )}
