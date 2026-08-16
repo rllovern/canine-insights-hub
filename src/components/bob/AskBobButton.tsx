@@ -15,13 +15,13 @@ type Props = {
 };
 
 /**
- * Embedded Jarvis entry point. Renders a small "Ask Jarvis" / "Run with Jarvis"
+ * Embedded Bob entry point. Renders a small "Ask Bob" / "Run with Bob"
  * button that deep-links to /assistant with prompt + scope params, inheriting
  * the current property + date range when not explicitly overridden.
  */
 export function AskBobButton({
   prompt,
-  label = "Ask Jarvis",
+  label = "Ask Bob",
   range,
   propertyId,
   variant = "outline",

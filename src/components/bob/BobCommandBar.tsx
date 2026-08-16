@@ -9,10 +9,10 @@ import { useDashboard } from "@/contexts/DashboardContext";
 import { rangeToISO } from "@/lib/metrics";
 
 const QUICK = [
-  { label: "Reconcile CTM to GHL (last 14 days)", q: "Reconcile CTM calls against GHL for the last 14 days" },
-  { label: "What's wrong with this account?", q: "What's wrong with this account right now?" },
-  { label: "Account stability summary", q: "Summarize current account stability" },
-  { label: "Lead performance snapshot", q: "Give me a lead performance snapshot" },
+  { label: "Why are my leads down?", q: "Why are my leads down this month?" },
+  { label: "Is my ad spend working?", q: "Is my ad spend working right now?" },
+  { label: "How am I doing vs last year?", q: "How does this period compare to the same time last year?" },
+  { label: "Anything I should worry about?", q: "Is there anything in my account I should be worried about right now?" },
 ];
 
 const NAV = [
@@ -20,7 +20,7 @@ const NAV = [
   { label: "Call Tracking", to: "/calls", icon: PhoneCall },
   { label: "Lead Performance", to: "/lead-performance", icon: Target },
   { label: "Reports", to: "/reports", icon: FileText },
-  { label: "Jarvis (Assistant)", to: "/assistant", icon: Sparkles },
+  { label: "Bob (Assistant)", to: "/assistant", icon: Sparkles },
 ];
 
 export function BobCommandBar() {
@@ -57,10 +57,10 @@ export function BobCommandBar() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Ask Jarvis or jump to a page…  (⌘K)" />
+      <CommandInput placeholder="Ask Bob or jump to a page…  (⌘K)" />
       <CommandList>
         <CommandEmpty>No matches.</CommandEmpty>
-        <CommandGroup heading="Ask Jarvis">
+        <CommandGroup heading="Ask Bob">
           {QUICK.map((q) => (
             <CommandItem key={q.label} onSelect={() => ask(q.q)}>
               <Sparkles className="size-4 mr-2 text-primary" /> {q.label}

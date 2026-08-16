@@ -70,7 +70,7 @@ export default function LeadPerformance() {
             range={range}
             propertyId={propertyId ?? undefined}
             prompt="Generate a lead performance report for the current scope and date range. Surface speed-to-lead, action-queue volume, and where leads are stalling."
-            label="Run with Jarvis"
+            label="Run with Bob"
           />
         </div>
       </div>
