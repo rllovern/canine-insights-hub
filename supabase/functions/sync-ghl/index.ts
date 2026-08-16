@@ -194,6 +194,30 @@ function canonicalizeOppStatus(raw: unknown): "open" | "won" | "lost" | "abandon
   return "unknown";
 }
 
+// Shared row shape for ghl_opportunities, used by both the deep oldest-first
+// walk and the recent-first freshness pass.
+function mapOppRow(property_id: string, o: Json): Json {
+  const a = o as Json;
+  return {
+    property_id,
+    ghl_opportunity_id: String(a.id),
+    contact_id: a.contactId ?? null,
+    pipeline_id: a.pipelineId ?? null,
+    stage_id: a.pipelineStageId ?? a.stageId ?? null,
+    status: canonicalizeOppStatus(a.status),
+    status_raw: a.status ?? null,
+    monetary_value: a.monetaryValue ?? a.monetary_value ?? null,
+    assigned_to: a.assignedTo ?? null,
+    lost_reason_raw: a.lostReasonName ?? a.lostReasonId ?? null,
+    lost_reason_normalized: a.lostReasonName ?? null,
+    won_at: a.status === "won" ? (a.lastStatusChangeAt ?? a.lastStageChangeAt ?? a.updatedAt ?? null) : null,
+    lost_at: a.status === "lost" ? (a.lastStatusChangeAt ?? a.lastStageChangeAt ?? a.updatedAt ?? null) : null,
+    ghl_created_at: a.createdAt ?? null,
+    ghl_updated_at: a.updatedAt ?? null,
+    raw: o,
+  };
+}
+
 function isWithinWindow(iso: unknown, from: Date, to: Date): boolean {
   if (!iso) return true;
   const time = new Date(String(iso)).getTime();
@@ -267,7 +291,7 @@ Deno.serve(async (req) => {
   // wall-time limit. `phase: "all"` (the default) preserves the legacy
   // single-invoke behaviour used by the manual sync button.
   const PHASES = [
-    "users", "pipelines", "contacts", "conversations",
+    "users", "pipelines", "contacts", "opportunities_recent", "conversations",
     "opportunities", "appointments", "tasks", "finalize",
   ] as const;
   type Phase = typeof PHASES[number];
@@ -286,7 +310,26 @@ Deno.serve(async (req) => {
   const invokeStartedMs = Date.now();
   const budgetMs = Math.min(MAX_BUDGET_MS, Math.max(5_000, Number(body.budget_ms ?? DEFAULT_BUDGET_MS)));
   const budgetLeftMs = () => budgetMs - (Date.now() - invokeStartedMs);
-  const haveBudget = (reserveMs = 8_000) => budgetLeftMs() > reserveMs;
+  // Per-phase budget slices. In `phase: "all"` mode every phase used to share
+  // one pool in code order, so conversations (a history-enrichment step) could
+  // consume the entire budget and starve opportunities — which silently froze
+  // the Won feed while the run still reported success. Each phase now gets a
+  // capped slice; a dedicated phase invoke still gets the whole budget.
+  const PHASE_SHARE: Record<string, number> = {
+    contacts: 0.25,
+    opportunities_recent: 0.2,
+    conversations: 0.25,
+    opportunities: 0.3,
+    appointments: 0.15,
+  };
+  let phaseStartedMs = Date.now();
+  let phaseCapMs = budgetMs;
+  const beginPhase = (p: string) => {
+    phaseStartedMs = Date.now();
+    phaseCapMs = phase === "all" ? budgetMs * (PHASE_SHARE[p] ?? 1) : budgetMs;
+  };
+  const haveBudget = (reserveMs = 8_000) =>
+    budgetLeftMs() > reserveMs && (Date.now() - phaseStartedMs) < phaseCapMs;
 
   const { data: pds, error: pdsErr } = await admin
     .from("property_data_sources")
@@ -336,6 +379,7 @@ Deno.serve(async (req) => {
 
   // ===== 1. USERS ===================================================
   if (runs("users")) await safe("users", async () => {
+    beginPhase("users");
     const j = await ghlFetch("GET", `/users/?locationId=${locationId}`, token);
     const users = ((j.users as Json[]) ?? []);
     const rows = users.map((u) => ({
@@ -352,6 +396,7 @@ Deno.serve(async (req) => {
 
   // ===== 2. PIPELINES + STAGES + MAPPING SEED =======================
   if (runs("pipelines")) await safe("pipelines", async () => {
+    beginPhase("pipelines");
     const j = await ghlFetch("GET", `/opportunities/pipelines?locationId=${locationId}`, token);
     const pipelines = ((j.pipelines as Json[]) ?? []);
 
@@ -395,6 +440,7 @@ Deno.serve(async (req) => {
   const contactCreatedAt = new Map<string, string>();
   const contactLookup = new Map<string, { phone: string | null; email: string | null }>();
   if (runs("contacts")) await safe("contacts", async () => {
+    beginPhase("contacts");
     // Resume from the cursor the previous invoke handed back.
     let cursor: unknown[] | null = Array.isArray(cursorIn?.searchAfter)
       ? (cursorIn!.searchAfter as unknown[]) : null;
@@ -484,8 +530,75 @@ Deno.serve(async (req) => {
     counts.contacts_tag_refresh_updated = tagRefreshed;
   }, undefined);
 
+  // ===== 3b. RECENT-FIRST OPPORTUNITY REFRESH =======================
+  // The deep walk below pages oldest-first, so on a large account it never
+  // reaches today's deals before the budget runs out — which is exactly how
+  // the Won feed froze. This pass pulls newest-updated-first and stops as soon
+  // as it reaches records older than the last confirmed refresh (with an
+  // overlap window), so current wins always land regardless of backfill state.
+  if (runs("opportunities_recent")) await safe("opportunities_recent", async () => {
+    beginPhase("opportunities_recent");
+    const OVERLAP_MS = 6 * 3_600_000;
+    const { data: wm } = await admin
+      .from("sync_watermarks")
+      .select("last_fresh_at")
+      .eq("property_id", property_id).eq("source", "ghl").eq("phase", "opportunities_recent")
+      .maybeSingle();
+    const sinceMs = wm?.last_fresh_at
+      ? new Date(wm.last_fresh_at as string).getTime() - OVERLAP_MS
+      : Date.now() - 30 * 86400_000;
+
+    let startAfter: string | null = null;
+    let startAfterId: string | null = null;
+    const pulled: Json[] = [];
+    let pages = 0;
+    let reachedWatermark = false;
+    while (haveBudget(12_000)) {
+      const qs = new URLSearchParams({ location_id: locationId, limit: "100", order: "last_updated_desc" });
+      if (startAfter && startAfterId) { qs.set("startAfter", startAfter); qs.set("startAfterId", startAfterId); }
+      const j = await ghlFetch("GET", `/opportunities/search?${qs.toString()}`, token);
+      const list = ((j.opportunities as Json[]) ?? []);
+      const meta = (j.meta ?? {}) as Json;
+      pages++;
+      pulled.push(...list);
+      const oldestOnPage = list.length
+        ? new Date(String((list[list.length - 1] as Json).updatedAt ?? 0)).getTime()
+        : 0;
+      if (list.length && Number.isFinite(oldestOnPage) && oldestOnPage < sinceMs) { reachedWatermark = true; break; }
+      if (!list.length || meta.startAfter == null || list.length < 100) { reachedWatermark = true; break; }
+      startAfter = String(meta.startAfter);
+      startAfterId = String(meta.startAfterId ?? "");
+    }
+    counts.opportunities_recent_pulled = pulled.length;
+    counts.opportunities_recent_pages = pages;
+    counts.opportunities_recent_caught_up = reachedWatermark;
+
+    if (pulled.length) {
+      const rows = pulled.map((o) => mapOppRow(property_id, o));
+      counts.opportunities_recent_written = await upsertChunked(
+        admin, "ghl_opportunities", rows, "property_id,ghl_opportunity_id",
+      );
+    }
+    // Only advance the freshness marker when we actually caught up to the
+    // previous watermark; a budget-stop leaves it where it was so the next
+    // run re-covers the gap.
+    if (reachedWatermark) {
+      await admin.from("sync_watermarks").upsert({
+        property_id, source: "ghl", phase: "opportunities_recent",
+        last_fresh_at: new Date().toISOString(),
+        last_attempt_at: new Date().toISOString(),
+        last_error: null,
+        consecutive_failures: 0,
+        paused_reason: null,
+        next_attempt_at: null,
+      } as never, { onConflict: "property_id,source,phase" });
+    }
+    if (phase === "opportunities_recent") phaseDone = true;
+  }, undefined);
+
   // ===== 4. CONVERSATIONS + MESSAGES (classified) ===================
   if (runs("conversations")) await safe("conversations_messages", async () => {
+    beginPhase("conversations");
     // When this phase runs on its own invoke the contacts phase lives in a
     // different process, so hydrate the in-window contact set from our copy.
     if (!contactIds.length) {
@@ -673,13 +786,29 @@ Deno.serve(async (req) => {
 
   // ===== 5. OPPORTUNITIES (+ stage-diff history) ====================
   if (runs("opportunities")) await safe("opportunities", async () => {
+    beginPhase("opportunities");
     // /opportunities/search (POST) rejects any sort parameter with a 422, but
     // the GET form accepts `order=added_asc` plus a real cursor (startAfter +
     // startAfterId returned in meta). Verified live against DFW: the cursor
     // walk returned 891 unique of 891 reported, zero duplicates. No date
     // windowing needed.
+    // The deep walk position is persisted so it resumes across runs instead of
+    // restarting at the oldest record every cycle.
     let startAfter = cursorIn?.startAfter != null ? String(cursorIn.startAfter) : null;
     let startAfterId = cursorIn?.startAfterId != null ? String(cursorIn.startAfterId) : null;
+    let storedCursor: Json | null = null;
+    if (startAfter == null) {
+      const { data: wmRow } = await admin
+        .from("sync_watermarks")
+        .select("cursor_json")
+        .eq("property_id", property_id).eq("source", "ghl").eq("phase", "opportunities")
+        .maybeSingle();
+      storedCursor = (wmRow?.cursor_json ?? null) as Json | null;
+      if (storedCursor?.startAfter != null) {
+        startAfter = String(storedCursor.startAfter);
+        startAfterId = String(storedCursor.startAfterId ?? "");
+      }
+    }
     const pulled: Json[] = [];
     let opportunityPages = 0;
     let opportunitiesExhausted = false;
@@ -707,6 +836,15 @@ Deno.serve(async (req) => {
     counts.opportunity_pages = opportunityPages;
     counts.opportunity_budget_stop = !opportunitiesExhausted;
 
+    // Persist the deep-walk position (null once the walk completes, so the
+    // next cycle starts a fresh full pass).
+    await admin.from("sync_watermarks").upsert({
+      property_id, source: "ghl", phase: "opportunities",
+      cursor_json: opportunitiesExhausted ? null : { startAfter, startAfterId },
+      last_attempt_at: new Date().toISOString(),
+      ...(opportunitiesExhausted ? { last_fresh_at: new Date().toISOString() } : {}),
+    } as never, { onConflict: "property_id,source,phase" });
+
     // Existing rows for stage-diff
     const { data: existing } = await admin
       .from("ghl_opportunities")
@@ -714,27 +852,7 @@ Deno.serve(async (req) => {
       .eq("property_id", property_id);
     const existingMap = new Map((existing ?? []).map((r) => [r.ghl_opportunity_id, { id: r.id as string, stage_id: r.stage_id as string | null }]));
 
-    const rows = pulled.map((o) => {
-      const a = o as Json;
-      return {
-        property_id,
-        ghl_opportunity_id: String(a.id),
-        contact_id: a.contactId ?? null,
-        pipeline_id: a.pipelineId ?? null,
-        stage_id: a.pipelineStageId ?? a.stageId ?? null,
-        status: canonicalizeOppStatus(a.status),
-        status_raw: a.status ?? null,
-        monetary_value: a.monetaryValue ?? a.monetary_value ?? null,
-        assigned_to: a.assignedTo ?? null,
-        lost_reason_raw: a.lostReasonName ?? a.lostReasonId ?? null,
-        lost_reason_normalized: a.lostReasonName ?? null,
-        won_at: a.status === "won" ? (a.lastStatusChangeAt ?? a.lastStageChangeAt ?? a.updatedAt ?? null) : null,
-        lost_at: a.status === "lost" ? (a.lastStatusChangeAt ?? a.lastStageChangeAt ?? a.updatedAt ?? null) : null,
-        ghl_created_at: a.createdAt ?? null,
-        ghl_updated_at: a.updatedAt ?? null,
-        raw: o,
-      };
-    });
+    const rows = pulled.map((o) => mapOppRow(property_id, o));
     counts.opportunities = await upsertChunked(admin, "ghl_opportunities", rows, "property_id,ghl_opportunity_id");
 
     // Stage-diff history (only when current stage differs from prior).
@@ -769,6 +887,7 @@ Deno.serve(async (req) => {
 
   // ===== 6. CALENDARS + APPOINTMENTS ================================
   if (runs("appointments")) await safe("appointments", async () => {
+    beginPhase("appointments");
     const cj = await ghlFetch("GET", `/calendars/?locationId=${locationId}`, token);
     const cals = ((cj.calendars as Json[]) ?? []);
     counts.calendars = cals.length;
@@ -900,6 +1019,34 @@ Deno.serve(async (req) => {
   const failedPhase = blockingErrors.length
     ? String(blockingErrors[0]).split(":")[0]
     : null;
+
+  // ---- Freshness watermarks -------------------------------------------
+  // The watchdog judges on these, not on run status, so a phase that silently
+  // wrote nothing cannot masquerade as healthy.
+  const nowIso = new Date().toISOString();
+  const failedLabels = new Set(blockingErrors.map((m) => String(m).split(":")[0]));
+  const ranPhases: string[] = [];
+  if (runs("contacts") && !failedLabels.has("contacts")) ranPhases.push("contacts");
+  if (runs("conversations") && !failedLabels.has("conversations_messages")) ranPhases.push("conversations");
+  if (runs("appointments") && !failedLabels.has("appointments")) ranPhases.push("appointments");
+  // Only a full run may refresh the "all" marker — a single-phase invoke must
+  // not make the whole source look fresh to the watchdog.
+  if (!blockingErrors.length && phase === "all") ranPhases.push("all");
+  for (const p of ranPhases) {
+    await admin.from("sync_watermarks").upsert({
+      property_id, source: "ghl", phase: p,
+      last_fresh_at: nowIso, last_attempt_at: nowIso,
+      last_error: null, consecutive_failures: 0, paused_reason: null, next_attempt_at: null,
+    } as never, { onConflict: "property_id,source,phase" });
+  }
+  if (blockingErrors.length && phase === "all") {
+    await admin.from("sync_watermarks").upsert({
+      property_id, source: "ghl", phase: "all",
+      last_attempt_at: nowIso,
+      last_error: blockingErrors.join(" | ").slice(0, 1000),
+    } as never, { onConflict: "property_id,source,phase" });
+  }
+
   await admin
     .from("property_data_sources")
     .update({

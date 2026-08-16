@@ -59,6 +59,19 @@ const PER_PAIR_TIMEOUT_MS = 5 * 60_000;
 // the next tick 2 minutes later.
 const MAX_CANDIDATES_PER_TICK = 10;
 
+// ----- Data-freshness thresholds -------------------------------------
+// A run that reports "success" is not proof the data moved: a phase can be
+// starved of budget and write nothing while the run still exits cleanly.
+// These ceilings are judged on sync_watermarks.last_fresh_at, so a source
+// that stops producing data is recovered even when every run looks green.
+const FRESHNESS_MAX_AGE_MS: Record<string, number> = {
+  ghl: 3 * 3_600_000,
+  ctm: 6 * 3_600_000,
+  google_ads: 8 * 3_600_000,
+  ga4: 8 * 3_600_000,
+  keyword_com: 26 * 3_600_000,
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -119,6 +132,22 @@ Deno.serve(async (req) => {
   const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
 
   const candidates: { property_id: string; source: string }[] = [];
+  // Freshness map, keyed property|source, from the phase-level watermarks.
+  // The oldest phase for a pair drives the decision — one frozen phase is
+  // enough to make the pair stale.
+  const freshness = new Map<string, number>();
+  {
+    const { data: wmRows } = await admin
+      .from("sync_watermarks")
+      .select("property_id, source, last_fresh_at");
+    for (const w of wmRows ?? []) {
+      const key = `${w.property_id}|${w.source}`;
+      const t = w.last_fresh_at ? new Date(w.last_fresh_at as string).getTime() : 0;
+      const prev = freshness.get(key);
+      if (prev == null || t < prev) freshness.set(key, t);
+    }
+  }
+  const staleFreshness: string[] = [];
   for (const row of srcRows ?? []) {
     const property_id = row.property_id as string;
     const source = row.source as string;
@@ -171,6 +200,25 @@ Deno.serve(async (req) => {
 
     candidates.push({ property_id, source });
     if (candidates.length >= MAX_CANDIDATES_PER_TICK) break;
+  }
+
+  // Second pass: pairs whose runs look healthy but whose data has stopped
+  // moving. Only added if there is room left in this tick.
+  for (const row of srcRows ?? []) {
+    if (candidates.length >= MAX_CANDIDATES_PER_TICK) break;
+    const property_id = row.property_id as string;
+    const source = row.source as string;
+    if (candidates.some((c) => c.property_id === property_id && c.source === source)) continue;
+    const backoffUntil = row.backoff_until as string | null;
+    if (backoffUntil && new Date(backoffUntil).getTime() > Date.now()) continue;
+    const maxAge = FRESHNESS_MAX_AGE_MS[source];
+    if (!maxAge) continue;
+    const key = `${property_id}|${source}`;
+    if (!freshness.has(key)) continue; // no watermark yet — run-status rules cover it
+    const age = Date.now() - (freshness.get(key) ?? 0);
+    if (age <= maxAge) continue;
+    staleFreshness.push(key);
+    candidates.push({ property_id, source });
   }
 
   const date_from = isoDaysAgo(30);
@@ -296,6 +344,7 @@ Deno.serve(async (req) => {
   return new Response(
     JSON.stringify({
       candidates: candidates.length,
+      stale_by_freshness: staleFreshness.length,
       recovered,
       still_failing: stillFailing,
       paused,

@@ -2147,6 +2147,62 @@ export type Database = {
           },
         ]
       }
+      sync_watermarks: {
+        Row: {
+          consecutive_failures: number
+          created_at: string
+          cursor_json: Json | null
+          id: string
+          last_attempt_at: string | null
+          last_error: string | null
+          last_fresh_at: string | null
+          next_attempt_at: string | null
+          paused_reason: string | null
+          phase: string
+          property_id: string
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          consecutive_failures?: number
+          created_at?: string
+          cursor_json?: Json | null
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          last_fresh_at?: string | null
+          next_attempt_at?: string | null
+          paused_reason?: string | null
+          phase?: string
+          property_id: string
+          source: string
+          updated_at?: string
+        }
+        Update: {
+          consecutive_failures?: number
+          created_at?: string
+          cursor_json?: Json | null
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          last_fresh_at?: string | null
+          next_attempt_at?: string | null
+          paused_reason?: string | null
+          phase?: string
+          property_id?: string
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_watermarks_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_nav_preferences: {
         Row: {
           order_keys: string[]
@@ -2585,6 +2641,21 @@ export type Database = {
           active: boolean
           jobid: number
           schedule: string
+        }[]
+      }
+      get_sync_freshness: {
+        Args: never
+        Returns: {
+          consecutive_failures: number
+          last_attempt_at: string
+          last_error: string
+          last_fresh_at: string
+          next_attempt_at: string
+          paused_reason: string
+          phase: string
+          property_id: string
+          property_name: string
+          source: string
         }[]
       }
       get_won_days_by_report_token: {
