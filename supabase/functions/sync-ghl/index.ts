@@ -194,6 +194,30 @@ function canonicalizeOppStatus(raw: unknown): "open" | "won" | "lost" | "abandon
   return "unknown";
 }
 
+// Shared row shape for ghl_opportunities, used by both the deep oldest-first
+// walk and the recent-first freshness pass.
+function mapOppRow(property_id: string, o: Json): Json {
+  const a = o as Json;
+  return {
+    property_id,
+    ghl_opportunity_id: String(a.id),
+    contact_id: a.contactId ?? null,
+    pipeline_id: a.pipelineId ?? null,
+    stage_id: a.pipelineStageId ?? a.stageId ?? null,
+    status: canonicalizeOppStatus(a.status),
+    status_raw: a.status ?? null,
+    monetary_value: a.monetaryValue ?? a.monetary_value ?? null,
+    assigned_to: a.assignedTo ?? null,
+    lost_reason_raw: a.lostReasonName ?? a.lostReasonId ?? null,
+    lost_reason_normalized: a.lostReasonName ?? null,
+    won_at: a.status === "won" ? (a.lastStatusChangeAt ?? a.lastStageChangeAt ?? a.updatedAt ?? null) : null,
+    lost_at: a.status === "lost" ? (a.lastStatusChangeAt ?? a.lastStageChangeAt ?? a.updatedAt ?? null) : null,
+    ghl_created_at: a.createdAt ?? null,
+    ghl_updated_at: a.updatedAt ?? null,
+    raw: o,
+  };
+}
+
 function isWithinWindow(iso: unknown, from: Date, to: Date): boolean {
   if (!iso) return true;
   const time = new Date(String(iso)).getTime();
