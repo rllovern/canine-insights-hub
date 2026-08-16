@@ -440,6 +440,7 @@ Deno.serve(async (req) => {
   const contactCreatedAt = new Map<string, string>();
   const contactLookup = new Map<string, { phone: string | null; email: string | null }>();
   if (runs("contacts")) await safe("contacts", async () => {
+    beginPhase("contacts");
     // Resume from the cursor the previous invoke handed back.
     let cursor: unknown[] | null = Array.isArray(cursorIn?.searchAfter)
       ? (cursorIn!.searchAfter as unknown[]) : null;
@@ -529,8 +530,75 @@ Deno.serve(async (req) => {
     counts.contacts_tag_refresh_updated = tagRefreshed;
   }, undefined);
 
+  // ===== 3b. RECENT-FIRST OPPORTUNITY REFRESH =======================
+  // The deep walk below pages oldest-first, so on a large account it never
+  // reaches today's deals before the budget runs out — which is exactly how
+  // the Won feed froze. This pass pulls newest-updated-first and stops as soon
+  // as it reaches records older than the last confirmed refresh (with an
+  // overlap window), so current wins always land regardless of backfill state.
+  if (runs("opportunities_recent")) await safe("opportunities_recent", async () => {
+    beginPhase("opportunities_recent");
+    const OVERLAP_MS = 6 * 3_600_000;
+    const { data: wm } = await admin
+      .from("sync_watermarks")
+      .select("last_fresh_at")
+      .eq("property_id", property_id).eq("source", "ghl").eq("phase", "opportunities_recent")
+      .maybeSingle();
+    const sinceMs = wm?.last_fresh_at
+      ? new Date(wm.last_fresh_at as string).getTime() - OVERLAP_MS
+      : Date.now() - 30 * 86400_000;
+
+    let startAfter: string | null = null;
+    let startAfterId: string | null = null;
+    const pulled: Json[] = [];
+    let pages = 0;
+    let reachedWatermark = false;
+    while (haveBudget(12_000)) {
+      const qs = new URLSearchParams({ location_id: locationId, limit: "100", order: "last_updated_desc" });
+      if (startAfter && startAfterId) { qs.set("startAfter", startAfter); qs.set("startAfterId", startAfterId); }
+      const j = await ghlFetch("GET", `/opportunities/search?${qs.toString()}`, token);
+      const list = ((j.opportunities as Json[]) ?? []);
+      const meta = (j.meta ?? {}) as Json;
+      pages++;
+      pulled.push(...list);
+      const oldestOnPage = list.length
+        ? new Date(String((list[list.length - 1] as Json).updatedAt ?? 0)).getTime()
+        : 0;
+      if (list.length && Number.isFinite(oldestOnPage) && oldestOnPage < sinceMs) { reachedWatermark = true; break; }
+      if (!list.length || meta.startAfter == null || list.length < 100) { reachedWatermark = true; break; }
+      startAfter = String(meta.startAfter);
+      startAfterId = String(meta.startAfterId ?? "");
+    }
+    counts.opportunities_recent_pulled = pulled.length;
+    counts.opportunities_recent_pages = pages;
+    counts.opportunities_recent_caught_up = reachedWatermark;
+
+    if (pulled.length) {
+      const rows = pulled.map((o) => mapOppRow(property_id, o));
+      counts.opportunities_recent_written = await upsertChunked(
+        admin, "ghl_opportunities", rows, "property_id,ghl_opportunity_id",
+      );
+    }
+    // Only advance the freshness marker when we actually caught up to the
+    // previous watermark; a budget-stop leaves it where it was so the next
+    // run re-covers the gap.
+    if (reachedWatermark) {
+      await admin.from("sync_watermarks").upsert({
+        property_id, source: "ghl", phase: "opportunities_recent",
+        last_fresh_at: new Date().toISOString(),
+        last_attempt_at: new Date().toISOString(),
+        last_error: null,
+        consecutive_failures: 0,
+        paused_reason: null,
+        next_attempt_at: null,
+      } as never, { onConflict: "property_id,source,phase" });
+    }
+    if (phase === "opportunities_recent") phaseDone = true;
+  }, undefined);
+
   // ===== 4. CONVERSATIONS + MESSAGES (classified) ===================
   if (runs("conversations")) await safe("conversations_messages", async () => {
+    beginPhase("conversations");
     // When this phase runs on its own invoke the contacts phase lives in a
     // different process, so hydrate the in-window contact set from our copy.
     if (!contactIds.length) {
