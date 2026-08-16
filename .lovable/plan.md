@@ -47,13 +47,25 @@ Run a targeted recent-deal refresh for NoVA, Colorado Springs, Winchester, DFW a
 
 MoCo stays as-is: its CRM connection is genuinely disconnected and correctly shows "No CRM connected".
 
+**7. Staleness watchdog — so this can never go unnoticed again**
+A watchdog runs every 2 minutes and judges on data freshness, not just on whether a run reported success, so a step that silently stops writing still gets caught.
+
+- **Freshness limit per source and step.** Each pair gets a maximum allowed age: CRM deals and contacts 3 hours, calls and ad spend 6 hours, rankings 24 hours. If the last confirmed write for that pair is older than its limit, the watchdog triggers a refresh for that pair alone.
+- **Escalating retry until it succeeds.** A failing or still-stale pair retries every 2 minutes for the first 30 minutes, then every 10 minutes, then hourly, and keeps going indefinitely until a run writes fresh data. On success it resets and returns to the normal 4-hour cadence.
+- **Only the broken pair.** Retries are keyed on (location, source, step). Healthy pairs are never re-run, so one stuck location cannot slow down or rate-limit everything else.
+- **Hard failures pause instead of looping.** Authentication or configuration errors (like MoCo's disconnected CRM) stop the retry loop and surface as "Action needed" rather than retrying forever against dead credentials.
+- **Visibility.** Any pair past 2x its freshness limit shows as Stale/Partial in the admin API Health page and the sidebar Data Sources panel, naming the step and its age.
+
 ## Technical notes
 
 - `supabase/functions/sync-ghl/index.ts`: new `opportunities_recent` incremental mode (updated-desc walk with a watermark), per-phase budget reservation, phase reorder, cursor persistence.
 - New table for sync watermarks/cursors: `(property_id, source, phase, last_success_at, cursor_json)` with GRANTs and service-role-only policies.
 - `supabase/functions/scheduled-sync-all/index.ts`: two-tier cycle (fast pass across all locations, then backfill with remaining time).
 - `get_api_health_summary` extended with per-phase freshness; `ApiHealth.tsx` and `SourceHealthPanel.tsx` gain a "Partial" state.
+- Watchdog state lives on the same watermark table (`next_attempt_at`, `consecutive_failures`, `paused_reason`); `resync-failed` is extended into the freshness-driven watchdog and its cron moves to every 2 minutes.
 
 ## Verification
 
 After the recovery run: compare stored won counts for Aug 8–16 against the CRM's reported totals per location, and confirm each location's deal step shows a success timestamp within the last cycle.
+
+Watchdog check: artificially age one pair's freshness marker and confirm it self-heals within one cycle without touching any other location or source.
