@@ -147,9 +147,12 @@ Deno.serve(async (req) => {
   // Each phase is idempotent and safely re-runnable; the cursor returned by
   // one invoke feeds the next, so pagination is per-invoke rather than
   // per-run and full coverage becomes achievable over successive invokes.
+  // opportunities_recent runs early and is capped by its own watermark, so
+  // today's deals land even when the deep backfill phases exhaust the wall
+  // budget later in the list. Phase order here is the recovery priority.
   const GHL_PHASES = [
-    "users", "pipelines", "contacts", "conversations",
-    "opportunities", "appointments", "finalize",
+    "users", "pipelines", "opportunities_recent", "contacts",
+    "conversations", "opportunities", "appointments", "finalize",
   ];
   const MAX_INVOKES_PER_PHASE = 8;
   const GHL_WALL_BUDGET_MS = 10 * 60_000;
