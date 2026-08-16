@@ -30,25 +30,21 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { History } from "lucide-react";
-import { ReportView } from "@/components/reports/ReportView";
-import { isReportSchema, type ReportSchema } from "@/lib/reports/reportSchema";
-import jarvisMark from "@/assets/jarvis-mark.png";
+import bobMark from "@/assets/jarvis-mark.png";
 import { toast } from "@/hooks/use-toast";
 
 const QUICK_PROMPTS = [
-  "Reconcile CTM calls against GHL for the last 14 days",
-  "What's the account stability looking like?",
-  "Show me a lead performance snapshot",
-  "Summarize this property's account health",
+  "Why are my leads down this month?",
+  "Is my ad spend working right now?",
+  "How does this month compare to the same time last year?",
+  "Walk me through what these numbers mean",
 ];
 
-type ReportRef = { id: string; schema: ReportSchema };
-
-type LatestJarvisContext = {
+type LatestBobContext = {
   propertyId: string | null;
   propertyName: string | null;
   propertySlug: string | null;
-  jarvisHeaderProperty: string;
+  bobHeaderProperty: string;
   from: string;
   to: string;
   compareFrom: string | null;
@@ -60,7 +56,7 @@ async function getFreshAccessToken() {
   const { data: sessionData, error } = await supabase.auth.getSession();
   if (import.meta.env.DEV) {
     const session = sessionData.session;
-    console.log("[Jarvis Auth Debug]", {
+    console.log("[Bob Auth Debug]", {
       hasSession: !!session,
       hasAccessToken: !!session?.access_token,
       tokenPrefix: session?.access_token?.slice(0, 12),
@@ -81,7 +77,7 @@ async function getFreshAccessToken() {
   const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
   if (import.meta.env.DEV) {
     const session = refreshData.session;
-    console.log("[Jarvis Auth Debug Refresh]", {
+    console.log("[Bob Auth Debug Refresh]", {
       hasSession: !!session,
       hasAccessToken: !!session?.access_token,
       tokenPrefix: session?.access_token?.slice(0, 12),
@@ -95,25 +91,6 @@ async function getFreshAccessToken() {
   }
   if (refreshError || !refreshData.session?.access_token) return null;
   return refreshData.session.access_token;
-}
-
-function extractReports(messages: UIMessage[]): ReportRef[] {
-  const reports: ReportRef[] = [];
-  for (const m of messages) {
-    for (const p of m.parts ?? []) {
-      if (p.type?.startsWith("tool-") || p.type === "dynamic-tool") {
-        const tp = p as { type: string; toolName?: string; output?: unknown; state?: string };
-        const name = (tp as any).toolName ?? tp.type.replace(/^tool-/, "");
-        if (name === "save_visual_report" && tp.state === "output-available") {
-          const out = tp.output as { report_id?: string; schema?: unknown } | undefined;
-          if (out?.report_id && isReportSchema(out.schema)) {
-            reports.push({ id: out.report_id, schema: out.schema });
-          }
-        }
-      }
-    }
-  }
-  return reports;
 }
 
 export function BobChat() {
@@ -132,13 +109,11 @@ export function BobChat() {
   const urlTo = params.get("to");
   const didPrefill = useRef(false);
   const [input, setInput] = useState("");
-  const [activeReport, setActiveReport] = useState<ReportRef | null>(null);
-  const [restoredReports, setRestoredReports] = useState<ReportRef[]>([]);
   const [recentSessions, setRecentSessions] = useState<
     { id: string; title: string | null; updated_at: string }[]
   >([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const latestContextRef = useRef<LatestJarvisContext | null>(null);
+  const latestContextRef = useRef<LatestBobContext | null>(null);
 
   const iso = useMemo(() => rangeToISO(range), [range]);
   const cmpIso = useMemo(
@@ -167,7 +142,7 @@ export function BobChat() {
     propertyId: effectivePropertyId,
     propertyName: effectiveProperty?.name ?? null,
     propertySlug: effectiveProperty?.slug ?? null,
-    jarvisHeaderProperty: activeProperty?.name ?? (urlPropertyId ? "Loading property..." : "No property"),
+    bobHeaderProperty: activeProperty?.name ?? (urlPropertyId ? "Loading property..." : "No property"),
     from: effectiveFrom,
     to: effectiveTo,
     compareFrom: cmpIso?.from ?? null,
@@ -213,11 +188,11 @@ export function BobChat() {
             },
           };
           if (import.meta.env.DEV) {
-            console.log("[Jarvis Context Before Send]", {
+            console.log("[Bob Context Before Send]", {
               selectedPropertyId: latest?.propertyId ?? null,
               selectedPropertyName: latest?.propertyName ?? null,
               selectedPropertySlug: latest?.propertySlug ?? null,
-              jarvisHeaderProperty: latest?.jarvisHeaderProperty ?? "No property",
+              bobHeaderProperty: latest?.bobHeaderProperty ?? "No property",
               dateRange,
               requestBodyPropertyId: payload?.propertyId,
               requestBodyContext: payload?.context,
@@ -252,7 +227,7 @@ export function BobChat() {
   const { messages, sendMessage, status, error, setMessages } = useChat({
     id: sessionId ?? "new",
     transport,
-    onError: (e) => toast({ title: "Jarvis error", description: e.message, variant: "destructive" }),
+    onError: (e) => toast({ title: "Bob hit a problem", description: e.message, variant: "destructive" }),
   });
 
   // Restore message history when loading an existing session
@@ -299,48 +274,6 @@ export function BobChat() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQ, accessToken, effectivePropertyId]);
-
-  const reportsFromMessages = useMemo(() => extractReports(messages), [messages]);
-  const reports = useMemo(() => {
-    const seen = new Set<string>();
-    const out: ReportRef[] = [];
-    for (const r of [...restoredReports, ...reportsFromMessages]) {
-      if (seen.has(r.id)) continue;
-      seen.add(r.id);
-      out.push(r);
-    }
-    return out;
-  }, [restoredReports, reportsFromMessages]);
-  useEffect(() => {
-    if (reports.length && (!activeReport || activeReport.id !== reports[reports.length - 1].id)) {
-      setActiveReport(reports[reports.length - 1]);
-    }
-  }, [reports, activeReport]);
-
-  // Restore reports for an existing session loaded via ?session=
-  useEffect(() => {
-    if (!sessionId || !accessToken) {
-      setRestoredReports([]);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const { data, error: e } = await supabase
-        .from("ai_agent_reports")
-        .select("id,schema_json")
-        .eq("session_id", sessionId)
-        .order("created_at", { ascending: true });
-      if (cancelled || e || !data) return;
-      const restored: ReportRef[] = [];
-      for (const row of data) {
-        if (isReportSchema(row.schema_json)) {
-          restored.push({ id: row.id, schema: row.schema_json as ReportSchema });
-        }
-      }
-      setRestoredReports(restored);
-    })();
-    return () => { cancelled = true; };
-  }, [sessionId, accessToken]);
 
   // Load recent sessions for the dropdown
   useEffect(() => {
@@ -398,28 +331,22 @@ export function BobChat() {
     stuckAny.errorText =
       "Tool run was interrupted (likely exceeded compute budget). Try a narrower window (e.g. days: 7) or rerun.";
     toast({
-      title: "Jarvis tool interrupted",
+      title: "Bob's lookup was interrupted",
       description:
         "The last tool call didn't finish. Try a smaller window (e.g. last 7 days) and rerun.",
       variant: "destructive",
     });
   }, [isLoading, messages]);
 
-  const saveReport = async (id: string) => {
-    const { error: e } = await supabase.from("ai_agent_reports").update({ saved: true }).eq("id", id);
-    if (e) throw e;
-  };
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-4 h-[calc(100vh-8rem)]">
-      {/* Chat pane */}
+    <div className="h-[calc(100vh-8rem)]">
       <Card className="flex flex-col min-h-0 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b">
-          <img src={jarvisMark} alt="Jarvis" width={24} height={24} className="size-6" />
+          <img src={bobMark} alt="Bob" width={24} height={24} className="size-6" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold leading-tight">Jarvis</div>
+            <div className="text-sm font-semibold leading-tight">Bob</div>
             <div className="text-[11px] text-muted-foreground truncate">
-              Powered by GPT-5.5 · {activeProperty?.name ?? "No property"} · {effectiveFrom} → {effectiveTo}
+              Your marketing analyst · {activeProperty?.name ?? "No property"} · {effectiveFrom} → {effectiveTo}
             </div>
           </div>
           <Popover>
@@ -440,7 +367,6 @@ export function BobChat() {
                       type="button"
                       onClick={() => {
                         setSessionId(s.id);
-                        setActiveReport(null);
                         const n = new URLSearchParams(params);
                         n.set("session", s.id);
                         n.delete("q");
@@ -460,7 +386,7 @@ export function BobChat() {
               )}
             </PopoverContent>
           </Popover>
-          <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); setActiveReport(null); setParams({}, { replace: true }); }}>
+          <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); setParams({}, { replace: true }); }}>
             New session
           </Button>
         </div>
@@ -469,21 +395,21 @@ export function BobChat() {
           <ConversationContent>
             {!accessToken ? (
               <ConversationEmptyState
-                icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
-                title="Sign in to use Jarvis"
-                description="Jarvis needs an authenticated session to query your account data."
+                icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
+                title="Sign in to talk to Bob"
+                description="Bob needs you signed in before he can look at your account."
               />
             ) : noAccessibleProperties ? (
               <ConversationEmptyState
-                icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
+                icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
                 title="No properties available"
                 description="Your account doesn't have access to any properties yet. Ask an admin to grant access."
               />
             ) : needsPropertySelection ? (
               <ConversationEmptyState
-                icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
-                title="Select a property to start using Jarvis"
-                description="Jarvis needs to know which property to analyze."
+                icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
+                title="Pick a location so Bob knows what to look at"
+                description="Choose a location and Bob will pull its numbers."
               >
                 <div className="mt-4 w-full max-w-xs">
                   <Select
@@ -505,9 +431,9 @@ export function BobChat() {
               </ConversationEmptyState>
             ) : messages.length === 0 ? (
               <ConversationEmptyState
-                icon={<img src={jarvisMark} alt="" className="size-10 opacity-80" />}
-                title="Ask Jarvis anything about this account"
-                description="Cross-source analytics, reconciliations, account health, and visual reports."
+                icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
+                title="Hi, I'm Bob — ask me anything about your marketing"
+                description="I look at your ads, calls, leads and sales, and explain what they actually mean in plain English."
               >
                 <div className="mt-4 grid gap-2 w-full max-w-md">
                   {QUICK_PROMPTS.map((p) => (
@@ -571,7 +497,7 @@ export function BobChat() {
               ref={textareaRef as any}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={disabled ? "Sign in to chat with Jarvis…" : "Ask Jarvis... (e.g. reconcile CTM to GHL for last 14 days)"}
+              placeholder={disabled ? "Sign in to chat with Bob…" : "Ask Bob anything… (e.g. why did my calls drop last week?)"}
               disabled={disabled}
             />
             <PromptInputFooter className="justify-end">
@@ -581,41 +507,6 @@ export function BobChat() {
         </div>
       </Card>
 
-      {/* Report pane */}
-      <Card className="flex flex-col min-h-0 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b">
-          <div className="text-sm font-semibold">Report</div>
-          <div className="text-[11px] text-muted-foreground">
-            {reports.length ? `${reports.length} generated this session` : "Generated reports will appear here"}
-          </div>
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto p-4">
-          {activeReport ? (
-            <ReportView schema={activeReport.schema} reportId={activeReport.id} onSave={saveReport} />
-          ) : (
-            <div className="h-full grid place-items-center text-center text-sm text-muted-foreground">
-              <div>
-                <img src={jarvisMark} alt="" className="mx-auto size-12 opacity-50" />
-                <div className="mt-3">No report yet. Ask Jarvis for a reconciliation or summary.</div>
-              </div>
-            </div>
-          )}
-          {reports.length > 1 && (
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {reports.map((r) => (
-                <Button
-                  key={r.id}
-                  size="sm"
-                  variant={r.id === activeReport?.id ? "default" : "outline"}
-                  onClick={() => setActiveReport(r)}
-                >
-                  {r.schema.title.slice(0, 40)}
-                </Button>
-              ))}
-            </div>
-          )}
-        </div>
-      </Card>
     </div>
   );
 }
