@@ -786,13 +786,29 @@ Deno.serve(async (req) => {
 
   // ===== 5. OPPORTUNITIES (+ stage-diff history) ====================
   if (runs("opportunities")) await safe("opportunities", async () => {
+    beginPhase("opportunities");
     // /opportunities/search (POST) rejects any sort parameter with a 422, but
     // the GET form accepts `order=added_asc` plus a real cursor (startAfter +
     // startAfterId returned in meta). Verified live against DFW: the cursor
     // walk returned 891 unique of 891 reported, zero duplicates. No date
     // windowing needed.
+    // The deep walk position is persisted so it resumes across runs instead of
+    // restarting at the oldest record every cycle.
     let startAfter = cursorIn?.startAfter != null ? String(cursorIn.startAfter) : null;
     let startAfterId = cursorIn?.startAfterId != null ? String(cursorIn.startAfterId) : null;
+    let storedCursor: Json | null = null;
+    if (startAfter == null) {
+      const { data: wmRow } = await admin
+        .from("sync_watermarks")
+        .select("cursor_json")
+        .eq("property_id", property_id).eq("source", "ghl").eq("phase", "opportunities")
+        .maybeSingle();
+      storedCursor = (wmRow?.cursor_json ?? null) as Json | null;
+      if (storedCursor?.startAfter != null) {
+        startAfter = String(storedCursor.startAfter);
+        startAfterId = String(storedCursor.startAfterId ?? "");
+      }
+    }
     const pulled: Json[] = [];
     let opportunityPages = 0;
     let opportunitiesExhausted = false;
@@ -820,6 +836,15 @@ Deno.serve(async (req) => {
     counts.opportunity_pages = opportunityPages;
     counts.opportunity_budget_stop = !opportunitiesExhausted;
 
+    // Persist the deep-walk position (null once the walk completes, so the
+    // next cycle starts a fresh full pass).
+    await admin.from("sync_watermarks").upsert({
+      property_id, source: "ghl", phase: "opportunities",
+      cursor_json: opportunitiesExhausted ? null : { startAfter, startAfterId },
+      last_attempt_at: new Date().toISOString(),
+      ...(opportunitiesExhausted ? { last_fresh_at: new Date().toISOString() } : {}),
+    } as never, { onConflict: "property_id,source,phase" });
+
     // Existing rows for stage-diff
     const { data: existing } = await admin
       .from("ghl_opportunities")
@@ -827,27 +852,7 @@ Deno.serve(async (req) => {
       .eq("property_id", property_id);
     const existingMap = new Map((existing ?? []).map((r) => [r.ghl_opportunity_id, { id: r.id as string, stage_id: r.stage_id as string | null }]));
 
-    const rows = pulled.map((o) => {
-      const a = o as Json;
-      return {
-        property_id,
-        ghl_opportunity_id: String(a.id),
-        contact_id: a.contactId ?? null,
-        pipeline_id: a.pipelineId ?? null,
-        stage_id: a.pipelineStageId ?? a.stageId ?? null,
-        status: canonicalizeOppStatus(a.status),
-        status_raw: a.status ?? null,
-        monetary_value: a.monetaryValue ?? a.monetary_value ?? null,
-        assigned_to: a.assignedTo ?? null,
-        lost_reason_raw: a.lostReasonName ?? a.lostReasonId ?? null,
-        lost_reason_normalized: a.lostReasonName ?? null,
-        won_at: a.status === "won" ? (a.lastStatusChangeAt ?? a.lastStageChangeAt ?? a.updatedAt ?? null) : null,
-        lost_at: a.status === "lost" ? (a.lastStatusChangeAt ?? a.lastStageChangeAt ?? a.updatedAt ?? null) : null,
-        ghl_created_at: a.createdAt ?? null,
-        ghl_updated_at: a.updatedAt ?? null,
-        raw: o,
-      };
-    });
+    const rows = pulled.map((o) => mapOppRow(property_id, o));
     counts.opportunities = await upsertChunked(admin, "ghl_opportunities", rows, "property_id,ghl_opportunity_id");
 
     // Stage-diff history (only when current stage differs from prior).
@@ -882,6 +887,7 @@ Deno.serve(async (req) => {
 
   // ===== 6. CALENDARS + APPOINTMENTS ================================
   if (runs("appointments")) await safe("appointments", async () => {
+    beginPhase("appointments");
     const cj = await ghlFetch("GET", `/calendars/?locationId=${locationId}`, token);
     const cals = ((cj.calendars as Json[]) ?? []);
     counts.calendars = cals.length;
