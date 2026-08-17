@@ -161,8 +161,8 @@ export function PortfolioVerdict({
         const verdict = tierToVerdict(tier);
         const reason =
           tier === "low-sample"
-            ? `Low sample · ${total} leads (need ${LOW_SAMPLE_BASE}+)`
-            : `Quality ${formatQualityRate(rate)}${grade.showInterval ? ` (range ${formatRange(grade)}, ${total} leads)` : ""} · ${v.bad} bad / ${v.good} good / ${v.projected} AI-proj`;
+            ? `Low sample · ${total} scored calls (need ${LOW_SAMPLE_BASE}+)`
+            : `Quality ${formatQualityRate(rate)}${grade.showInterval ? ` (range ${formatRange(grade)}, ${total} scored calls)` : ""} · ${v.bad} bad / ${v.good} good of ${total} scored`;
         rows.push({ property_id, name: v.name, total, bad: v.bad, good: v.good, projected: v.projected, rate, tier, verdict, reason });
       }
       const order = { critical: 0, warning: 1, good: 2 } as const;
