@@ -51,7 +51,7 @@ const TEMPLATES: Template[] = [
     id: "quality-rate",
     theme: "quality",
     label: () => "Are my calls good quality?",
-    question: (p) => `Are the calls coming into ${p} good quality? Give me good calls against scored calls.`,
+    question: (p) => `Are the calls coming into ${p} good quality? Give me good leads against scored leads.`,
   },
   {
     id: "quality-mix",
@@ -77,8 +77,8 @@ const TEMPLATES: Template[] = [
     id: "spend-cost",
     theme: "spend",
     needs: "ads",
-    label: () => "What is a good call costing me?",
-    question: (p) => `What is a good call costing me at ${p}, and is that reasonable?`,
+    label: () => "What is a good lead costing me?",
+    question: (p) => `What is a good lead costing me at ${p}, and is that reasonable?`,
   },
   {
     id: "sales-wins",
@@ -91,8 +91,8 @@ const TEMPLATES: Template[] = [
     id: "sales-convert",
     theme: "sales",
     needs: "crm",
-    label: () => "Are good calls turning into sales?",
-    question: (p) => `Are good calls turning into sales at ${p}?`,
+    label: () => "Are good leads turning into sales?",
+    question: (p) => `Are good leads turning into sales at ${p}?`,
   },
   {
     id: "watch",
