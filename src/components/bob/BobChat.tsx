@@ -24,9 +24,6 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { History } from "lucide-react";
@@ -44,7 +41,9 @@ type LatestBobContext = {
   propertyId: string | null;
   propertyName: string | null;
   propertySlug: string | null;
-  bobHeaderProperty: string;
+  scopeMode: "agency" | "property";
+  propertyIds: string[] | null;
+  scopeLabel: string;
   from: string;
   to: string;
   compareFrom: string | null;
