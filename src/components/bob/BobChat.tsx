@@ -104,6 +104,11 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
   const [recentSessions, setRecentSessions] = useState<
     { id: string; title: string | null; updated_at: string }[]
   >([]);
+  // The AI SDK recreates its Chat instance whenever `id` changes. Keep this
+  // client key independent from the persisted session id returned mid-stream,
+  // otherwise the response continues into an abandoned Chat instance.
+  const [chatKey, setChatKey] = useState(() => `bob-${crypto.randomUUID()}`);
+  const [sessionToRestore, setSessionToRestore] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const latestContextRef = useRef<LatestBobContext | null>(null);
 
@@ -214,29 +219,27 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     [setSessionId],
   );
 
-  const { messages, sendMessage, status, error, setMessages, regenerate } = useChat({
-    id: sessionId ?? "new",
+  const { messages, sendMessage, status, error, setMessages, regenerate, clearError } = useChat({
+    id: chatKey,
     transport,
     onError: (e) => toast({ title: "Bob hit a problem", description: e.message, variant: "destructive" }),
   });
 
-  // Restore message history when loading an existing session
-  const restoredForSession = useRef<string | null>(null);
+  // Restore only sessions the user explicitly selects. A session id received
+  // from a live response header must never trigger a query that can overwrite
+  // the in-flight transcript before persistence finishes.
+  const restoreRequest = useRef(0);
   useEffect(() => {
-    if (!sessionId || !accessToken) return;
-    if (restoredForSession.current === sessionId) return;
-    if (messages.length > 0) {
-      restoredForSession.current = sessionId;
-      return;
-    }
+    if (!sessionToRestore || !accessToken) return;
+    const request = ++restoreRequest.current;
     let cancelled = false;
     (async () => {
       const { data, error: e } = await supabase
         .from("ai_agent_messages")
         .select("id,role,content,parts_json,created_at")
-        .eq("session_id", sessionId)
+        .eq("session_id", sessionToRestore)
         .order("created_at", { ascending: true });
-      if (cancelled || e || !data || data.length === 0) return;
+      if (cancelled || request !== restoreRequest.current || e || !data) return;
       const restored: UIMessage[] = data.map((row) => {
         const parts = Array.isArray(row.parts_json) && row.parts_json.length > 0
           ? (row.parts_json as UIMessage["parts"])
@@ -247,11 +250,13 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
           parts,
         };
       });
-      restoredForSession.current = sessionId;
-      setMessages(restored);
+      setMessages((current) => current.length > 0 ? current : restored);
     })();
-    return () => { cancelled = true; };
-  }, [sessionId, accessToken, messages.length, setMessages]);
+    return () => {
+      cancelled = true;
+      restoreRequest.current += 1;
+    };
+  }, [sessionToRestore, accessToken, setMessages]);
 
   // Auto-send a prompt handed in by "Ask Bob" buttons / the command bar.
   const sentNonce = useRef<number | null>(null);
@@ -288,8 +293,32 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     if (!accessToken) return;
     const text = input.trim();
     if (!text || status === "submitted" || status === "streaming") return;
+    clearError();
     sendMessage({ text });
     setInput("");
+  };
+
+  const sendQuickPrompt = (text: string) => {
+    if (disabled || isLoading) return;
+    clearError();
+    sendMessage({ text });
+  };
+
+  const startNewConversation = () => {
+    restoreRequest.current += 1;
+    setSessionToRestore(null);
+    setSessionId(null);
+    clearError();
+    setChatKey(`bob-${crypto.randomUUID()}`);
+  };
+
+  const selectConversation = (id: string) => {
+    restoreRequest.current += 1;
+    setSessionToRestore(id);
+    setSessionId(id);
+    clearError();
+    setChatKey(`bob-session-${id}`);
+    setHistoryOpen(false);
   };
 
   const isLoading = status === "submitted" || status === "streaming";
@@ -316,17 +345,24 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     const key = `${last.id}:${(stuck as { type?: string }).type}`;
     if (interruptedNoticeShown.current === key) return;
     interruptedNoticeShown.current = key;
-    const stuckAny = stuck as { state?: string; output?: unknown; errorText?: string };
-    stuckAny.state = "output-error";
-    stuckAny.errorText =
+    const interruptionMessage =
       "Tool run was interrupted (likely exceeded compute budget). Try a narrower window (e.g. days: 7) or rerun.";
+    setMessages((current) => current.map((message) => {
+      if (message.id !== last.id) return message;
+      return {
+        ...message,
+        parts: (message.parts ?? []).map((part) => part === stuck
+          ? ({ ...part, state: "output-error", errorText: interruptionMessage } as UIMessage["parts"][number])
+          : part),
+      };
+    }));
     toast({
       title: "Bob's lookup was interrupted",
       description:
         "The last tool call didn't finish. Try a smaller window (e.g. last 7 days) and rerun.",
       variant: "destructive",
     });
-  }, [isLoading, messages]);
+  }, [isLoading, messages, setMessages]);
 
   // Keep Bob's face in sync with what the chat is doing.
   useEffect(() => { onThinkingChange?.(isLoading); }, [isLoading, onThinkingChange]);
@@ -393,7 +429,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => { setSessionId(s.id); setHistoryOpen(false); }}
+                      onClick={() => selectConversation(s.id)}
                       className={`w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted/60 ${
                         s.id === sessionId ? "bg-muted/60" : ""
                       }`}
@@ -414,7 +450,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
             variant="ghost"
             className="size-7 rounded-full"
             aria-label="New conversation"
-            onClick={() => { setSessionId(null); setMessages([]); }}
+            onClick={startNewConversation}
           >
             <Plus className="size-3.5" />
           </Button>
@@ -516,7 +552,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
             key={p}
             type="button"
             disabled={disabled || isLoading}
-            onClick={() => sendMessage({ text: p })}
+            onClick={() => sendQuickPrompt(p)}
             className="rounded-full px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
             style={{ background: "hsl(var(--bob-bubble) / 0.1)", color: "hsl(var(--bob-bubble))" }}
           >
