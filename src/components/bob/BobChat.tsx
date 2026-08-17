@@ -206,12 +206,11 @@ export function BobChat() {
           const sid = r.headers.get("x-session-id");
           if (sid && sid !== latestContextRef.current?.sessionId) {
             setSessionId(sid);
-            setParams((p) => { const n = new URLSearchParams(p); n.set("session", sid); return n; }, { replace: true });
           }
           return r;
         },
       }),
-    [setParams],
+    [setSessionId],
   );
 
   const { messages, sendMessage, status, error, setMessages } = useChat({
@@ -253,17 +252,16 @@ export function BobChat() {
     return () => { cancelled = true; };
   }, [sessionId, accessToken, messages.length, setMessages]);
 
-  // Auto-send prefilled query from Cmd+K — wait for property to hydrate
+  // Auto-send a prompt handed in by "Ask Bob" buttons / the command bar.
+  const sentNonce = useRef<number | null>(null);
   useEffect(() => {
-    if (initialQ && accessToken && effectivePropertyId && !didPrefill.current) {
-      didPrefill.current = true;
-      sendMessage({ text: initialQ });
-      const next = new URLSearchParams(params);
-      next.delete("q");
-      setParams(next, { replace: true });
-    }
+    if (!pending || !accessToken) return;
+    if (sentNonce.current === pending.nonce) return;
+    sentNonce.current = pending.nonce;
+    sendMessage({ text: pending.text });
+    clearPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQ, accessToken, effectivePropertyId]);
+  }, [pending, accessToken]);
 
   // Load recent sessions for the dropdown
   useEffect(() => {
