@@ -1658,8 +1658,10 @@ function buildTools(ctx: Ctx) {
         const spanDays = Math.max(1, Math.round((toD.getTime() - fromD.getTime()) / 86400_000) + 1);
         const prevTo = new Date(fromD.getTime() - 86400_000);
         const prevFrom = new Date(prevTo.getTime() - (spanDays - 1) * 86400_000);
-        const lyFrom = new Date(Date.UTC(fromD.getUTCFullYear() - 1, fromD.getUTCMonth(), fromD.getUTCDate()));
-        const lyTo = new Date(Date.UTC(toD.getUTCFullYear() - 1, toD.getUTCMonth(), toD.getUTCDate()));
+        // Month over month only. Year-over-year comparisons are deliberately
+        // not fetched — this business is never compared to a year ago.
+        const lmFrom = new Date(Date.UTC(fromD.getUTCFullYear(), fromD.getUTCMonth() - 1, fromD.getUTCDate()));
+        const lmTo = new Date(Date.UTC(toD.getUTCFullYear(), toD.getUTCMonth() - 1, toD.getUTCDate()));
         const now = new Date();
         const y = now.getUTCFullYear();
         const m = now.getUTCMonth();
@@ -1673,10 +1675,10 @@ function buildTools(ctx: Ctx) {
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: f, _to: t });
         // Everything in one parallel batch — this whole diagnosis is a single
         // model step, so the worker never has to survive a long tool chain.
-        const [current, previous, lastYear, months, srcRes, runRes] = await Promise.all([
+        const [current, previous, lastMonth, months, srcRes, runRes] = await Promise.all([
           call(from, to),
           call(d(prevFrom), d(prevTo)),
-          call(d(lyFrom), d(lyTo)),
+          call(d(lmFrom), d(lmTo)),
           Promise.all(monthSpans.map((s) => call(s.from, s.to))),
           ctx.supabase.from("property_data_sources")
             .select("source,is_connected,last_synced_at").eq("property_id", id),
@@ -1705,7 +1707,7 @@ function buildTools(ctx: Ctx) {
           property_id: id,
           current: { range: { from, to }, totals: totalsOf(current.data), by_source: (current.data as { by_source?: unknown })?.by_source ?? null },
           previous_same_length: { range: { from: d(prevFrom), to: d(prevTo) }, totals: totalsOf(previous.data) },
-          last_year_same_period: { range: { from: d(lyFrom), to: d(lyTo) }, totals: totalsOf(lastYear.data) },
+          last_month_same_window: { range: { from: d(lmFrom), to: d(lmTo) }, totals: totalsOf(lastMonth.data) },
           last_6_months_by_month: monthSpans.map((s, idx) => ({ month: s.month, totals: totalsOf(months[idx].data) })),
           feeds,
           any_stale_feed: feeds.some((f) => f.is_connected && f.stale),
