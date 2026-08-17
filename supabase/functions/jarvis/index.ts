@@ -63,12 +63,22 @@ WHAT THE SOURCE LABELS CAN AND CANNOT TELL YOU
   - Never put a number on the gap. No percentages, no ranges, no "roughly a third". Qualitative only: "a meaningful share", "more than the label shows".
   - Never use the word "attribution", or "tracking pixel", "UTM", "cookie", "iOS 14", or any other jargon. Plain English a dog trainer would use.
   - Never change the reported numbers. Report the counts exactly as the cards show them, then explain that the paid line is understated. Never re-add records to Google Ads yourself and never do your own arithmetic on top of the cards.
-  - Judge whether paid is working by the things that ARE measured well: spend, impressions, clicks, total records, good calls, and cost per good call moving together over time.
+  - Judge whether paid is working by the things that ARE measured well: spend, impressions, clicks, total records, good leads, and cost per good lead moving together over time.
 
 THE PLATFORMS ARE A BLACK BOX
 - Modern ad platforms largely run themselves. They decide moment to moment who sees the ad, on which site or app it shows, and what to pay for it. They do not show that reasoning to anyone — not to the client, not to the team managing the account.
-- So when someone asks why a campaign shifted, why costs moved, or what the platform is "doing", say honestly that the platform keeps its decisions to itself, and that the fair test is the outcome over time: are the calls holding up, are the good calls holding up, is the cost per good call reasonable.
+- So when someone asks why a campaign shifted, why costs moved, or what the platform is "doing", say honestly that the platform keeps its decisions to itself, and that the fair test is the outcome over time: are the records holding up, are the good leads holding up, is the cost per good lead reasonable.
 - Then reassure and route: your records show the admin team has already been digging into this. If they would like some extra attention on it, they can note it here and the team will pick it up.
+
+HOW THE ACCOUNT IS TUNED (negative keywords and account changes)
+Clients ask about this. Answer confidently and in plain English — this is the strategy, not an excuse.
+- "How often should negatives be run?" About every 30 days. That spacing is deliberate: it gives the account a full learning cycle to settle between changes.
+- Why not more often: every change to the account, even a good one like adding negative keywords, disturbs how the platform has learned to buy. Running negatives too frequently keeps resetting that learning and squeezes the top of the funnel, so the account sees fewer of the people it should be reaching. Done too often it actively hurts performance.
+- Negatives are also weighed against the budget, so trimming search terms never ends up cannibalizing the volume the account needs to keep learning.
+- The volume reality: we can never outpace search volume, and no negative list can get in front of everything people type. Trying to filter our way to perfection is a losing game.
+- What actually moves the needle: we steer the account from the other end. Feeding strong bottom-of-funnel signals back in — good leads, verified sales, the quality outcome on every record — teaches the platform who the right customer is far more powerfully than trimming the top ever could. We have plenty of that quality data, so that is the lever we pull.
+- "Why haven't negatives been run in X weeks?" Do not treat this as neglect and never imply anyone dropped the ball. Explain the 30-day cadence and the learning-cycle reasoning above, then point to the fair test — records, good leads, cost per good lead, and verified sales over time. If those outcomes look healthy, say so. If they genuinely look wrong, say that plainly and tell them the admin team is already on it and they can flag it here for extra attention.
+- HARD LIMITS on this topic: you cannot see search terms, keyword lists, negative lists, or the account's change history, and you have no date for when negatives were last run. Never invent one, never name a keyword, and never claim a change was or was not made on a given day. Speak to the strategy and the outcomes only, and route specifics to the admin team.
 
 HOW YOU COMPARE TIME (month over month only)
 - The only comparisons you make are: this window versus the same-length window right before it, this month to date versus the same span last month, and the trend across the last several months.
@@ -85,18 +95,18 @@ WHOSE SIDE YOU ARE ON
 CANONICAL LEAD MODEL (non-negotiable math)
 - There are three populations and they are NOT the same size. Always name which one you mean:
   1. Records — every call and form that came in.
-  2. Scored calls — the records call tracking gave a quality outcome. Always smaller than records, because spam and un-scored records are left out.
-  3. Good calls — the scored calls that were real people asking about training.
-- Quality rate = good calls ÷ scored calls. At or above 30% is healthy, 25–30% is worth watching, below 25% needs attention.
-- Never say "leads" on its own. Say "records", "scored calls" or "good calls".
-- Whenever you give a good-call count, give it against its base: "25 of your 45 scored calls were good".
-- "AI-projected sale" is retired. Never mention it, never add it to good calls, never treat it as revenue or a forecast.
-- Verified sales come from the CRM and are separate from call counts. Do not mix them.
+  2. Scored Leads — the records call tracking gave a quality outcome. Always smaller than records, because spam and un-scored records are left out.
+  3. Good Leads — the scored leads that were real people asking about training.
+- Quality rate = good leads ÷ scored leads. At or above 30% is healthy, 25–30% is worth watching, below 25% needs attention.
+- Say "records", "scored leads" or "good leads" — never a bare "leads" on its own, and never call these "calls", because many of them are form fills, not phone calls.
+- Whenever you give a good-lead count, give it against its base: "25 of your 45 scored leads were good".
+- "AI-projected sale" is retired. Never mention it, never add it to good leads, never treat it as revenue or a forecast.
+- Verified sales come from the CRM and are separate from these counts. Do not mix them.
 - When a tool already returns these counts or the quality rate, use those values as given.
 
 MATCH THE DASHBOARD, ALWAYS
 - Every number you say out loud must be a number the user can find on their screen. The lookups are already filtered exactly the way the cards are (the CRM "won" feed is excluded, and on shared ad accounts only campaigns labeled to that location count). Never do your own arithmetic on top of that.
-- Use the same names as the cards: "Records" (all calls + forms), "Scored calls" (records with a quality outcome), "Good Calls" (the good ones), "Verified Sale" (CRM wins).
+- Use the same names as the cards: "Records" (all calls + forms), "Scored Leads" (records with a quality outcome), "Good Leads" (the good ones), "Verified Sale" (CRM wins).
 - Use the date window the dashboard selector is set to, exactly as given in ACTIVE CONTEXT. Do not round it to "the first half of the month" or invent a different comparison window; say the dates the way the card labels them.
 
 NEVER STATE A NUMBER YOU DID NOT JUST FETCH (absolute rule)
@@ -118,7 +128,7 @@ If they say yes or ask for more, then go deeper — and still finish with a new,
 If a real problem is found, beat 2 still says it plainly and tells them to alert the administration team; the offer to explain further comes after that.
 WHAT YOU MAY NEVER OFFER: you have no data about individual training programs, packages, classes, breeds, or services. Never ask, hint, or offer to look into "which training programs are driving the most interest", which package or service is most popular, or anything else broken out by program or offering — you cannot see any of that. If the user asks about program-level demand, say plainly in one sentence that the dashboard tracks calls and sales rather than which program each caller wanted, and offer something you can answer instead.
 NEVER STEER TOWARD FOLLOW-UP OR THE SALES TEAM: do not offer, suggest, hint at, or drift into how fast leads are being called back, whether anyone has responded, how many attempts were made, who is assigned, or how a rep, agent, owner or "team" is handling leads. No "want me to check how quickly the team is getting back to these leads?", no "should I see if anyone has followed up?", no unprompted remark that response time might be worth a look. At many locations it is the owner personally answering, so there is no team to comment on and the framing lands badly. Answer follow-up questions only if the user asks about it outright, and then stay factual and never assign blame. Your subject is marketing: lead quality, the ads, and the sales that came from them.
-Every offer you make must be answerable with what you actually have and must stay in that lane: records, scored calls, good calls and quality rate, cost per good call, ad spend, clicks and impressions, where the calls came from, verified sales and revenue, and month-over-month movement.
+Every offer you make must be answerable with what you actually have and must stay in that lane: records, scored leads, good leads and quality rate, cost per good lead, ad spend, clicks and impressions, where the records came from, verified sales and revenue, and month-over-month movement.
 No bullet lists unless they ask for a list.
 
 REPORTS
@@ -348,6 +358,32 @@ function resolveRange(ctx: Ctx, from?: string, to?: string, days?: number) {
  * this filter or Bob will quote numbers the cards never show.
  */
 const PPC_SOURCE = "Google PPC";
+
+/**
+ * clicks/impressions are not exposed on v_lead_counts_daily — they live on
+ * daily_metrics. Fetch them once and join by date|ad_source|campaign.
+ */
+function trafficKey(date: string, source?: string | null, campaign?: string | null) {
+  return `${date}|${source ?? ""}|${campaign ?? ""}`;
+}
+
+async function fetchTraffic(ctx: Ctx, propertyId: string, from: string, to: string) {
+  const out = new Map<string, { clicks: number; impressions: number }>();
+  const { data } = await ctx.supabase
+    .from("daily_metrics")
+    .select("date,ad_source,campaign,clicks,impressions")
+    .eq("property_id", propertyId)
+    .gte("date", from)
+    .lte("date", to);
+  for (const r of (data ?? []) as Array<{ date: string; ad_source: string | null; campaign: string | null; clicks: number | null; impressions: number | null }>) {
+    const k = trafficKey(r.date, r.ad_source, r.campaign);
+    const cur = out.get(k) ?? { clicks: 0, impressions: 0 };
+    cur.clicks += Number(r.clicks ?? 0);
+    cur.impressions += Number(r.impressions ?? 0);
+    out.set(k, cur);
+  }
+  return out;
+}
 
 async function dashboardScope(ctx: Ctx, propertyId: string) {
   const { data } = await ctx.supabase
@@ -796,12 +832,13 @@ function buildTools(ctx: Ctx) {
         const from = new Date(to.getTime() - i.days * 86400_000);
         const { data, error } = await ctx.supabase
           .from("v_lead_counts_daily")
-          .select("date,ad_source,campaign,cost,clicks,impressions,records,good_leads")
+          .select("date,ad_source,campaign,cost,records,good_leads")
           .eq("property_id", id)
           .gte("date", from.toISOString().slice(0, 10))
           .lte("date", to.toISOString().slice(0, 10))
           .order("date");
         if (error) throw new Error(error.message);
+        const traffic = await fetchTraffic(ctx, id, from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
         const inScope = await dashboardScope(ctx, id);
         const rows = (data ?? []).filter(inScope);
         const byDate = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
@@ -809,10 +846,11 @@ function buildTools(ctx: Ctx) {
         for (const r of rows) {
           const date = r.date;
           const source = r.ad_source ?? "Unknown";
+          const tr = traffic.get(trafficKey(r.date, r.ad_source, r.campaign)) ?? { clicks: 0, impressions: 0 };
           const add = (bucket: { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }) => {
             bucket.cost += Number(r.cost ?? 0);
-            bucket.clicks += Number(r.clicks ?? 0);
-            bucket.impressions += Number(r.impressions ?? 0);
+            bucket.clicks += tr.clicks;
+            bucket.impressions += tr.impressions;
             bucket.calls += Number(r.records ?? 0);
             bucket.good_leads += Number(r.good_leads ?? 0);
           };
@@ -1196,30 +1234,33 @@ function buildTools(ctx: Ctx) {
         const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
         // Canonical Lead Model: read v_lead_counts_daily for total_leads / quality.
         let q = ctx.supabase.from("v_lead_counts_daily")
-          .select("date,ad_source,campaign,cost,impressions,clicks,records,bad_leads,good_leads,projected_sales,verified_sales,total_leads,quality_numerator")
+          .select("date,ad_source,campaign,cost,records,bad_leads,good_leads,projected_sales,verified_sales,total_leads,quality_numerator")
           .eq("property_id", id).gte("date", from).lte("date", to);
         if (i.ad_source) q = q.eq("ad_source", i.ad_source);
         if (i.campaign) q = q.eq("campaign", i.campaign);
         const { data, error } = await q;
         if (error) throw new Error(error.message);
+        // clicks/impressions live on daily_metrics, not on the lead-counts view.
+        const traffic = await fetchTraffic(ctx, id, from, to);
         const inScope = await dashboardScope(ctx, id);
         const rows = (data ?? []).filter(inScope);
         const tot = { cost: 0, impressions: 0, clicks: 0, leads: 0, bad_leads: 0, good_leads: 0, projected_sale: 0, verified_sale: 0, quality_num: 0 };
         const byCampaign = new Map<string, { campaign: string; cost: number; clicks: number; impressions: number; leads: number }>();
         const byDate = new Map<string, { date: string; cost: number; clicks: number; leads: number }>();
         for (const r of rows) {
-          tot.cost += Number(r.cost ?? 0); tot.impressions += Number(r.impressions ?? 0);
-          tot.clicks += Number(r.clicks ?? 0); tot.leads += Number(r.total_leads ?? 0);
+          const tr = traffic.get(trafficKey(r.date, r.ad_source, r.campaign)) ?? { clicks: 0, impressions: 0 };
+          tot.cost += Number(r.cost ?? 0); tot.impressions += tr.impressions;
+          tot.clicks += tr.clicks; tot.leads += Number(r.total_leads ?? 0);
           tot.bad_leads += Number(r.bad_leads ?? 0);
           tot.good_leads += Number(r.good_leads ?? 0); tot.projected_sale += Number(r.projected_sales ?? 0); tot.verified_sale += Number(r.verified_sales ?? 0);
           tot.quality_num += Number(r.quality_numerator ?? 0);
           const ck = r.campaign || "(unknown)";
           const c = byCampaign.get(ck) ?? { campaign: ck, cost: 0, clicks: 0, impressions: 0, leads: 0 };
-          c.cost += Number(r.cost ?? 0); c.clicks += Number(r.clicks ?? 0);
-          c.impressions += Number(r.impressions ?? 0); c.leads += Number(r.total_leads ?? 0);
+          c.cost += Number(r.cost ?? 0); c.clicks += tr.clicks;
+          c.impressions += tr.impressions; c.leads += Number(r.total_leads ?? 0);
           byCampaign.set(ck, c);
           const d = byDate.get(r.date) ?? { date: r.date, cost: 0, clicks: 0, leads: 0 };
-          d.cost += Number(r.cost ?? 0); d.clicks += Number(r.clicks ?? 0); d.leads += Number(r.total_leads ?? 0);
+          d.cost += Number(r.cost ?? 0); d.clicks += tr.clicks; d.leads += Number(r.total_leads ?? 0);
           byDate.set(r.date, d);
         }
         return {
@@ -1236,7 +1277,7 @@ function buildTools(ctx: Ctx) {
             .map(c => ({ ...c, cpl: c.leads > 0 ? c.cost / c.leads : 0, ctr: c.impressions > 0 ? c.clicks / c.impressions : 0 }))
             .sort((a, b) => b.cost - a.cost),
           daily: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
-          sources_used: ["v_lead_counts_daily"],
+          sources_used: ["v_lead_counts_daily", "daily_metrics"],
           caveats: rows.length === 0 ? ["No metrics rows in window"] : [],
         };
       }),

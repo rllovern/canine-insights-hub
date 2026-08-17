@@ -49,7 +49,7 @@ export function JourneyFunnel({
   // The funnel is a CALL-tracking funnel: every stage must come from CTM so the
   // parts sum to the base. CRM wins (t.sales, from ghl_opportunities) are a
   // different population on a different timestamp and are shown separately.
-  // Projected-sale is retired: quality is good calls only.
+  // Projected-sale is retired: quality is good leads only.
   const qualityCount = t.good;
   const priorQualityCount = prior.good;
   const cpgl = qualityCount ? t.spend / qualityCount : 0;
@@ -80,8 +80,8 @@ export function JourneyFunnel({
       </div>
       <p className="text-[11px] text-slate-500 mt-0.5">
         {isAds
-          ? "PPC Spend → PPC Records → Scored calls → Good Calls"
-          : "Ad Spend → Records → Scored calls → Good Calls"}
+          ? "PPC Spend → PPC Records → Scored Leads → Good Leads"
+          : "Ad Spend → Records → Scored Leads → Good Leads"}
       </p>
 
       {/* Single horizontal row: three stages on one baseline, long connector arrows. */}
@@ -116,7 +116,7 @@ export function JourneyFunnel({
           target={QUALITY_TARGETS.green * 100}
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
           tier={tier === "low-sample" ? null : tier}
-          footnote={t.totalLeads ? `${t.good} of ${t.totalLeads} scored calls` : undefined}
+          footnote={t.totalLeads ? `${t.good} of ${t.totalLeads} scored leads` : undefined}
         />
         <LeadMix bad={t.bad} good={t.good} other={t.projected} crmWins={t.sales} total={t.totalLeads} records={t.calls} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
       </div>
@@ -183,7 +183,7 @@ function LeadMix({
         <div className="cursor-help">
           <div className="text-[10.5px] text-slate-500 mb-0.5">Scored mix</div>
           <div className={cn("text-base font-bold tabular-nums", numCls)}>
-            {total} <span className="text-[10.5px] font-normal text-slate-500">scored calls</span>
+            {total} <span className="text-[10.5px] font-normal text-slate-500">scored leads</span>
           </div>
           <div className="text-[10px] text-slate-400 tabular-nums">of {records} records</div>
         </div>
@@ -201,7 +201,7 @@ function LeadMix({
           )}
         </div>
         <div className="text-[10px] text-slate-400 mt-1">
-          These are call-scoring outcomes and sum to {total} scored calls. Spam and un-scored
+          These are quality-scoring outcomes and sum to {total} scored leads. Spam and un-scored
           records are not in this base. CRM wins ({crmWins}) are counted separately by Date marked
           Won and are not part of this mix.
         </div>
@@ -216,7 +216,7 @@ function LeadMix({
   );
 }
 
-/** Records → Scored calls. Makes the drop visible instead of implicit. */
+/** Records → Scored Leads. Makes the drop visible instead of implicit. */
 function ScoredStage({ scored, records, unscored, scoredPct }: { scored: number; records: number; unscored: number; scoredPct: number }) {
   return (
     <Tooltip>
@@ -225,7 +225,7 @@ function ScoredStage({ scored, records, unscored, scoredPct }: { scored: number;
           <div className="flex size-9 items-center justify-center rounded-full bg-sky-100">
             <ClipboardCheck className="size-4 text-sky-600" />
           </div>
-          <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Scored calls</div>
+          <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Scored Leads</div>
           <div className="text-[13px] font-bold tabular-nums mt-0.5 leading-tight text-slate-900">{fmtNumber(scored)}</div>
           <div className="text-[10px] text-slate-500 tabular-nums mt-0.5">
             {records ? `${scored} of ${records} scored` : "—"}
@@ -233,7 +233,7 @@ function ScoredStage({ scored, records, unscored, scoredPct }: { scored: number;
         </div>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-snug">
-        <div className="font-semibold">Scored calls</div>
+        <div className="font-semibold">Scored Leads</div>
         <div className="mt-1">
           The records call tracking gave a quality outcome. {fmtNumber(unscored)} of {fmtNumber(records)} records
           are not in this base — spam, or not scored yet.
@@ -257,7 +257,7 @@ function GoodStage({ good, bad, qualityRate, base, qualityRatePct, hasBase }: { 
           <div className="flex size-9 items-center justify-center rounded-full bg-emerald-100">
             <Award className="size-4 text-emerald-600" />
           </div>
-          <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Good Calls</div>
+          <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Good Leads</div>
           <div className={cn("text-[13px] font-bold tabular-nums mt-0.5 leading-tight", numCls)}>{fmtNumber(good)}</div>
           <div className="text-[10px] text-slate-500 tabular-nums mt-0.5">
             {hasBase ? `${good} of ${base} scored` : "—"}
@@ -265,7 +265,7 @@ function GoodStage({ good, bad, qualityRate, base, qualityRatePct, hasBase }: { 
         </div>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-snug">
-        <div className="font-semibold">Good calls</div>
+        <div className="font-semibold">Good leads</div>
         <div className="mt-1 tabular-nums">
           <span className="text-purple-600 font-medium">{good} good</span>
           <span className="text-slate-400"> · </span>
@@ -273,7 +273,7 @@ function GoodStage({ good, bad, qualityRate, base, qualityRatePct, hasBase }: { 
         </div>
         <div className="text-slate-400 text-[10px] mt-0.5">Source: call scoring (daily_metrics.good_leads)</div>
         {hasBase && (
-          <div className="mt-1 tabular-nums">Quality rate {qualityRatePct.toFixed(1)}% — good ÷ {base} scored calls.</div>
+          <div className="mt-1 tabular-nums">Quality rate {qualityRatePct.toFixed(1)}% — good ÷ {base} scored leads.</div>
         )}
       </TooltipContent>
     </Tooltip>

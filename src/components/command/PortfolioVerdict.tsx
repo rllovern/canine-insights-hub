@@ -49,13 +49,13 @@ function locationVerdict(totals: Totals, grade: QualityGrade) {
   if (grade.tier === "low-sample") {
     return {
       verdict: "good" as const,
-      reason: `Low sample (${grade.n} scored calls in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ scored calls.`,
+      reason: `Low sample (${grade.n} scored leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ scored leads.`,
     };
   }
   const rateText = formatQualityRate(grade.rate);
-  const mix = `${totals.bad} bad · ${totals.good} good of ${grade.n} scored calls`;
+  const mix = `${totals.bad} bad · ${totals.good} good of ${grade.n} scored leads`;
   const rangeText = grade.showInterval
-    ? ` (range ${formatRange(grade)} on ${grade.n} scored calls)`
+    ? ` (range ${formatRange(grade)} on ${grade.n} scored leads)`
     : "";
   const head =
     grade.tier === "green"
@@ -161,8 +161,8 @@ export function PortfolioVerdict({
         const verdict = tierToVerdict(tier);
         const reason =
           tier === "low-sample"
-            ? `Low sample · ${total} scored calls (need ${LOW_SAMPLE_BASE}+)`
-            : `Quality ${formatQualityRate(rate)}${grade.showInterval ? ` (range ${formatRange(grade)}, ${total} scored calls)` : ""} · ${v.bad} bad / ${v.good} good of ${total} scored`;
+            ? `Low sample · ${total} scored leads (need ${LOW_SAMPLE_BASE}+)`
+            : `Quality ${formatQualityRate(rate)}${grade.showInterval ? ` (range ${formatRange(grade)}, ${total} scored leads)` : ""} · ${v.bad} bad / ${v.good} good of ${total} scored`;
         rows.push({ property_id, name: v.name, total, bad: v.bad, good: v.good, projected: v.projected, rate, tier, verdict, reason });
       }
       const order = { critical: 0, warning: 1, good: 2 } as const;
@@ -208,7 +208,7 @@ export function PortfolioVerdict({
               {showWindowHint && (
                 <p>
                   Use a 30-day window for the most reliable verdict. Shorter ranges have
-                  fewer scored calls, which can make the quality rate look unusually high or low.
+                  fewer scored leads, which can make the quality rate look unusually high or low.
                 </p>
               )}
             </TooltipContent></Tooltip>
@@ -232,7 +232,7 @@ export function PortfolioVerdict({
             <div className="text-[12px] font-semibold text-slate-900 truncate">{label}</div>
             <p className="mt-1.5 text-[12px] text-slate-600 leading-snug">
               {lowSample ? (
-                <>Quality not yet meaningful · {grade.n} scored calls</>
+                <>Quality not yet meaningful · {grade.n} scored leads</>
               ) : (
                 <>
                   <span className="font-semibold text-slate-900">Quality {formatQualityRate(grade.rate)}</span>
@@ -242,7 +242,7 @@ export function PortfolioVerdict({
               )}
             </p>
             <p className="mt-1.5 text-[11px] text-slate-500 leading-snug">
-              {t.calls} records · {grade.n} scored calls · {t.good} good · {t.sales} verified sales
+              {t.calls} records · {grade.n} scored leads · {t.good} good · {t.sales} verified sales
             </p>
           </div>
         </div>
