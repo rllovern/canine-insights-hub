@@ -1485,7 +1485,7 @@ function buildTools(ctx: Ctx) {
 
     get_trend_windows: tool({
       description:
-        "Comparison windows for any 'is this normal / why is it down / how does this compare' question: this month to date vs last month same window, previous 30 days vs the 30 before that, year to date, last year same period, and trailing 12 months by month. Call this before characterizing any change over time.",
+        "Comparison windows for any 'is this normal / why is it down / how does this compare' question: this month to date vs last month same window, last month full, previous 30 days vs the 30 before that, and the last 12 months by month. Month over month only — no year-over-year window is returned. Call this before characterizing any change over time.",
       inputSchema: z.object({
         property_id: z.string().uuid().optional(),
       }),
@@ -1509,11 +1509,6 @@ function buildTools(ctx: Ctx) {
           },
           previous_30_days: { from: d(shift(now, -30)), to: d(now) },
           prior_30_days: { from: d(shift(now, -60)), to: d(shift(now, -31)) },
-          year_to_date: { from: d(new Date(Date.UTC(y, 0, 1))), to: d(now) },
-          last_year_same_period: {
-            from: d(new Date(Date.UTC(y - 1, 0, 1))),
-            to: d(new Date(Date.UTC(y - 1, m, day))),
-          },
         };
         const entries = Object.entries(windows);
         const monthSpans: Array<{ month: string; from: string; to: string }> = [];
