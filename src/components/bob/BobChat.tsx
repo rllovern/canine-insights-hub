@@ -33,6 +33,20 @@ const QUICK_PROMPTS = [
 const GREETING =
   "Hi, I'm Bob! I keep an eye on your ads, calls, leads and sales — and I explain them in plain English. Ask me anything, or tap a question below.";
 
+// Plain-English label for whatever lookup Bob is running right now.
+const TOOL_ACTIVITY: Record<string, string> = {
+  list_locations: "Checking which locations you can see…",
+  get_property_context: "Checking your location setup…",
+  get_portfolio_trend: "Rolling up all your locations…",
+  get_trend_windows: "Comparing this period to before…",
+  get_source_health: "Checking your data feeds…",
+  get_call_summary: "Reading through your calls…",
+  get_lead_quality: "Sorting your leads by quality…",
+  get_ad_performance: "Looking at your ad spend…",
+  get_budget_pacing: "Checking your budget pacing…",
+  get_sales_summary: "Pulling your sales from the CRM…",
+};
+
 type LatestBobContext = {
   propertyId: string | null;
   propertyName: string | null;
