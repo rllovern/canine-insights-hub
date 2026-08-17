@@ -41,12 +41,12 @@ export const qualityRate = (c: LeadCounts) => {
  */
 export const otherScored = (c: LeadCounts) => c.projected;
 
-/** One vocabulary, every surface. Never "leads", never "projected". */
+/** One vocabulary, every surface. Never "calls" (many records are forms), never "projected". */
 export const LEAD_LABELS = {
   records: "Records",
-  scored: "Scored calls",
-  good: "Good Calls",
-  bad: "Bad calls",
+  scored: "Scored Leads",
+  good: "Good Leads",
+  bad: "Bad leads",
   other: "Other scored",
   verified: "Verified Sale",
 } as const;
