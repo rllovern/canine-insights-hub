@@ -10,7 +10,7 @@ export function BobLauncher() {
   return (
     <div
       className={cn(
-        "fixed right-6 bottom-20 sm:bottom-6 z-40 flex items-end gap-3",
+        "fixed right-3 bottom-3 sm:right-6 sm:bottom-6 z-40 flex items-end gap-3",
         open && "pointer-events-none opacity-0 scale-90 transition-all",
       )}
     >
