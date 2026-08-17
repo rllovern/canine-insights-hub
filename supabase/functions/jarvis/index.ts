@@ -713,13 +713,14 @@ function buildTools(ctx: Ctx) {
         const from = new Date(to.getTime() - i.days * 86400_000);
         const { data, error } = await ctx.supabase
           .from("v_lead_counts_daily")
-          .select("date,ad_source,cost,clicks,impressions,records,good_leads")
+          .select("date,ad_source,campaign,cost,clicks,impressions,records,good_leads")
           .eq("property_id", id)
           .gte("date", from.toISOString().slice(0, 10))
           .lte("date", to.toISOString().slice(0, 10))
           .order("date");
         if (error) throw new Error(error.message);
-        const rows = data ?? [];
+        const inScope = await dashboardScope(ctx, id);
+        const rows = (data ?? []).filter(inScope);
         const byDate = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
         const bySource = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
         for (const r of rows) {
