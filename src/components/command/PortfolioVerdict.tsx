@@ -18,7 +18,6 @@ import {
   LOW_SAMPLE_BASE,
   LOW_SAMPLE_CAVEAT,
   formatQualityRate,
-  PROJECTED_LABEL,
 } from "@/lib/leadModel";
 import { gradeQuality, formatRange, confidenceLabel, type QualityGrade } from "@/lib/leadModel";
 
