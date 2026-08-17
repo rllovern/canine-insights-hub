@@ -1489,6 +1489,51 @@ function buildTools(ctx: Ctx) {
       }),
     }),
 
+    get_portfolio_trend: tool({
+      description:
+        "ALL-LOCATIONS ROLL-UP. One call that returns, for every location in scope, the current-window totals and the same-length previous window, plus the portfolio total. Use this INSTEAD of calling the per-location tools once per location whenever the question is about all locations, a portfolio trend, or 'why are my leads down' with no single location selected. Only after this identifies which locations moved should you drill into one of them.",
+      inputSchema: z.object({
+        from: z.string().optional(),
+        to: z.string().optional(),
+        days: z.number().optional(),
+      }),
+      execute: wrap(ctx, "get_portfolio_trend", async (i) => {
+        const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
+        const spanDays = Math.max(
+          1,
+          Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400_000) + 1,
+        );
+        const prevTo = new Date(new Date(from).getTime() - 86400_000);
+        const prevFrom = new Date(prevTo.getTime() - (spanDays - 1) * 86400_000);
+        const d = (x: Date) => x.toISOString().slice(0, 10);
+        const props = ctx.allowedProperties;
+        const results = await Promise.all(
+          props.flatMap((p) => [
+            ctx.supabase.rpc("ai_assistant_context", { _property_id: p.id, _from: from, _to: to }),
+            ctx.supabase.rpc("ai_assistant_context", { _property_id: p.id, _from: d(prevFrom), _to: d(prevTo) }),
+          ]),
+        );
+        const locations = props.map((p, idx) => ({
+          property_id: p.id,
+          name: p.name,
+          current: totalsOf(results[idx * 2].data),
+          previous: totalsOf(results[idx * 2 + 1].data),
+        }));
+        const sum = (key: string, pick: "current" | "previous") =>
+          locations.reduce((acc, l) => acc + Number((l[pick] as Record<string, unknown> | null)?.[key] ?? 0), 0);
+        const keys = ["calls", "good_leads", "bad_leads", "spam", "projected_sale", "verified_sale", "cost", "clicks", "impressions"];
+        const portfolio: Record<string, { current: number; previous: number }> = {};
+        for (const k of keys) portfolio[k] = { current: sum(k, "current"), previous: sum(k, "previous") };
+        return {
+          current_range: { from, to },
+          previous_range: { from: d(prevFrom), to: d(prevTo) },
+          locations,
+          portfolio_totals: portfolio,
+          note: "Totals only. Drill into a single location with the per-location tools once you know which one moved.",
+        };
+      }),
+    }),
+
     get_source_health: tool({
       description:
         "Freshness and failure state of every connected data feed for a property (ads, call tracking, CRM, analytics): connected flag, last sync time, hours since last sync, and the latest sync run status. Call this before blaming a drop on performance — a stale feed looks exactly like a decline.",
