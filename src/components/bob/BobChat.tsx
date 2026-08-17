@@ -469,8 +469,7 @@ export function BobChat() {
             </PromptInputFooter>
           </PromptInput>
         </div>
-      </Card>
-
+      </div>
     </div>
   );
 }
