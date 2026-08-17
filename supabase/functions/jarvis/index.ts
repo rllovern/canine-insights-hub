@@ -1001,8 +1001,9 @@ function buildTools(ctx: Ctx) {
           if (i.campaign) q = q.eq("campaign", i.campaign);
           const { data, error } = await q;
           if (error) throw new Error(error.message);
-          return data ?? [];
+          return (data ?? []).filter(inScope);
         };
+        const inScope = await dashboardScope(ctx, id);
         const [cur, prev] = await Promise.all([
           fetchRange(i.current_from, i.current_to),
           fetchRange(i.previous_from, i.previous_to),
