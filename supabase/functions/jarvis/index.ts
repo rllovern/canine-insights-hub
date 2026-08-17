@@ -264,6 +264,42 @@ function logToolContext(name: string, input: ToolPropertyInput, ctx: Ctx) {
   });
 }
 
+/**
+ * Does this question need live data? Anything about performance, counts, money,
+ * time windows or comparisons does. Only pure chit-chat ("thanks", "who are
+ * you") does not. When true we force a tool call on the first step so the model
+ * physically cannot answer from memory.
+ */
+const DATA_QUESTION_RE = new RegExp(
+  [
+    "record", "call", "lead", "good", "quality", "score", "spam", "sale", "sold", "revenue",
+    "won", "win", "close", "convert", "conversion", "spend", "budget", "cost", "cpl", "cpgl",
+    "click", "impression", "ctr", "source", "campaign", "ads?\\b", "google", "traffic",
+    "trend", "month", "week", "day", "quarter", "year", "compare", "vs\\b", "versus",
+    "perform", "doing", "how (is|are|'s|has)", "why (is|are|did|has)", "what (is|are|'s|happened)",
+    "up\\b", "down\\b", "drop", "decline", "increase", "better", "worse", "pace", "target",
+    "speed", "respond", "response", "follow", "stale", "pipeline", "appointment", "\\d",
+  ].join("|"),
+  "i",
+);
+function needsFreshData(text: string) {
+  return DATA_QUESTION_RE.test(text ?? "");
+}
+
+/** Any digit that isn't part of a date the context already supplied. */
+function statesNumbers(text: string) {
+  return /\d/.test(text ?? "");
+}
+
+function _unusedLogToolContext(name: string, input: ToolPropertyInput, ctx: Ctx) {
+  if (!DEBUG) return;
+  console.log("[Jarvis Tool Context]", {
+    toolName: name,
+    inputPropertyId: input?.property_id ?? input?.propertyId ?? null,
+    fallbackPropertyIdFromSession: ctx.defaultPropertyId,
+  });
+}
+
 function resolveProperty(ctx: Ctx, input?: string | ToolPropertyInput | null, toolName?: string) {
   const raw = typeof input === "string" || input == null
     ? input
