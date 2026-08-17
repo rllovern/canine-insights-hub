@@ -453,7 +453,13 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
           ) : (
             <>
               {messages.length === 0 && <BobBubble>{GREETING}</BobBubble>}
-              {messages.map((m) => (
+              {messages.map((m) => {
+                const textParts = (m.parts ?? []).filter(
+                  (p) => p.type === "text" && (p as { text?: string }).text?.trim(),
+                );
+                // Tool calls are internal plumbing — never shown.
+                if (textParts.length === 0) return null;
+                return (
                 <div
                   key={m.id}
                   className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
@@ -471,33 +477,27 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                         : undefined
                     }
                   >
-                    {m.parts.map((part, i) => {
-                      if (part.type === "text") {
-                        return <MessageResponse key={i}>{part.text}</MessageResponse>;
-                      }
-                      if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
-                        const tp = part as any;
-                        const name = tp.toolName ?? tp.type.replace(/^tool-/, "");
-                        return (
-                          <Tool key={i} defaultOpen={false} className="my-1 bg-background/60 text-xs">
-                            <ToolHeader
-                              type={tp.type === "dynamic-tool" ? "dynamic-tool" : (tp.type as any)}
-                              state={tp.state}
-                              toolName={tp.type === "dynamic-tool" ? name : (undefined as any)}
-                              title={name}
-                            />
-                            <ToolContent>
-                              <ToolInput input={tp.input} />
-                              <ToolOutput output={tp.output} errorText={tp.errorText} />
-                            </ToolContent>
-                          </Tool>
-                        );
-                      }
-                      return null;
-                    })}
+                    {textParts.map((part, i) => (
+                      <MessageResponse key={i}>{(part as { text: string }).text}</MessageResponse>
+                    ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
+              {droppedAnswer && (
+                <div className="flex justify-start">
+                  <div className="max-w-[92%] rounded-[18px] rounded-bl-[4px] bg-muted px-3.5 py-2.5 text-sm">
+                    That one got cut off before I could answer.{" "}
+                    <button
+                      type="button"
+                      className="underline underline-offset-2"
+                      onClick={() => regenerate()}
+                    >
+                      Tap to try again
+                    </button>
+                  </div>
+                </div>
+              )}
               {isLoading && (
                 <div className="flex justify-start">
                   <div
