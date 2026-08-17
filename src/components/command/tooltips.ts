@@ -30,7 +30,7 @@ export const TIPS = {
   topOpps:
     "Auto-detected gaps ranked by severity across CPL/CPGL/SLA efficiency. Dollar impact stays pending until the cost-impact formula is anchored to stable verified source counts and unit costs.",
   portfolioVerdict:
-    "One-glance state of the business per location, judged on the canonical quality rate = good leads ÷ scored leads. Target ≥30% green, 25–29% amber, <25% red (graded on the Wilson interval, so thin samples are not called critical). The mix breakdown counts call-scoring outcomes. 'Verified sales' are closed/won deals from the CRM and are a separate figure.",
+    "One-glance state of the business per location, judged on the canonical quality rate = good leads ÷ scored leads. Target ≥30% green, 25–29% amber, <25% red (graded on the Wilson interval, so thin samples are not called critical). The mix breakdown counts quality-scoring outcomes. 'Verified sales' are closed/won deals from the CRM and are a separate figure.",
   adSpend:
     "Google PPC spend over the selected date range. Source: daily_metrics.cost where ad_source = 'Google PPC'.",
   adCpl:

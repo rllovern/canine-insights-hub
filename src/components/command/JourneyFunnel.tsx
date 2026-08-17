@@ -201,7 +201,7 @@ function LeadMix({
           )}
         </div>
         <div className="text-[10px] text-slate-400 mt-1">
-          These are call-scoring outcomes and sum to {total} scored leads. Spam and un-scored
+          These are quality-scoring outcomes and sum to {total} scored leads. Spam and un-scored
           records are not in this base. CRM wins ({crmWins}) are counted separately by Date marked
           Won and are not part of this mix.
         </div>

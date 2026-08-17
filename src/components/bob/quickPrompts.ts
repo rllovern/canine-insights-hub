@@ -50,14 +50,14 @@ const TEMPLATES: Template[] = [
   {
     id: "quality-rate",
     theme: "quality",
-    label: () => "Are my calls good quality?",
-    question: (p) => `Are the calls coming into ${p} good quality? Give me good leads against scored leads.`,
+    label: () => "Are my leads good quality?",
+    question: (p) => `Are the records coming into  good quality? Give me good leads against scored leads.`,
   },
   {
     id: "quality-mix",
     theme: "quality",
-    label: () => "Where are my best calls coming from?",
-    question: (p) => `Where are the best calls for ${p} coming from?`,
+    label: () => "Where are my best leads coming from?",
+    question: (p) => `Where are the best leads for  coming from?`,
   },
   {
     id: "spend-working",
