@@ -1689,20 +1689,30 @@ serve(async (req) => {
 
     // Resolve the set of locations this user may actually be answered about.
     // The dashboard location selector narrows it; access control caps it.
-    const { data: allProps } = await supabase
+    // One round-trip: the user's own RLS decides what they can see, instead of
+    // one user_can_access_property RPC per property.
+    const { data: visibleProps, error: visibleErr } = await userSupabase
       .from("properties")
       .select("id,name")
       .eq("is_active", true)
       .order("name");
-    const accessChecks = await Promise.all(
-      (allProps ?? []).map(async (p) => {
-        const { data: ok } = await supabase.rpc("user_can_access_property", {
-          _user_id: user.id, _property_id: p.id,
-        });
-        return ok ? { id: p.id as string, name: p.name as string } : null;
-      }),
+    let accessible = ((visibleProps ?? []) as Array<{ id: string; name: string }>).map(
+      (p) => ({ id: p.id, name: p.name }),
     );
-    const accessible = accessChecks.filter(Boolean) as { id: string; name: string }[];
+    if (visibleErr || accessible.length === 0) {
+      // Fallback to the explicit per-property check if RLS returned nothing.
+      const { data: allProps } = await supabase
+        .from("properties").select("id,name").eq("is_active", true).order("name");
+      const checks = await Promise.all(
+        (allProps ?? []).map(async (p) => {
+          const { data: ok } = await supabase.rpc("user_can_access_property", {
+            _user_id: user.id, _property_id: p.id,
+          });
+          return ok ? { id: p.id as string, name: p.name as string } : null;
+        }),
+      );
+      accessible = checks.filter(Boolean) as { id: string; name: string }[];
+    }
 
     if (scopeMode === "property") {
       if (!propertyId || !accessible.some((p) => p.id === propertyId)) {
