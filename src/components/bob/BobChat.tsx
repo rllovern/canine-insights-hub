@@ -9,14 +9,9 @@ import { useDashboard } from "@/contexts/DashboardContext";
 import { useBob } from "@/contexts/BobContext";
 import { rangeToISO } from "@/lib/metrics";
 import {
-  Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton,
+  Conversation, ConversationContent, ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import {
-  Message, MessageContent, MessageResponse,
-} from "@/components/ai-elements/message";
-import {
-  PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit,
-} from "@/components/ai-elements/prompt-input";
+import { MessageResponse } from "@/components/ai-elements/message";
 import {
   Tool, ToolHeader, ToolContent, ToolInput, ToolOutput,
 } from "@/components/ai-elements/tool";
@@ -292,11 +287,10 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     return () => window.clearTimeout(t);
   }, [sessionId, status, drawerOpen]);
 
-  const onSubmit = (msg: { text: string }, evt: React.FormEvent) => {
-    evt.preventDefault();
+  const submit = () => {
     if (!accessToken) return;
-    const text = msg.text.trim();
-    if (!text) return;
+    const text = input.trim();
+    if (!text || status === "submitted" || status === "streaming") return;
     sendMessage({ text });
     setInput("");
   };
