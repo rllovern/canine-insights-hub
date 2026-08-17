@@ -185,11 +185,11 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "assistant",
-    roles: STAFF_ROLES,
     route: "/command",
     target: t("bob-launcher"),
     title: "Bob, your assistant",
-    body: "Ask questions in normal words, like \"how many good leads did Nova get last month?\" and he answers using your real data. He lives behind this button in the bottom-right corner of every page.",
+    body: "This is Bob. Ask him questions in normal words — like \"how many good leads did we get last month?\" — and he answers using your real numbers from this dashboard. He follows the location and date range you picked at the top.",
+    action: "He lives behind this face in the bottom-right corner of every page. He sticks to leads, ads and verified sales.",
   },
   {
     id: "finish",
