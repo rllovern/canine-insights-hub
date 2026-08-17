@@ -60,6 +60,15 @@ CANONICAL LEAD MODEL (non-negotiable math)
 - When a tool already returns total leads or quality rate, use those values as given.
 - Explain these plainly when you use them: "good leads means real people asking about training".
 
+MATCH THE DASHBOARD, ALWAYS
+- Every number you say out loud must be a number the user can find on their screen. The lookups are already filtered exactly the way the cards are (the CRM "won" feed is excluded, and on shared ad accounts only campaigns labeled to that location count). Never do your own arithmetic on top of that.
+- Use the same names as the cards: "Records" (all calls + forms), "Qualified Calls" (good leads), "Qualified Leads" (good leads plus AI-projected-sale calls), "Verified Sale" (CRM wins), "Lead Mix" (bad + good + AI-projected-sale).
+- Use the date window the dashboard selector is set to, exactly as given in ACTIVE CONTEXT. Do not round it to "the first half of the month" or invent a different comparison window; say the dates the way the card labels them.
+
+HOW YOUR MESSAGE IS DISPLAYED
+- Your answer is rendered as chat bubbles, one per paragraph. Separate each beat with a blank line so it lands as its own bubble. Keep paragraphs short — two to four sentences.
+- Plain sentences only: no markdown headings, no bold, no tables, no bullet lists unless the user asks for a list.
+
 HOW EVERY ANSWER IS SHAPED (always these three beats, in this order)
 1. Acknowledge the question in one short line that shows you understood it and names the location and window in normal words. Example: "Good question — you're looking at calls for Colorado Springs over the last thirty days."
 2. Give the brief answer: two to four plain sentences, conclusion first. At most one or two numbers, only if they carry the point. Keep this short even when you ran a dozen lookups behind the scenes — the detail is yours to offer, not to dump.
@@ -242,17 +251,42 @@ function resolveProperty(ctx: Ctx, input?: string | ToolPropertyInput | null, to
 }
 function resolveRange(ctx: Ctx, from?: string, to?: string, days?: number) {
   if (from && to) return { from, to };
+  // The dashboard's date selector is the source of truth. A tool-supplied
+  // `days` may never silently re-window the answer away from the cards.
+  if (ctx.defaultFrom && ctx.defaultTo) {
+    return { from: ctx.defaultFrom, to: ctx.defaultTo };
+  }
   if (days) {
     const t = new Date();
     const f = new Date(t.getTime() - days * 86400_000);
     return { from: f.toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) };
   }
-  if (ctx.defaultFrom && ctx.defaultTo) {
-    return { from: ctx.defaultFrom, to: ctx.defaultTo };
-  }
   const t = new Date();
   const f = new Date(t.getTime() - 30 * 86400_000);
   return { from: f.toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) };
+}
+
+/**
+ * Dashboard scope rules, mirrored exactly (see useCommandData.fetchWindow):
+ *  - the `GHL Won` disposition feed is not a media source and is excluded
+ *  - on shared Google Ads accounts, only campaigns labeled to this location count
+ * Any row-level read of daily_metrics / v_lead_counts_daily must run through
+ * this filter or Bob will quote numbers the cards never show.
+ */
+const PPC_SOURCE = "Google PPC";
+
+async function dashboardScope(ctx: Ctx, propertyId: string) {
+  const { data } = await ctx.supabase
+    .from("campaign_labels")
+    .select("campaign")
+    .eq("property_id", propertyId);
+  const allowed = (data ?? []).map((r: { campaign: string }) => r.campaign);
+  const set = allowed.length > 0 ? new Set(allowed) : null;
+  return (row: { ad_source?: string | null; campaign?: string | null }) => {
+    if ((row.ad_source ?? "") === "GHL Won") return false;
+    if (set && (row.ad_source ?? "") === PPC_SOURCE && !set.has(row.campaign ?? "")) return false;
+    return true;
+  };
 }
 
 function secondsBetween(a: string | null | undefined, b: string | null | undefined) {
@@ -688,13 +722,14 @@ function buildTools(ctx: Ctx) {
         const from = new Date(to.getTime() - i.days * 86400_000);
         const { data, error } = await ctx.supabase
           .from("v_lead_counts_daily")
-          .select("date,ad_source,cost,clicks,impressions,records,good_leads")
+          .select("date,ad_source,campaign,cost,clicks,impressions,records,good_leads")
           .eq("property_id", id)
           .gte("date", from.toISOString().slice(0, 10))
           .lte("date", to.toISOString().slice(0, 10))
           .order("date");
         if (error) throw new Error(error.message);
-        const rows = data ?? [];
+        const inScope = await dashboardScope(ctx, id);
+        const rows = (data ?? []).filter(inScope);
         const byDate = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
         const bySource = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
         for (const r of rows) {
@@ -976,8 +1011,9 @@ function buildTools(ctx: Ctx) {
           if (i.campaign) q = q.eq("campaign", i.campaign);
           const { data, error } = await q;
           if (error) throw new Error(error.message);
-          return data ?? [];
+          return (data ?? []).filter(inScope);
         };
+        const inScope = await dashboardScope(ctx, id);
         const [cur, prev] = await Promise.all([
           fetchRange(i.current_from, i.current_to),
           fetchRange(i.previous_from, i.previous_to),
@@ -1092,7 +1128,8 @@ function buildTools(ctx: Ctx) {
         if (i.campaign) q = q.eq("campaign", i.campaign);
         const { data, error } = await q;
         if (error) throw new Error(error.message);
-        const rows = data ?? [];
+        const inScope = await dashboardScope(ctx, id);
+        const rows = (data ?? []).filter(inScope);
         const tot = { cost: 0, impressions: 0, clicks: 0, leads: 0, bad_leads: 0, good_leads: 0, projected_sale: 0, verified_sale: 0, quality_num: 0 };
         const byCampaign = new Map<string, { campaign: string; cost: number; clicks: number; impressions: number; leads: number }>();
         const byDate = new Map<string, { date: string; cost: number; clicks: number; leads: number }>();

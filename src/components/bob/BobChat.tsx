@@ -11,7 +11,6 @@ import { rangeToISO } from "@/lib/metrics";
 import {
   Conversation, ConversationContent, ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import { MessageResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -485,29 +484,47 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                 );
                 // Tool calls are internal plumbing — never shown.
                 if (textParts.length === 0) return null;
+                const text = textParts.map((p) => (p as { text: string }).text).join("\n\n");
+                // One bubble per paragraph, so the acknowledgement beat and the
+                // explanation arrive as separate messages like a real chat.
+                const chunks =
+                  m.role === "user"
+                    ? [text.trim()]
+                    : text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
+                if (chunks.length === 0) return null;
                 return (
-                <div
-                  key={m.id}
-                  className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-                  style={{ animation: "msgIn .25s ease" }}
-                >
-                  <div
-                    className={
-                      m.role === "user"
-                        ? "max-w-[85%] rounded-[18px] rounded-br-[4px] px-3.5 py-2.5 text-sm"
-                        : "max-w-[92%] rounded-[18px] rounded-bl-[4px] bg-muted px-3.5 py-2.5 text-sm text-foreground"
-                    }
-                    style={
-                      m.role === "user"
-                        ? { background: "hsl(var(--bob-bubble))", color: "hsl(var(--bob-bubble-foreground))" }
-                        : undefined
-                    }
-                  >
-                    {textParts.map((part, i) => (
-                      <MessageResponse key={i}>{(part as { text: string }).text}</MessageResponse>
-                    ))}
+                  <div key={m.id} className="flex flex-col gap-1.5">
+                    {chunks.map((chunk, i) => {
+                      const isLast = i === chunks.length - 1;
+                      return (
+                        <div
+                          key={i}
+                          className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                          style={{ animation: "msgIn .25s ease" }}
+                        >
+                          <div
+                            className={[
+                              "min-w-0 whitespace-pre-wrap break-words px-3.5 py-2.5 text-sm leading-relaxed rounded-[18px]",
+                              m.role === "user"
+                                ? `max-w-[85%] ${isLast ? "rounded-br-[4px]" : ""}`
+                                : `max-w-[92%] bg-muted text-foreground ${isLast ? "rounded-bl-[4px]" : ""}`,
+                            ].join(" ")}
+                            style={{
+                              overflowWrap: "anywhere",
+                              ...(m.role === "user"
+                                ? {
+                                    background: "hsl(var(--bob-bubble))",
+                                    color: "hsl(var(--bob-bubble-foreground))",
+                                  }
+                                : {}),
+                            }}
+                          >
+                            {chunk}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
                 );
               })}
               {droppedAnswer && (

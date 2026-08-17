@@ -2421,6 +2421,10 @@ export type Database = {
         Args: { _from: string; _property_id: string; _to: string }
         Returns: Json
       }
+      ai_assistant_context_multi: {
+        Args: { _from: string; _property_ids: string[]; _to: string }
+        Returns: Json
+      }
       can_access_property: {
         Args: { _property_id: string; _user_id: string }
         Returns: boolean
