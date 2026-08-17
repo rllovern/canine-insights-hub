@@ -365,6 +365,8 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
 
   useEffect(() => { if (error && setMood) setMood("concerned", 5000); }, [error, setMood]);
 
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   // The user only wants a "thinking" state — no per-tool activity chatter.
   const activity = isLoading ? BOB_STATUS.thinking : null;
 
