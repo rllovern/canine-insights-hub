@@ -62,7 +62,9 @@ export type Database = {
           parts_json: Json | null
           role: string
           session_id: string
+          tool_backed: boolean | null
           tool_calls_json: Json | null
+          tool_run_count: number
         }
         Insert: {
           content?: string | null
@@ -72,7 +74,9 @@ export type Database = {
           parts_json?: Json | null
           role: string
           session_id: string
+          tool_backed?: boolean | null
           tool_calls_json?: Json | null
+          tool_run_count?: number
         }
         Update: {
           content?: string | null
@@ -82,7 +86,9 @@ export type Database = {
           parts_json?: Json | null
           role?: string
           session_id?: string
+          tool_backed?: boolean | null
           tool_calls_json?: Json | null
+          tool_run_count?: number
         }
         Relationships: [
           {
