@@ -14,13 +14,12 @@ type Props = {
 
 /**
  * Embedded Bob entry point. Renders a small "Ask Bob" / "Run with Bob"
- * button that deep-links to /assistant with the prompt (and optionally a date
- * range). The location is always taken from the sidebar location selector.
+ * button that opens the Bob drawer with the prompt prefilled and sent. The
+ * location and dates always come from the sidebar selectors.
  */
 export function AskBobButton({
   prompt,
   label = "Ask Bob",
-  range,
   variant = "outline",
   size = "sm",
   className,
