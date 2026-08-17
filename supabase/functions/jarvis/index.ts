@@ -1577,13 +1577,19 @@ serve(async (req) => {
       );
     }
     const messages = rawMessages as UIMessage[];
+    const bodyScope = (body.scope ?? null) as
+      | { mode?: string; propertyId?: string | null; propertyIds?: string[] | null; label?: string | null }
+      | null;
     const activePropertyId =
+      (bodyScope?.mode === "agency" ? null : bodyScope?.propertyId ?? null) ??
       (body.propertyId as string | undefined) ??
       (body.property_id as string | undefined) ??
       (body.context?.propertyId as string | undefined) ??
       (body.context?.property_id as string | undefined) ??
       null;
-    const propertyId = activePropertyId;
+    const scopeMode: "agency" | "property" =
+      bodyScope?.mode === "agency" ? "agency" : (activePropertyId ? "property" : "agency");
+    const propertyId = scopeMode === "property" ? activePropertyId : null;
     const bodyDateRange = body.dateRange ?? body.context?.dateRange ?? null;
     const from = (body.from as string | undefined) ?? (bodyDateRange?.from as string | undefined) ?? null;
     const to = (body.to as string | undefined) ?? (bodyDateRange?.to as string | undefined) ?? null;
@@ -1608,17 +1614,33 @@ serve(async (req) => {
       { global: { headers: { Authorization: `Bearer ${userJwt}` } } },
     );
 
-    // Verify property access if provided
-    if (propertyId) {
-      const { data: ok } = await supabase.rpc("user_can_access_property", {
-        _user_id: user.id, _property_id: propertyId,
-      });
-      if (!ok) {
+    // Resolve the set of locations this user may actually be answered about.
+    // The dashboard location selector narrows it; access control caps it.
+    const { data: allProps } = await supabase
+      .from("properties")
+      .select("id,name")
+      .eq("is_active", true)
+      .order("name");
+    const accessChecks = await Promise.all(
+      (allProps ?? []).map(async (p) => {
+        const { data: ok } = await supabase.rpc("user_can_access_property", {
+          _user_id: user.id, _property_id: p.id,
+        });
+        return ok ? { id: p.id as string, name: p.name as string } : null;
+      }),
+    );
+    const accessible = accessChecks.filter(Boolean) as { id: string; name: string }[];
+
+    if (scopeMode === "property") {
+      if (!propertyId || !accessible.some((p) => p.id === propertyId)) {
         return new Response(JSON.stringify({ error: "Property access denied" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
+    const allowedProperties = scopeMode === "property"
+      ? accessible.filter((p) => p.id === propertyId)
+      : accessible;
 
     // Create or update session
     if (!sessionId) {
@@ -1663,6 +1685,8 @@ serve(async (req) => {
       defaultPropertyId: propertyId,
       defaultFrom: from,
       defaultTo: to,
+      scopeMode,
+      allowedProperties,
     };
 
     const gateway = createOpenAICompatible({
@@ -1671,7 +1695,10 @@ serve(async (req) => {
       headers: { "Lovable-API-Key": key },
     });
 
-    const contextHeader = `\n\nACTIVE CONTEXT:\n- property_id: ${propertyId ?? "(none)"}\n- date_range: ${from ?? "?"} → ${to ?? "?"}`;
+    const scopeLine = scopeMode === "property"
+      ? `SINGLE LOCATION: ${allowedProperties[0]?.name ?? "selected location"} (property_id ${propertyId})`
+      : `ALL LOCATIONS (${allowedProperties.length}): ${allowedProperties.map((p) => `${p.name} [${p.id}]`).join(", ") || "(none)"}`;
+    const contextHeader = `\n\nACTIVE CONTEXT:\n- scope: ${scopeLine}\n- date_range: ${from ?? "?"} → ${to ?? "?"}\n\nSCOPE RULES (non-negotiable):\n- The dashboard location selector is the only thing that decides which locations you may discuss.\n- In SINGLE LOCATION scope, every answer and every tool call is about that location only. If the user asks about another location by name, say you're currently looking at ${allowedProperties[0]?.name ?? "the selected location"} and they should switch the location selector. Never pull or guess another location's numbers.\n- In ALL LOCATIONS scope, call list_locations first, then run the per-location tools once per location id and roll up or compare, naming each location explicitly.\n- Never mention or infer data about a location that is not listed above.`;
 
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
