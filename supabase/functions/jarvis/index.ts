@@ -259,6 +259,12 @@ function secondsBetween(a: string | null | undefined, b: string | null | undefin
   return Number.isFinite(diff) ? Math.max(0, Math.round(diff / 1000)) : null;
 }
 
+/** Pull just the totals block out of an ai_assistant_context payload. */
+function totalsOf(data: unknown) {
+  const t = (data as { totals?: Record<string, unknown> } | null)?.totals;
+  return t ?? null;
+}
+
 function percentile(values: number[], p: number) {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -1449,23 +1455,82 @@ function buildTools(ctx: Ctx) {
           },
         };
         const entries = Object.entries(windows);
-        const results = await Promise.all(entries.map(([, w]) =>
-          ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: w.from, _to: w.to })
-        ));
-        const out: Record<string, unknown> = {};
-        entries.forEach(([k, w], idx) => {
-          out[k] = { range: w, data: results[idx].data ?? null, error: results[idx].error?.message ?? null };
-        });
-        const months: Array<{ month: string; data: unknown }> = [];
+        const monthSpans: Array<{ month: string; from: string; to: string }> = [];
         for (let back = 11; back >= 0; back--) {
           const start = new Date(Date.UTC(y, m - back, 1));
           const end = new Date(Date.UTC(y, m - back + 1, 0));
-          const { data } = await ctx.supabase.rpc("ai_assistant_context", {
-            _property_id: id, _from: d(start), _to: d(end > now ? now : end),
+          monthSpans.push({
+            month: d(start).slice(0, 7),
+            from: d(start),
+            to: d(end > now ? now : end),
           });
-          months.push({ month: d(start).slice(0, 7), data: data ?? null });
         }
+        // One parallel batch for the comparison windows AND all 12 months —
+        // the monthly loop used to run one round-trip at a time.
+        const [windowResults, monthResults] = await Promise.all([
+          Promise.all(entries.map(([, w]) =>
+            ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: w.from, _to: w.to })
+          )),
+          Promise.all(monthSpans.map((s) =>
+            ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: s.from, _to: s.to })
+          )),
+        ]);
+        const out: Record<string, unknown> = {};
+        entries.forEach(([k, w], idx) => {
+          out[k] = { range: w, data: windowResults[idx].data ?? null, error: windowResults[idx].error?.message ?? null };
+        });
+        // Months carry totals only — the per-source breakdown for 12 months
+        // bloated the payload (and the model's input tokens) for no gain.
+        const months = monthSpans.map((s, idx) => ({
+          month: s.month,
+          totals: totalsOf(monthResults[idx].data),
+        }));
         return { property_id: id, windows: out, trailing_12_months_by_month: months };
+      }),
+    }),
+
+    get_portfolio_trend: tool({
+      description:
+        "ALL-LOCATIONS ROLL-UP. One call that returns, for every location in scope, the current-window totals and the same-length previous window, plus the portfolio total. Use this INSTEAD of calling the per-location tools once per location whenever the question is about all locations, a portfolio trend, or 'why are my leads down' with no single location selected. Only after this identifies which locations moved should you drill into one of them.",
+      inputSchema: z.object({
+        from: z.string().optional(),
+        to: z.string().optional(),
+        days: z.number().optional(),
+      }),
+      execute: wrap(ctx, "get_portfolio_trend", async (i) => {
+        const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
+        const spanDays = Math.max(
+          1,
+          Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400_000) + 1,
+        );
+        const prevTo = new Date(new Date(from).getTime() - 86400_000);
+        const prevFrom = new Date(prevTo.getTime() - (spanDays - 1) * 86400_000);
+        const d = (x: Date) => x.toISOString().slice(0, 10);
+        const props = ctx.allowedProperties;
+        const results = await Promise.all(
+          props.flatMap((p) => [
+            ctx.supabase.rpc("ai_assistant_context", { _property_id: p.id, _from: from, _to: to }),
+            ctx.supabase.rpc("ai_assistant_context", { _property_id: p.id, _from: d(prevFrom), _to: d(prevTo) }),
+          ]),
+        );
+        const locations = props.map((p, idx) => ({
+          property_id: p.id,
+          name: p.name,
+          current: totalsOf(results[idx * 2].data),
+          previous: totalsOf(results[idx * 2 + 1].data),
+        }));
+        const sum = (key: string, pick: "current" | "previous") =>
+          locations.reduce((acc, l) => acc + Number((l[pick] as Record<string, unknown> | null)?.[key] ?? 0), 0);
+        const keys = ["calls", "good_leads", "bad_leads", "spam", "projected_sale", "verified_sale", "cost", "clicks", "impressions"];
+        const portfolio: Record<string, { current: number; previous: number }> = {};
+        for (const k of keys) portfolio[k] = { current: sum(k, "current"), previous: sum(k, "previous") };
+        return {
+          current_range: { from, to },
+          previous_range: { from: d(prevFrom), to: d(prevTo) },
+          locations,
+          portfolio_totals: portfolio,
+          note: "Totals only. Drill into a single location with the per-location tools once you know which one moved.",
+        };
       }),
     }),
 
@@ -1624,20 +1689,30 @@ serve(async (req) => {
 
     // Resolve the set of locations this user may actually be answered about.
     // The dashboard location selector narrows it; access control caps it.
-    const { data: allProps } = await supabase
+    // One round-trip: the user's own RLS decides what they can see, instead of
+    // one user_can_access_property RPC per property.
+    const { data: visibleProps, error: visibleErr } = await userSupabase
       .from("properties")
       .select("id,name")
       .eq("is_active", true)
       .order("name");
-    const accessChecks = await Promise.all(
-      (allProps ?? []).map(async (p) => {
-        const { data: ok } = await supabase.rpc("user_can_access_property", {
-          _user_id: user.id, _property_id: p.id,
-        });
-        return ok ? { id: p.id as string, name: p.name as string } : null;
-      }),
+    let accessible = ((visibleProps ?? []) as Array<{ id: string; name: string }>).map(
+      (p) => ({ id: p.id, name: p.name }),
     );
-    const accessible = accessChecks.filter(Boolean) as { id: string; name: string }[];
+    if (visibleErr || accessible.length === 0) {
+      // Fallback to the explicit per-property check if RLS returned nothing.
+      const { data: allProps } = await supabase
+        .from("properties").select("id,name").eq("is_active", true).order("name");
+      const checks = await Promise.all(
+        (allProps ?? []).map(async (p) => {
+          const { data: ok } = await supabase.rpc("user_can_access_property", {
+            _user_id: user.id, _property_id: p.id,
+          });
+          return ok ? { id: p.id as string, name: p.name as string } : null;
+        }),
+      );
+      accessible = checks.filter(Boolean) as { id: string; name: string }[];
+    }
 
     if (scopeMode === "property") {
       if (!propertyId || !accessible.some((p) => p.id === propertyId)) {
@@ -1668,21 +1743,23 @@ serve(async (req) => {
       if (sessErr) throw new Error(sessErr.message);
       sessionId = sess.id;
     } else {
-      await supabase.from("ai_agent_sessions")
+      // Don't block the model call on a bookkeeping update.
+      void supabase.from("ai_agent_sessions")
         .update({ updated_at: new Date().toISOString() })
-        .eq("id", sessionId).eq("user_id", user.id);
+        .eq("id", sessionId).eq("user_id", user.id)
+        .then(({ error }) => { if (error) console.error("session touch failed", error.message); });
     }
 
     // Persist newest user message
     const lastUser = [...messages].reverse().find(m => m.role === "user");
     if (lastUser) {
       const text = lastUser.parts?.filter(p => p.type === "text").map(p => (p as { text: string }).text).join("\n");
-      await supabase.from("ai_agent_messages").insert({
+      void supabase.from("ai_agent_messages").insert({
         session_id: sessionId,
         role: "user",
         content: text ?? "",
         parts_json: lastUser.parts,
-      });
+      }).then(({ error }) => { if (error) console.error("persist user failed", error.message); });
     }
 
     const ctx: Ctx = {
@@ -1706,14 +1783,14 @@ serve(async (req) => {
     const scopeLine = scopeMode === "property"
       ? `SINGLE LOCATION: ${allowedProperties[0]?.name ?? "selected location"} (property_id ${propertyId})`
       : `ALL LOCATIONS (${allowedProperties.length}): ${allowedProperties.map((p) => `${p.name} [${p.id}]`).join(", ") || "(none)"}`;
-    const contextHeader = `\n\nACTIVE CONTEXT:\n- scope: ${scopeLine}\n- date_range: ${from ?? "?"} → ${to ?? "?"}\n\nSCOPE RULES (non-negotiable):\n- The dashboard location selector is the only thing that decides which locations you may discuss.\n- In SINGLE LOCATION scope, every answer and every tool call is about that location only. If the user asks about another location by name, say you're currently looking at ${allowedProperties[0]?.name ?? "the selected location"} and they should switch the location selector. Never pull or guess another location's numbers.\n- In ALL LOCATIONS scope, call list_locations first, then run the per-location tools once per location id and roll up or compare, naming each location explicitly.\n- Never mention or infer data about a location that is not listed above.`;
+    const contextHeader = `\n\nACTIVE CONTEXT:\n- scope: ${scopeLine}\n- date_range: ${from ?? "?"} → ${to ?? "?"}\n\nSCOPE RULES (non-negotiable):\n- The dashboard location selector is the only thing that decides which locations you may discuss.\n- In SINGLE LOCATION scope, every answer and every tool call is about that location only. If the user asks about another location by name, say you're currently looking at ${allowedProperties[0]?.name ?? "the selected location"} and they should switch the location selector. Never pull or guess another location's numbers.\n- In ALL LOCATIONS scope, use get_portfolio_trend — one call that covers every location at once. Do NOT loop the per-location tools across all locations; that is slow and you do not need it. After the roll-up, drill into at most 2 locations that actually moved, and offer to look at the others instead of sweeping them all.\n- Never mention or infer data about a location that is not listed above.\n\nSPEED RULES:\n- Open with your one-line acknowledgement BEFORE you call any tool, so the user sees you working. Then run the lookups, then give the brief answer and the follow-up offer.\n- Prefer the fewest lookups that can answer the question. Do not re-run a tool you already have results from in this conversation.`;
 
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
       system: SYSTEM_PROMPT + contextHeader,
       messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
       tools: buildTools(ctx),
-      stopWhen: stepCountIs(50),
+      stopWhen: stepCountIs(24),
     });
 
     const streamResponse = result.toUIMessageStreamResponse({

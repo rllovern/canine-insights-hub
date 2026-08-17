@@ -33,6 +33,20 @@ const QUICK_PROMPTS = [
 const GREETING =
   "Hi, I'm Bob! I keep an eye on your ads, calls, leads and sales — and I explain them in plain English. Ask me anything, or tap a question below.";
 
+// Plain-English label for whatever lookup Bob is running right now.
+const TOOL_ACTIVITY: Record<string, string> = {
+  list_locations: "Checking which locations you can see…",
+  get_property_context: "Checking your location setup…",
+  get_portfolio_trend: "Rolling up all your locations…",
+  get_trend_windows: "Comparing this period to before…",
+  get_source_health: "Checking your data feeds…",
+  get_call_summary: "Reading through your calls…",
+  get_lead_quality: "Sorting your leads by quality…",
+  get_ad_performance: "Looking at your ad spend…",
+  get_budget_pacing: "Checking your budget pacing…",
+  get_sales_summary: "Pulling your sales from the CRM…",
+};
+
 type LatestBobContext = {
   propertyId: string | null;
   propertyName: string | null;
@@ -354,6 +368,22 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
 
   useEffect(() => { if (error && setMood) setMood("concerned", 5000); }, [error, setMood]);
 
+  // Live "what Bob is doing right now" line, derived from the streaming tool parts.
+  const activity = (() => {
+    if (!isLoading) return null;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return "Getting your numbers…";
+    const running = [...(last.parts ?? [])].reverse().find((p) => {
+      const t = (p as { type?: string }).type ?? "";
+      const s = (p as { state?: string }).state ?? "";
+      return (t.startsWith("tool-") || t === "dynamic-tool") &&
+        (s === "input-streaming" || s === "input-available");
+    }) as { type?: string; toolName?: string } | undefined;
+    if (!running) return "Thinking it through…";
+    const name = running.toolName ?? (running.type ?? "").replace(/^tool-/, "");
+    return TOOL_ACTIVITY[name] ?? "Looking that up…";
+  })();
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Header — leaves room for Bob peeking over the corner */}
@@ -361,7 +391,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
         <div className="min-w-0">
           <div className="text-base font-bold leading-tight">Bob</div>
           <div className="truncate text-xs text-muted-foreground">
-            {isLoading ? BOB_STATUS.thinking : BOB_STATUS[mood]}
+            {isLoading ? (activity ?? BOB_STATUS.thinking) : BOB_STATUS[mood]}
           </div>
           <div className="truncate text-[10px] text-muted-foreground/80">
             {scopeLabel} · {effectiveFrom} → {effectiveTo}
