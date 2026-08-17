@@ -53,16 +53,20 @@ WHEN IT IS A REAL PROBLEM
 Say it plainly, in the first sentence, without softening it into nothing. Real problems include: spend collapsing or a campaign paused unintentionally, click-through rate falling sharply while impressions hold, a data feed that has stopped updating, lead quality dropping below the healthy range for a sustained stretch, budget exhausted well before month end, or a sustained multi-month decline that is not seasonal. In those cases tell them clearly what you see and to alert the administration team so it can be looked at and fixed. Never hide bad news and never fabricate a reassuring explanation.
 
 CANONICAL LEAD MODEL (non-negotiable math)
-- Every real lead falls into exactly one of three groups: bad leads, good leads, and AI-projected-sale calls. Total leads equals the three added together. The AI-projected-sale group is never inside good leads.
-- Quality rate = (good + AI-projected-sale) / total leads. At or above 30% is healthy, 25–30% is worth watching, below 25% needs attention.
-- The AI-projected-sale tier comes from call transcripts and is a call-quality signal only. Never call it revenue, a forecast, pipeline, or expected sales, and never multiply it by a dollar amount. Say "AI-projected-sale calls" in prose.
-- Verified sales come from the CRM and are separate from lead counts. Do not mix them.
-- When a tool already returns total leads or quality rate, use those values as given.
-- Explain these plainly when you use them: "good leads means real people asking about training".
+- There are three populations and they are NOT the same size. Always name which one you mean:
+  1. Records — every call and form that came in.
+  2. Scored calls — the records call tracking gave a quality outcome. Always smaller than records, because spam and un-scored records are left out.
+  3. Good calls — the scored calls that were real people asking about training.
+- Quality rate = good calls ÷ scored calls. At or above 30% is healthy, 25–30% is worth watching, below 25% needs attention.
+- Never say "leads" on its own. Say "records", "scored calls" or "good calls".
+- Whenever you give a good-call count, give it against its base: "25 of your 45 scored calls were good".
+- "AI-projected sale" is retired. Never mention it, never add it to good calls, never treat it as revenue or a forecast.
+- Verified sales come from the CRM and are separate from call counts. Do not mix them.
+- When a tool already returns these counts or the quality rate, use those values as given.
 
 MATCH THE DASHBOARD, ALWAYS
 - Every number you say out loud must be a number the user can find on their screen. The lookups are already filtered exactly the way the cards are (the CRM "won" feed is excluded, and on shared ad accounts only campaigns labeled to that location count). Never do your own arithmetic on top of that.
-- Use the same names as the cards: "Records" (all calls + forms), "Qualified Calls" (good leads), "Qualified Leads" (good leads plus AI-projected-sale calls), "Verified Sale" (CRM wins), "Lead Mix" (bad + good + AI-projected-sale).
+- Use the same names as the cards: "Records" (all calls + forms), "Scored calls" (records with a quality outcome), "Good Calls" (the good ones), "Verified Sale" (CRM wins).
 - Use the date window the dashboard selector is set to, exactly as given in ACTIVE CONTEXT. Do not round it to "the first half of the month" or invent a different comparison window; say the dates the way the card labels them.
 
 HOW YOUR MESSAGE IS DISPLAYED
@@ -1039,7 +1043,8 @@ function buildTools(ctx: Ctx) {
           // Canonical: never use the legacy `leads` column. total_leads is
           // already summed from v_lead_counts_daily (bad+good+projected).
           leads: t.total_leads,
-          quality_rate: t.total_leads > 0 ? t.quality_num / t.total_leads : 0,
+          // Quality = good calls / scored calls. Projected-sale is retired.
+          quality_rate: t.total_leads > 0 ? t.good_leads / t.total_leads : 0,
           ctr: t.impressions > 0 ? t.clicks / t.impressions : 0,
           cpc: t.clicks > 0 ? t.cost / t.clicks : 0,
           cpl: t.total_leads > 0 ? t.cost / t.total_leads : 0,
@@ -1058,7 +1063,6 @@ function buildTools(ctx: Ctx) {
           total_leads: { current: c.leads, previous: p.leads, ...delta(c.leads, p.leads) },
           bad_leads: { current: c.bad_leads, previous: p.bad_leads, ...delta(c.bad_leads, p.bad_leads) },
           good_leads: { current: c.good_leads, previous: p.good_leads, ...delta(c.good_leads, p.good_leads) },
-          ai_projected_sale: { current: c.projected_sale, previous: p.projected_sale, ...delta(c.projected_sale, p.projected_sale) },
           quality_rate: { current: c.quality_rate, previous: p.quality_rate, ...delta(c.quality_rate, p.quality_rate) },
           cpl: { current: c.cpl, previous: p.cpl, ...delta(c.cpl, p.cpl) },
           conv_rate: { current: c.conv_rate, previous: p.conv_rate, ...delta(c.conv_rate, p.conv_rate) },
@@ -1152,7 +1156,7 @@ function buildTools(ctx: Ctx) {
           property_id: id, from, to,
           totals: {
             ...tot,
-            quality_rate: tot.leads > 0 ? tot.quality_num / tot.leads : 0,
+            quality_rate: tot.leads > 0 ? tot.good_leads / tot.leads : 0,
             ctr: tot.impressions > 0 ? tot.clicks / tot.impressions : 0,
             cpc: tot.clicks > 0 ? tot.cost / tot.clicks : 0,
             cpl: tot.leads > 0 ? tot.cost / tot.leads : 0,
@@ -1724,7 +1728,7 @@ function buildTools(ctx: Ctx) {
           const cost = Number(t.cost ?? 0);
           const clicks = Number(t.clicks ?? 0);
           const impressions = Number(t.impressions ?? 0);
-          const good = Number(t.good_leads ?? 0) + Number(t.projected_sale ?? 0);
+          const good = Number(t.good_leads ?? 0);
           return {
             ...t,
             ctr_pct: impressions ? Math.round((clicks / impressions) * 10000) / 100 : null,
