@@ -12,9 +12,6 @@ import {
   Conversation, ConversationContent, ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import { MessageResponse } from "@/components/ai-elements/message";
-import {
-  Tool, ToolHeader, ToolContent, ToolInput, ToolOutput,
-} from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -231,7 +228,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     [setSessionId],
   );
 
-  const { messages, sendMessage, status, error, setMessages } = useChat({
+  const { messages, sendMessage, status, error, setMessages, regenerate } = useChat({
     id: sessionId ?? "new",
     transport,
     onError: (e) => toast({ title: "Bob hit a problem", description: e.message, variant: "destructive" }),
@@ -368,21 +365,15 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
 
   useEffect(() => { if (error && setMood) setMood("concerned", 5000); }, [error, setMood]);
 
-  // Live "what Bob is doing right now" line, derived from the streaming tool parts.
-  const activity = (() => {
-    if (!isLoading) return null;
-    const last = messages[messages.length - 1];
-    if (!last || last.role !== "assistant") return "Getting your numbers…";
-    const running = [...(last.parts ?? [])].reverse().find((p) => {
-      const t = (p as { type?: string }).type ?? "";
-      const s = (p as { state?: string }).state ?? "";
-      return (t.startsWith("tool-") || t === "dynamic-tool") &&
-        (s === "input-streaming" || s === "input-available");
-    }) as { type?: string; toolName?: string } | undefined;
-    if (!running) return "Thinking it through…";
-    const name = running.toolName ?? (running.type ?? "").replace(/^tool-/, "");
-    return TOOL_ACTIVITY[name] ?? "Looking that up…";
-  })();
+  // The user only wants a "thinking" state — no per-tool activity chatter.
+  const activity = isLoading ? BOB_STATUS.thinking : null;
+
+  // A turn that ended with no text at all (worker recycled mid-run) must not
+  // look like Bob simply ignored the question.
+  const lastMessage = messages[messages.length - 1];
+  const droppedAnswer =
+    !isLoading && !error && !!lastMessage && lastMessage.role === "assistant" &&
+    !(lastMessage.parts ?? []).some((p) => p.type === "text" && (p as { text?: string }).text?.trim());
 
   return (
     <div className="flex h-full min-h-0 flex-col">
