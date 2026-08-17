@@ -1043,7 +1043,8 @@ function buildTools(ctx: Ctx) {
           // Canonical: never use the legacy `leads` column. total_leads is
           // already summed from v_lead_counts_daily (bad+good+projected).
           leads: t.total_leads,
-          quality_rate: t.total_leads > 0 ? t.quality_num / t.total_leads : 0,
+          // Quality = good calls / scored calls. Projected-sale is retired.
+          quality_rate: t.total_leads > 0 ? t.good_leads / t.total_leads : 0,
           ctr: t.impressions > 0 ? t.clicks / t.impressions : 0,
           cpc: t.clicks > 0 ? t.cost / t.clicks : 0,
           cpl: t.total_leads > 0 ? t.cost / t.total_leads : 0,
@@ -1062,7 +1063,6 @@ function buildTools(ctx: Ctx) {
           total_leads: { current: c.leads, previous: p.leads, ...delta(c.leads, p.leads) },
           bad_leads: { current: c.bad_leads, previous: p.bad_leads, ...delta(c.bad_leads, p.bad_leads) },
           good_leads: { current: c.good_leads, previous: p.good_leads, ...delta(c.good_leads, p.good_leads) },
-          ai_projected_sale: { current: c.projected_sale, previous: p.projected_sale, ...delta(c.projected_sale, p.projected_sale) },
           quality_rate: { current: c.quality_rate, previous: p.quality_rate, ...delta(c.quality_rate, p.quality_rate) },
           cpl: { current: c.cpl, previous: p.cpl, ...delta(c.cpl, p.cpl) },
           conv_rate: { current: c.conv_rate, previous: p.conv_rate, ...delta(c.conv_rate, p.conv_rate) },
@@ -1156,7 +1156,7 @@ function buildTools(ctx: Ctx) {
           property_id: id, from, to,
           totals: {
             ...tot,
-            quality_rate: tot.leads > 0 ? tot.quality_num / tot.leads : 0,
+            quality_rate: tot.leads > 0 ? tot.good_leads / tot.leads : 0,
             ctr: tot.impressions > 0 ? tot.clicks / tot.impressions : 0,
             cpc: tot.clicks > 0 ? tot.cost / tot.clicks : 0,
             cpl: tot.leads > 0 ? tot.cost / tot.leads : 0,
