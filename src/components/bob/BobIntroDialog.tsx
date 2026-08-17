@@ -24,7 +24,7 @@ export function BobIntroDialog() {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader className="items-center text-center">
           <div className="mb-1">
-            <BobFace scale={0.8} mood="happy" />
+            <BobFace scale={0.8} mood="happy" gx={0} gy={0} lid={0} />
           </div>
           <DialogTitle className="text-xl">Meet Bob, your marketing assistant</DialogTitle>
           <DialogDescription>
