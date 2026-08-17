@@ -4,8 +4,14 @@
  * `public.lead_quality_rollup`. Every page reads through this module; no
  * surface re-derives total leads or quality rate locally.
  *
- * Three mutually-exclusive real-lead tiers (bad, good, sales).
- * `projected` is NEVER inside `good`, NEVER subtracted, NEVER a forecast.
+ * Scored calls = bad + good + projected. These are the calls call tracking
+ * gave a quality outcome; spam and un-scored records are NOT in this base.
+ *
+ * RETIRED: the AI "projected sale" tier. We have real CRM wins now, so a
+ * guess no longer counts as a quality outcome. `projected` still arrives from
+ * the sync and still sits in the scored base (those calls did happen and were
+ * scored), but it is no longer in the quality numerator and no surface
+ * labels it "projected". Quality = good ÷ scored calls.
  */
 
 export type LeadCounts = {
@@ -17,17 +23,33 @@ export type LeadCounts = {
   verified?: number;
 };
 
-/** Total Leads = bad + good + sales. Three exclusive tiers. */
+/** Scored calls = bad + good + projected. Denominator for quality. */
 export const totalLeads = (c: LeadCounts) => c.bad + c.good + c.projected;
 
-/** Quality numerator = good + sales (both are quality outcomes). */
-export const qualityNumerator = (c: LeadCounts) => c.good + c.projected;
+/** Quality numerator = good only. Projected-sale is retired. */
+export const qualityNumerator = (c: LeadCounts) => c.good;
 
-/** Quality rate = (good + projected) ÷ total. Ratio-of-sums when aggregating. */
+/** Quality rate = good ÷ scored calls. Ratio-of-sums when aggregating. */
 export const qualityRate = (c: LeadCounts) => {
   const t = totalLeads(c);
   return t ? qualityNumerator(c) / t : 0;
 };
+
+/**
+ * Scored calls that got neither a good nor a bad outcome (formerly the
+ * "projected sale" tier). Kept only so the mix still sums to the base.
+ */
+export const otherScored = (c: LeadCounts) => c.projected;
+
+/** One vocabulary, every surface. Never "leads", never "projected". */
+export const LEAD_LABELS = {
+  records: "Records",
+  scored: "Scored calls",
+  good: "Good Calls",
+  bad: "Bad calls",
+  other: "Other scored",
+  verified: "Verified Sale",
+} as const;
 
 /** Absolute, fixed quality targets. Never derived from any single location. */
 export const QUALITY_TARGETS = { green: 0.30, amber: 0.25 } as const;
