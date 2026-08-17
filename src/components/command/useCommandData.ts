@@ -182,37 +182,28 @@ async function fetchPpcWindow(
   from: string,
   to: string,
 ): Promise<DailyAgg[]> {
-  // Build the allowed campaign set from campaign_labels so PPC rows that
-  // belong to a different location are excluded from the Ads view. If a property has no
-  // labels, we don't filter — that keeps locations without a mapping working.
-  let allowed: Set<string> | null = null;
-  if (propertyIds && propertyIds.length > 0) {
-    const { data: labels, error: labelErr } = await supabase
-      .from("campaign_labels")
-      .select("campaign")
-      .in("property_id", propertyIds);
-    if (labelErr) throw labelErr;
-    if (labels && labels.length > 0) {
-      allowed = new Set((labels as any[]).map((r) => r.campaign as string));
-    }
-  }
+  // Shared Google Ads accounts (NoVA / Winchester) scope PPC rows through
+  // campaign_labels. Call-tracking rows under Google PPC carry no spend
+  // signals and are never in the allow-list, so they always pass through.
+  const labels = await fetchCampaignLabels(propertyIds);
 
   let q = supabase
     .from("daily_metrics")
-    .select("date, campaign, cost, good_leads, bad_leads, projected_sale, verified_sale, record_count")
+    .select("date, property_id, ad_source, campaign, cost, impressions, clicks, good_leads, bad_leads, projected_sale, verified_sale, record_count")
     .eq("ad_source", PPC_SOURCE)
     .gte("date", from)
     .lte("date", to);
   if (propertyIds) q = q.in("property_id", propertyIds);
-  if (allowed && allowed.size > 0) {
-    q = q.in("campaign", Array.from(allowed));
-  }
   const res = await q;
   if (res.error) throw res.error;
 
+  const rows = (res.data ?? []) as any[];
+  const scope = buildCampaignScope(labels, rows);
+
   const map = new Map<string, DailyAgg>();
   for (const d of eachDateISO(new Date(from), new Date(to))) map.set(d, zeroDay(d));
-  for (const r of (res.data ?? []) as any[]) {
+  for (const r of rows) {
+    if (!isRowInScope(r, scope)) continue;
     const day = map.get(r.date) ?? zeroDay(r.date);
     day.cost += Number(r.cost ?? 0);
     day.good_leads += Number(r.good_leads ?? 0);
