@@ -389,12 +389,13 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Popover>
+          <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
             <PopoverTrigger asChild>
               <Button size="icon" variant="ghost" className="size-7 rounded-full" aria-label="Recent sessions">
                 <History className="size-3.5" />
               </Button>
             </PopoverTrigger>
+            {historyOpen && (
             <PopoverContent align="end" className="w-72 p-1">
               {recentSessions.length === 0 ? (
                 <div className="px-2 py-3 text-xs text-muted-foreground">No sessions yet.</div>
@@ -404,7 +405,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => setSessionId(s.id)}
+                      onClick={() => { setSessionId(s.id); setHistoryOpen(false); }}
                       className={`w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted/60 ${
                         s.id === sessionId ? "bg-muted/60" : ""
                       }`}
@@ -418,6 +419,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                 </div>
               )}
             </PopoverContent>
+            )}
           </Popover>
           <Button
             size="icon"
