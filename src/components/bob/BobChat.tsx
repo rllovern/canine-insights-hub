@@ -18,13 +18,8 @@ import {
 import { History, Plus, X, ArrowUp } from "lucide-react";
 import { BOB_STATUS, type BobMood } from "./BobFace";
 import { toast } from "@/hooks/use-toast";
-
-const QUICK_PROMPTS = [
-  "Why are my leads down?",
-  "Is my ad spend working?",
-  "How am I doing vs last year?",
-  "What do these numbers mean?",
-];
+import { buildQuickPrompts } from "./quickPrompts";
+import { useCrmConnection } from "@/lib/crm-connection";
 
 const GREETING =
   "Hi, I'm Bob! I keep an eye on your ads, calls, leads and sales — and I explain them in plain English. Ask me anything, or tap a question below.";
@@ -121,6 +116,20 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
   const effectiveFrom = iso.from;
   const effectiveTo = iso.to;
   const effectivePropertyId = mode === "property" ? scopedPropertyId : null;
+
+  // Quick chips name the selected location and rotate daily. Sales questions
+  // are hidden for locations with no CRM connected.
+  const crm = useCrmConnection(
+    mode === "property" && scopedPropertyId ? [scopedPropertyId] : propertyIds,
+  );
+  const quickPrompts = useMemo(
+    () =>
+      buildQuickPrompts({
+        placeLabel: mode === "property" ? effectiveProperty?.name ?? scopeLabel : "all locations",
+        hasCrm: !crm.noneConnected,
+      }),
+    [mode, effectiveProperty?.name, scopeLabel, crm.noneConnected],
+  );
 
   latestContextRef.current = {
     propertyId: effectivePropertyId,
@@ -564,16 +573,16 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
 
       {/* Quick chips */}
       <div className="flex flex-wrap gap-2 px-3.5 pb-1.5 pt-2.5">
-        {QUICK_PROMPTS.map((p) => (
+        {quickPrompts.map((p) => (
           <button
-            key={p}
+            key={p.id}
             type="button"
             disabled={disabled || isLoading}
-            onClick={() => sendQuickPrompt(p)}
+            onClick={() => sendQuickPrompt(p.question)}
             className="rounded-full px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
             style={{ background: "hsl(var(--bob-bubble) / 0.1)", color: "hsl(var(--bob-bubble))" }}
           >
-            {p}
+            {p.label}
           </button>
         ))}
       </div>

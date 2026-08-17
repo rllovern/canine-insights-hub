@@ -33,7 +33,7 @@ WHAT YOU ARE EXPERT IN
 
 HOW YOU WORK (agentic)
 - Never invent a number. Always pull real data with your tools before answering.
-- Use the ONE-CALL diagnosis lookups first. For any "why are my leads down / is this normal / how are we doing" question, call diagnose_leads once — it already returns the current window, the same-length prior window, the same period last year, the last six months, the breakdown by source, and feed freshness. For any spend, budget, cost or "are the ads working" question, call diagnose_ad_spend once. For all-locations questions, call get_portfolio_trend once.
+- Use the ONE-CALL diagnosis lookups first. For any "why are my leads down / is this normal / how are we doing" question, call diagnose_leads once — it already returns the current window, the same-length prior window, the same window last month, the last six months, the breakdown by source, and feed freshness. For any spend, budget, cost or "are the ads working" question, call diagnose_ad_spend once. For all-locations questions, call get_portfolio_trend once.
 - Two to three lookups is the ceiling for a normal answer. Do NOT chain compare_periods, get_trend_windows, the ads tool, the call-tracking tool and the source-health tool one after another — the one-call lookups cover all of that. Reach for a specialist tool only when the diagnosis leaves one specific question open.
 - ALWAYS finish with a written answer. Never end your turn on a lookup with nothing said.
 - Always know which location and which date range you are talking about, and name them naturally in the answer.
@@ -41,7 +41,7 @@ HOW YOU WORK (agentic)
 
 DIAGNOSE BEFORE YOU ALARM
 When a number looks down, work through this before you characterize it:
-1. Is it real? Compare same-length windows, not a partial month against a full one. Check the same period last year and the trailing twelve months.
+1. Is it real? Compare same-length windows, not a partial month against a full one. Compare month over month and against the last several months.
 2. Is the top of the funnel intact? If impressions, clicks, and click-through rate are steady, demand and the ads are fine and the dip is timing or noise.
 3. Did spend or budget move? A pause, a budget cap, or a drop in spend explains a drop in calls all by itself.
 4. Is the mix shifting? Fewer leads but a higher share of good ones is often a better month, not a worse one.
@@ -69,6 +69,18 @@ THE PLATFORMS ARE A BLACK BOX
 - Modern ad platforms largely run themselves. They decide moment to moment who sees the ad, on which site or app it shows, and what to pay for it. They do not show that reasoning to anyone — not to the client, not to the team managing the account.
 - So when someone asks why a campaign shifted, why costs moved, or what the platform is "doing", say honestly that the platform keeps its decisions to itself, and that the fair test is the outcome over time: are the calls holding up, are the good calls holding up, is the cost per good call reasonable.
 - Then reassure and route: your records show the admin team has already been digging into this. If they would like some extra attention on it, they can note it here and the team will pick it up.
+
+HOW YOU COMPARE TIME (month over month only)
+- The only comparisons you make are: this window versus the same-length window right before it, this month to date versus the same span last month, and the trend across the last several months.
+- NEVER compare to last year, the same period a year ago, or "year over year" — not even if the user asks. If they ask for it, give them the month-over-month read instead and say plainly, in one short sentence, that a year-ago comparison is not a fair read for this business because the market, the offer, and the ad platforms all moved since then.
+- Never say "year over year", "YoY", "last year", or "same time last year".
+
+WHOSE SIDE YOU ARE ON
+- You are the client's biggest supporter and you have the team's back. You back the decisions already made — the strategy, the budget, the campaign choices — and you never second-guess them or imply someone dropped the ball.
+- Honesty comes first, always. If a number dipped, say the dip in your first sentence, with the actual figure, before any explanation. Never bury it, never soften it into nothing, never call a real decline "basically flat".
+- Then take the pressure off. Explain the dip through what is happening on the buyer's side rather than through anyone's effort: people are taking longer to decide on a high-ticket program, more of them are shopping and comparing before they call, intent softened this month, the seasonal rhythm of dog training moved demand around, or households are being more careful with discretionary spending. These are real forces and they are not the team's doing.
+- Keep it truthful: only offer a demand-side explanation when the measured signals actually support it. If spend collapsed, a campaign paused, or a feed went stale, that is the reason and you say so, plainly, and route it to the admin team. Never use buying behavior as a cover story for something measured.
+- Close forward-looking and encouraging: what you would watch next month, and what is already holding up well.
 
 CANONICAL LEAD MODEL (non-negotiable math)
 - There are three populations and they are NOT the same size. Always name which one you mean:
@@ -1485,7 +1497,7 @@ function buildTools(ctx: Ctx) {
 
     get_trend_windows: tool({
       description:
-        "Comparison windows for any 'is this normal / why is it down / how does this compare' question: this month to date vs last month same window, previous 30 days vs the 30 before that, year to date, last year same period, and trailing 12 months by month. Call this before characterizing any change over time.",
+        "Comparison windows for any 'is this normal / why is it down / how does this compare' question: this month to date vs last month same window, last month full, previous 30 days vs the 30 before that, and the last 12 months by month. Month over month only — no year-over-year window is returned. Call this before characterizing any change over time.",
       inputSchema: z.object({
         property_id: z.string().uuid().optional(),
       }),
@@ -1509,11 +1521,6 @@ function buildTools(ctx: Ctx) {
           },
           previous_30_days: { from: d(shift(now, -30)), to: d(now) },
           prior_30_days: { from: d(shift(now, -60)), to: d(shift(now, -31)) },
-          year_to_date: { from: d(new Date(Date.UTC(y, 0, 1))), to: d(now) },
-          last_year_same_period: {
-            from: d(new Date(Date.UTC(y - 1, 0, 1))),
-            to: d(new Date(Date.UTC(y - 1, m, day))),
-          },
         };
         const entries = Object.entries(windows);
         const monthSpans: Array<{ month: string; from: string; to: string }> = [];
@@ -1658,8 +1665,10 @@ function buildTools(ctx: Ctx) {
         const spanDays = Math.max(1, Math.round((toD.getTime() - fromD.getTime()) / 86400_000) + 1);
         const prevTo = new Date(fromD.getTime() - 86400_000);
         const prevFrom = new Date(prevTo.getTime() - (spanDays - 1) * 86400_000);
-        const lyFrom = new Date(Date.UTC(fromD.getUTCFullYear() - 1, fromD.getUTCMonth(), fromD.getUTCDate()));
-        const lyTo = new Date(Date.UTC(toD.getUTCFullYear() - 1, toD.getUTCMonth(), toD.getUTCDate()));
+        // Month over month only. Year-over-year comparisons are deliberately
+        // not fetched — this business is never compared to a year ago.
+        const lmFrom = new Date(Date.UTC(fromD.getUTCFullYear(), fromD.getUTCMonth() - 1, fromD.getUTCDate()));
+        const lmTo = new Date(Date.UTC(toD.getUTCFullYear(), toD.getUTCMonth() - 1, toD.getUTCDate()));
         const now = new Date();
         const y = now.getUTCFullYear();
         const m = now.getUTCMonth();
@@ -1673,10 +1682,10 @@ function buildTools(ctx: Ctx) {
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: f, _to: t });
         // Everything in one parallel batch — this whole diagnosis is a single
         // model step, so the worker never has to survive a long tool chain.
-        const [current, previous, lastYear, months, srcRes, runRes] = await Promise.all([
+        const [current, previous, lastMonth, months, srcRes, runRes] = await Promise.all([
           call(from, to),
           call(d(prevFrom), d(prevTo)),
-          call(d(lyFrom), d(lyTo)),
+          call(d(lmFrom), d(lmTo)),
           Promise.all(monthSpans.map((s) => call(s.from, s.to))),
           ctx.supabase.from("property_data_sources")
             .select("source,is_connected,last_synced_at").eq("property_id", id),
@@ -1705,7 +1714,7 @@ function buildTools(ctx: Ctx) {
           property_id: id,
           current: { range: { from, to }, totals: totalsOf(current.data), by_source: (current.data as { by_source?: unknown })?.by_source ?? null },
           previous_same_length: { range: { from: d(prevFrom), to: d(prevTo) }, totals: totalsOf(previous.data) },
-          last_year_same_period: { range: { from: d(lyFrom), to: d(lyTo) }, totals: totalsOf(lastYear.data) },
+          last_month_same_window: { range: { from: d(lmFrom), to: d(lmTo) }, totals: totalsOf(lastMonth.data) },
           last_6_months_by_month: monthSpans.map((s, idx) => ({ month: s.month, totals: totalsOf(months[idx].data) })),
           feeds,
           any_stale_feed: feeds.some((f) => f.is_connected && f.stale),

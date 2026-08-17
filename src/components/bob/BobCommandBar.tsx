@@ -5,13 +5,8 @@ import {
 } from "@/components/ui/command";
 import { Sparkles, BarChart3, PhoneCall, FileText, Target, GitCompare, Search } from "lucide-react";
 import { useBob } from "@/contexts/BobContext";
-
-const QUICK = [
-  { label: "Why are my leads down?", q: "Why are my leads down this month?" },
-  { label: "Is my ad spend working?", q: "Is my ad spend working right now?" },
-  { label: "How am I doing vs last year?", q: "How does this period compare to the same time last year?" },
-  { label: "Anything I should worry about?", q: "Is there anything in my account I should be worried about right now?" },
-];
+import { useScope } from "@/contexts/ScopeContext";
+import { buildQuickPrompts } from "./quickPrompts";
 
 const NAV = [
   { label: "PPC Overview", to: "/dashboard", icon: BarChart3 },
@@ -24,6 +19,10 @@ export function BobCommandBar() {
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
   const { openBob } = useBob();
+  const { mode, activeProperty, label: scopeLabel } = useScope();
+  const quick = buildQuickPrompts({
+    placeLabel: mode === "property" ? activeProperty?.name ?? scopeLabel : "all locations",
+  });
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -47,8 +46,8 @@ export function BobCommandBar() {
       <CommandList>
         <CommandEmpty>No matches.</CommandEmpty>
         <CommandGroup heading="Ask Bob">
-          {QUICK.map((q) => (
-            <CommandItem key={q.label} onSelect={() => ask(q.q)}>
+          {quick.map((q) => (
+            <CommandItem key={q.id} onSelect={() => ask(q.question)}>
               <Sparkles className="size-4 mr-2 text-primary" /> {q.label}
             </CommandItem>
           ))}
