@@ -49,13 +49,13 @@ function locationVerdict(totals: Totals, grade: QualityGrade) {
   if (grade.tier === "low-sample") {
     return {
       verdict: "good" as const,
-      reason: `Low sample (${grade.n} leads in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ leads.`,
+      reason: `Low sample (${grade.n} scored calls in window) — quality rate not yet meaningful. Need ${LOW_SAMPLE_BASE}+ scored calls.`,
     };
   }
   const rateText = formatQualityRate(grade.rate);
-  const mix = `${totals.bad} bad · ${totals.good} good · ${totals.projected} ${PROJECTED_LABEL}`;
+  const mix = `${totals.bad} bad · ${totals.good} good of ${grade.n} scored calls`;
   const rangeText = grade.showInterval
-    ? ` (range ${formatRange(grade)} on ${grade.n} leads)`
+    ? ` (range ${formatRange(grade)} on ${grade.n} scored calls)`
     : "";
   const head =
     grade.tier === "green"
