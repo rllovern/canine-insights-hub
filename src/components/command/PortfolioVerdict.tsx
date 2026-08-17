@@ -208,7 +208,7 @@ export function PortfolioVerdict({
               {showWindowHint && (
                 <p>
                   Use a 30-day window for the most reliable verdict. Shorter ranges have
-                  fewer leads, which can make the quality rate look unusually high or low.
+                  fewer scored calls, which can make the quality rate look unusually high or low.
                 </p>
               )}
             </TooltipContent></Tooltip>
@@ -232,7 +232,7 @@ export function PortfolioVerdict({
             <div className="text-[12px] font-semibold text-slate-900 truncate">{label}</div>
             <p className="mt-1.5 text-[12px] text-slate-600 leading-snug">
               {lowSample ? (
-                <>Quality not yet meaningful · {grade.n} leads</>
+                <>Quality not yet meaningful · {grade.n} scored calls</>
               ) : (
                 <>
                   <span className="font-semibold text-slate-900">Quality {formatQualityRate(grade.rate)}</span>
@@ -242,7 +242,7 @@ export function PortfolioVerdict({
               )}
             </p>
             <p className="mt-1.5 text-[11px] text-slate-500 leading-snug">
-              {grade.n} leads · {t.qualifiedCalls} qualified · {t.sales} verified sales
+              {t.calls} records · {grade.n} scored calls · {t.good} good · {t.sales} verified sales
             </p>
           </div>
         </div>
