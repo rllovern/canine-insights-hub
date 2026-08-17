@@ -337,22 +337,47 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     });
   }, [isLoading, messages]);
 
+  // Keep Bob's face in sync with what the chat is doing.
+  useEffect(() => { onThinkingChange?.(isLoading); }, [isLoading, onThinkingChange]);
+  useEffect(() => {
+    if (!setMood) return;
+    if (isLoading) setMood("thinking", 0);
+  }, [isLoading, setMood]);
+
+  const lastAssistantId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!setMood || isLoading) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant" || last.id === lastAssistantId.current) return;
+    lastAssistantId.current = last.id;
+    const text = (last.parts ?? [])
+      .map((p) => (p.type === "text" ? (p as { text: string }).text : ""))
+      .join(" ")
+      .toLowerCase();
+    const worrying = /(problem|drop|down|broken|stale|alert the admin|concern|issue|paused|failed)/.test(text);
+    setMood(worrying ? "concerned" : Math.random() < 0.5 ? "happy" : "curious", 5000);
+  }, [messages, isLoading, setMood]);
+
+  useEffect(() => { if (error && setMood) setMood("concerned", 5000); }, [error, setMood]);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 pr-12 border-b">
-          <img src={bobMark} alt="Bob" width={24} height={24} className="size-6" />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold leading-tight">Bob</div>
-            <div className="text-[11px] text-muted-foreground truncate">
-              Your marketing analyst · {scopeLabel} · {effectiveFrom} → {effectiveTo}
-            </div>
+      {/* Header — leaves room for Bob peeking over the corner */}
+      <div className="flex items-start justify-between gap-2 border-b border-border/60 py-3 pl-[104px] pr-3">
+        <div className="min-w-0">
+          <div className="text-base font-bold leading-tight">Bob</div>
+          <div className="truncate text-xs text-muted-foreground">
+            {isLoading ? BOB_STATUS.thinking : BOB_STATUS[mood]}
           </div>
+          <div className="truncate text-[10px] text-muted-foreground/80">
+            {scopeLabel} · {effectiveFrom} → {effectiveTo}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           <Popover>
             <PopoverTrigger asChild>
-              <Button size="sm" variant="ghost" className="gap-1.5">
+              <Button size="icon" variant="ghost" className="size-7 rounded-full" aria-label="Recent sessions">
                 <History className="size-3.5" />
-                Recent
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-72 p-1">
@@ -364,10 +389,8 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => {
-                        setSessionId(s.id);
-                      }}
-                      className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted/60 ${
+                      onClick={() => setSessionId(s.id)}
+                      className={`w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted/60 ${
                         s.id === sessionId ? "bg-muted/60" : ""
                       }`}
                     >
@@ -381,55 +404,58 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
               )}
             </PopoverContent>
           </Popover>
-          <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); }}>
-            New
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7 rounded-full"
+            aria-label="New conversation"
+            onClick={() => { setSessionId(null); setMessages([]); }}
+          >
+            <Plus className="size-3.5" />
           </Button>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="grid size-7 place-items-center rounded-full bg-muted text-muted-foreground transition hover:bg-muted/70"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
         </div>
+      </div>
 
-        <Conversation className="flex-1 min-h-0">
-          <ConversationContent>
-            {!accessToken ? (
-              <ConversationEmptyState
-                icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
-                title="Sign in to talk to Bob"
-                description="Bob needs you signed in before he can look at your account."
-              />
-            ) : noAccessibleProperties ? (
-              <ConversationEmptyState
-                icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
-                title="No properties available"
-                description="Your account doesn't have access to any properties yet. Ask an admin to grant access."
-              />
-            ) : messages.length === 0 ? (
-              <ConversationEmptyState
-                icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
-                title="Hi, I'm Bob — ask me anything about your marketing"
-                description="I look at your ads, calls, leads and sales, and explain what they actually mean in plain English."
-              >
-                <div className="space-y-1">
-                  <h3 className="font-medium text-sm">Hi, I'm Bob — your marketing analyst</h3>
-                  <p className="text-muted-foreground text-sm">
-                    I look at your ads, calls, leads and sales, and explain what they actually mean in plain English.
-                  </p>
-                </div>
-                <div className="mt-4 grid gap-2 w-full max-w-md">
-                  {QUICK_PROMPTS.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => sendMessage({ text: p })}
-                      className="text-left text-sm border rounded-md px-3 py-2 hover:bg-muted/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </ConversationEmptyState>
-            ) : (
-              messages.map((m) => (
-                <Message key={m.id} from={m.role}>
-                  <MessageContent>
+      {/* Transcript */}
+      <Conversation className="min-h-0 flex-1">
+        <ConversationContent className="flex flex-col gap-2 p-3.5">
+          {!accessToken ? (
+            <BobBubble>Sign in and I'll take a look at your account for you.</BobBubble>
+          ) : noAccessibleProperties ? (
+            <BobBubble>
+              Your account doesn't have access to any locations yet — ask an admin to grant access and I'll dig in.
+            </BobBubble>
+          ) : (
+            <>
+              {messages.length === 0 && <BobBubble>{GREETING}</BobBubble>}
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                  style={{ animation: "msgIn .25s ease" }}
+                >
+                  <div
+                    className={
+                      m.role === "user"
+                        ? "max-w-[85%] rounded-[18px] rounded-br-[4px] px-3.5 py-2.5 text-sm"
+                        : "max-w-[92%] rounded-[18px] rounded-bl-[4px] bg-muted px-3.5 py-2.5 text-sm text-foreground"
+                    }
+                    style={
+                      m.role === "user"
+                        ? { background: "hsl(var(--bob-bubble))", color: "hsl(var(--bob-bubble-foreground))" }
+                        : undefined
+                    }
+                  >
                     {m.parts.map((part, i) => {
                       if (part.type === "text") {
                         return <MessageResponse key={i}>{part.text}</MessageResponse>;
@@ -438,11 +464,11 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                         const tp = part as any;
                         const name = tp.toolName ?? tp.type.replace(/^tool-/, "");
                         return (
-                          <Tool key={i} defaultOpen={false}>
+                          <Tool key={i} defaultOpen={false} className="my-1 bg-background/60 text-xs">
                             <ToolHeader
                               type={tp.type === "dynamic-tool" ? "dynamic-tool" : (tp.type as any)}
                               state={tp.state}
-                              toolName={tp.type === "dynamic-tool" ? name : undefined as any}
+                              toolName={tp.type === "dynamic-tool" ? name : (undefined as any)}
                               title={name}
                             />
                             <ToolContent>
@@ -454,34 +480,83 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                       }
                       return null;
                     })}
-                  </MessageContent>
-                </Message>
-              ))
-            )}
-            {isLoading && (
-              <div className="px-1"><Shimmer>Thinking...</Shimmer></div>
-            )}
-            {error && (
-              <div className="text-xs text-destructive">Error: {error.message}</div>
-            )}
-          </ConversationContent>
-          <ConversationScrollButton />
-        </Conversation>
+                  </div>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div
+                    className="flex gap-1 rounded-[18px] rounded-bl-[4px] bg-muted px-3.5 py-3"
+                    style={{ animation: "msgIn .25s ease" }}
+                  >
+                    <span className="size-[7px] rounded-full bg-muted-foreground" style={{ animation: "dotPulse 1.2s infinite" }} />
+                    <span className="size-[7px] rounded-full bg-muted-foreground" style={{ animation: "dotPulse 1.2s .18s infinite" }} />
+                    <span className="size-[7px] rounded-full bg-muted-foreground" style={{ animation: "dotPulse 1.2s .36s infinite" }} />
+                  </div>
+                </div>
+              )}
+              {error && (
+                <div className="text-xs text-destructive">Error: {error.message}</div>
+              )}
+            </>
+          )}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
 
-        <div className="border-t p-3">
-          <PromptInput onSubmit={onSubmit}>
-            <PromptInputTextarea
-              ref={textareaRef as any}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={disabled ? "Sign in to chat with Bob…" : "Ask Bob anything… (e.g. why did my calls drop last week?)"}
-              disabled={disabled}
-            />
-            <PromptInputFooter className="justify-end">
-              <PromptInputSubmit status={status} disabled={disabled || !input.trim() || isLoading} />
-            </PromptInputFooter>
-          </PromptInput>
-        </div>
+      {/* Quick chips */}
+      <div className="flex flex-wrap gap-2 px-3.5 pb-1.5 pt-2.5">
+        {QUICK_PROMPTS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            disabled={disabled || isLoading}
+            onClick={() => sendMessage({ text: p })}
+            className="rounded-full px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
+            style={{ background: "hsl(var(--bob-bubble) / 0.1)", color: "hsl(var(--bob-bubble))" }}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {/* Composer */}
+      <div className="flex items-center gap-2 px-3.5 pb-3.5 pt-2">
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder={disabled ? "Sign in to chat with Bob…" : "Ask about your numbers…"}
+          disabled={disabled}
+          className="flex-1 resize-none rounded-[999px] border border-input bg-background px-4 py-2.5 text-sm outline-none transition focus:border-ring disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={submit}
+          aria-label="Send"
+          disabled={disabled || !input.trim() || isLoading}
+          className="grid size-9 shrink-0 place-items-center rounded-full text-primary-foreground transition hover:brightness-110 disabled:opacity-40"
+          style={{ background: "hsl(var(--bob-bubble))", color: "hsl(var(--bob-bubble-foreground))" }}
+        >
+          <ArrowUp className="size-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BobBubble({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex justify-start" style={{ animation: "msgIn .25s ease" }}>
+      <div className="max-w-[92%] rounded-[18px] rounded-bl-[4px] bg-muted px-3.5 py-2.5 text-sm text-foreground">
+        {children}
       </div>
     </div>
   );
