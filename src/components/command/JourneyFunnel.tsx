@@ -7,7 +7,6 @@ import { DEFAULT_COMMAND_TARGETS } from "./useCommandData";
 import { TIPS } from "./tooltips";
 import { CARD_CHROME } from "./cardChrome";
 import {
-  PROJECTED_LABEL,
   QUALITY_TARGETS,
   qualityTier,
   formatQualityRate,
@@ -48,10 +47,11 @@ export function JourneyFunnel({
   prior = prior ?? EMPTY_TOTALS;
   const isAds = mode === "ads";
   // The funnel is a CALL-tracking funnel: every stage must come from CTM so the
-  // parts sum to the total. CRM wins (t.sales, from ghl_opportunities) are a
+  // parts sum to the base. CRM wins (t.sales, from ghl_opportunities) are a
   // different population on a different timestamp and are shown separately.
-  const qualityCount = t.good + t.projected;
-  const priorQualityCount = prior.good + prior.projected;
+  // Projected-sale is retired: quality is good calls only.
+  const qualityCount = t.good;
+  const priorQualityCount = prior.good;
   const cpgl = qualityCount ? t.spend / qualityCount : 0;
   const priorCpgl = priorQualityCount ? prior.spend / priorQualityCount : 0;
   const cpl = t.totalLeads ? t.spend / t.totalLeads : 0;
@@ -59,8 +59,9 @@ export function JourneyFunnel({
   const qualityRatePct = t.qualityRate * 100;
   const priorQualityRatePct = prior.qualityRate * 100;
   const tier = qualityTier(t.qualityRate, t.totalLeads);
-  const callsConvPct = t.calls ? 100 : 0; // 100% of calls flow into the funnel
-  const leadsConvPct = t.calls ? (t.totalLeads / t.calls) * 100 : 0;
+  const callsConvPct = t.calls ? 100 : 0; // 100% of records enter the funnel
+  const scoredPct = t.calls ? (t.totalLeads / t.calls) * 100 : 0;
+  const unscored = Math.max(0, t.calls - t.totalLeads);
   const mer = isAds && t.totalLeads && blendedTotalLeads ? blendedTotalLeads / t.totalLeads : null;
   const benchmarkName = benchmarkLabel ?? "Current scope";
   const cpglBenchmark = cpgl ? `${fmtCurrency(cpgl)}/good lead` : "unavailable";
@@ -79,8 +80,8 @@ export function JourneyFunnel({
       </div>
       <p className="text-[11px] text-slate-500 mt-0.5">
         {isAds
-          ? "PPC Spend → PPC Records → PPC Qualified (good + projected)"
-          : "Ad Spend → Records → Qualified (good + projected)"}
+          ? "PPC Spend → PPC Records → Scored calls → Good Calls"
+          : "Ad Spend → Records → Scored calls → Good Calls"}
       </p>
 
       {/* Single horizontal row: three stages on one baseline, long connector arrows. */}
@@ -89,7 +90,9 @@ export function JourneyFunnel({
         <Connector />
         <Stage s={{ label: isAds ? "PPC Records" : "Records", src: isAds ? "daily_metrics.record_count · Google PPC" : "CTM + Forms (calls + forms)", value: fmtNumber(t.calls), Icon: PhoneCall, sub: t.calls ? `${callsConvPct.toFixed(0)}%` : "—", iconBg: "bg-indigo-100", iconColor: "text-indigo-600" }} />
         <Connector />
-        <QualifiedStage good={t.good} projected={t.projected} bad={t.bad} qualityRate={t.qualityRate} base={t.totalLeads} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} leadsConvPct={leadsConvPct} />
+        <ScoredStage scored={t.totalLeads} records={t.calls} unscored={unscored} scoredPct={scoredPct} />
+        <Connector />
+        <GoodStage good={t.good} bad={t.bad} qualityRate={t.qualityRate} base={t.totalLeads} qualityRatePct={qualityRatePct} hasBase={t.totalLeads > 0} />
       </div>
 
       <div className="mt-auto grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-200 pt-2">
@@ -114,7 +117,7 @@ export function JourneyFunnel({
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
           tier={tier === "low-sample" ? null : tier}
         />
-        <LeadMix bad={t.bad} good={t.good} projected={t.projected} crmWins={t.sales} total={t.totalLeads} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
+        <LeadMix bad={t.bad} good={t.good} other={t.projected} crmWins={t.sales} total={t.totalLeads} records={t.calls} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
       </div>
 
       {isAds && (
