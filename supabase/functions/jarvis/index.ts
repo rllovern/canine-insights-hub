@@ -141,6 +141,10 @@ type Ctx = {
   defaultPropertyId: string | null;
   defaultFrom: string | null;
   defaultTo: string | null;
+  /** Scope from the sidebar location selector. */
+  scopeMode: "agency" | "property";
+  /** Every property id this request is allowed to touch (already access-checked). */
+  allowedProperties: { id: string; name: string }[];
 };
 
 type ToolPropertyInput = {
@@ -201,8 +205,29 @@ function resolveProperty(ctx: Ctx, input?: string | ToolPropertyInput | null, to
     ? input
     : input.property_id ?? input.propertyId ?? null;
   if (toolName && typeof input !== "string") logToolContext(toolName, input ?? {}, ctx);
-  const id = raw ?? ctx.defaultPropertyId;
-  if (!id) throw new Error("no property specified and no active property in context");
+  const allowed = ctx.allowedProperties;
+  // Single-location scope: pinned. Anything else is out of view.
+  if (ctx.scopeMode === "property") {
+    const pinned = ctx.defaultPropertyId;
+    if (!pinned) throw new Error("no location is selected in the dashboard");
+    if (raw && raw !== pinned) {
+      const name = allowed.find((p) => p.id === pinned)?.name ?? "the selected location";
+      throw new Error(
+        `out_of_scope: the location selector is set to ${name}. You may only discuss that location. Tell the user to switch the location selector to look at another location.`,
+      );
+    }
+    return pinned;
+  }
+  // Agency scope: any accessible location, but nothing outside it.
+  const id = raw ?? (allowed.length === 1 ? allowed[0].id : null);
+  if (!id) {
+    throw new Error(
+      "missing_property_id: the selector is set to all locations. Call list_locations and then call this tool once per location you need.",
+    );
+  }
+  if (!allowed.some((p) => p.id === id)) {
+    throw new Error("out_of_scope: that location is not one this user can see.");
+  }
   return id;
 }
 function resolveRange(ctx: Ctx, from?: string, to?: string, days?: number) {
