@@ -316,6 +316,17 @@ function sourceBundle(contact: Record<string, unknown> | undefined) {
 
 function buildTools(ctx: Ctx) {
   return {
+    list_locations: tool({
+      description:
+        "List the locations currently in scope (from the dashboard location selector). Call this first whenever the scope is all locations, then call the other tools once per location id.",
+      inputSchema: z.object({}),
+      execute: wrap(ctx, "list_locations", async () => ({
+        scope_mode: ctx.scopeMode,
+        locations: ctx.allowedProperties,
+        count: ctx.allowedProperties.length,
+      })),
+    }),
+
     get_property_context: tool({
       description:
         "Get the active property's name, connected data sources, and sync freshness. Always call this first when starting a new line of inquiry about a property.",
@@ -324,16 +335,7 @@ function buildTools(ctx: Ctx) {
         propertyId: z.string().uuid().optional().describe("Alias for property_id; defaults to active dashboard property"),
       }),
       execute: wrap(ctx, "get_property_context", async (input) => {
-        logToolContext("get_property_context", input, ctx);
-        const id = input.property_id ?? input.propertyId ?? ctx.defaultPropertyId;
-        if (!id) {
-          return {
-            ok: false,
-            error: "missing_property_id",
-            message: "No property selected.",
-          };
-        }
-        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const id = resolveProperty(ctx, input, "get_property_context");
         const [{ data: p }, { data: srcs }] = await Promise.all([
           ctx.supabase.from("properties").select("id,name,slug,timezone").eq("id", id).maybeSingle(),
           ctx.supabase.from("property_data_sources").select("source,is_connected,last_synced_at").eq("property_id", id),
