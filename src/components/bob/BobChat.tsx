@@ -11,7 +11,6 @@ import { rangeToISO } from "@/lib/metrics";
 import {
   Conversation, ConversationContent, ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import { MessageResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import {
   Popover, PopoverContent, PopoverTrigger,
