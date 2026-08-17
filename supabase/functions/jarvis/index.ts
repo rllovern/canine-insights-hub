@@ -1972,6 +1972,7 @@ serve(async (req) => {
       : accessible;
 
     // Create or update session
+    let priorSessionPropertyId: string | null = null;
     if (!sessionId) {
       const firstUser = messages.find(m => m.role === "user");
       const titleText = firstUser?.parts?.find((p) => p.type === "text")?.text ?? "New session";
@@ -1989,9 +1990,14 @@ serve(async (req) => {
       if (sessErr) throw new Error(sessErr.message);
       sessionId = sess.id;
     } else {
+      const { data: prior } = await supabase
+        .from("ai_agent_sessions")
+        .select("property_id")
+        .eq("id", sessionId).eq("user_id", user.id).maybeSingle();
+      priorSessionPropertyId = (prior?.property_id as string | null) ?? null;
       // Don't block the model call on a bookkeeping update.
       void supabase.from("ai_agent_sessions")
-        .update({ updated_at: new Date().toISOString() })
+        .update({ updated_at: new Date().toISOString(), property_id: propertyId })
         .eq("id", sessionId).eq("user_id", user.id)
         .then(({ error }) => { if (error) console.error("session touch failed", error.message); });
     }
@@ -2018,6 +2024,7 @@ serve(async (req) => {
       defaultTo: to,
       scopeMode,
       allowedProperties,
+      turn: { toolRuns: 0 },
     };
 
     const gateway = createOpenAICompatible({
@@ -2031,12 +2038,51 @@ serve(async (req) => {
       : `ALL LOCATIONS (${allowedProperties.length}): ${allowedProperties.map((p) => `${p.name} [${p.id}]`).join(", ") || "(none)"}`;
     const contextHeader = `\n\nACTIVE CONTEXT:\n- scope: ${scopeLine}\n- date_range: ${from ?? "?"} → ${to ?? "?"}\n\nSCOPE RULES (non-negotiable):\n- The dashboard location selector is the only thing that decides which locations you may discuss.\n- In SINGLE LOCATION scope, every answer and every tool call is about that location only. If the user asks about another location by name, say you're currently looking at ${allowedProperties[0]?.name ?? "the selected location"} and they should switch the location selector. Never pull or guess another location's numbers.\n- In ALL LOCATIONS scope, use get_portfolio_trend — one call that covers every location at once. Do NOT loop the per-location tools across all locations; that is slow and you do not need it. After the roll-up, drill into at most 2 locations that actually moved, and offer to look at the others instead of sweeping them all.\n- Never mention or infer data about a location that is not listed above.\n\nSPEED RULES:\n- Open with your one-line acknowledgement BEFORE you call any tool, so the user sees you working. Then run the lookups, then give the brief answer and the follow-up offer.\n- Prefer the fewest lookups that can answer the question. Do not re-run a tool you already have results from in this conversation.`;
 
+    // Location fence: when the selector moved since the last turn, every figure
+    // in the earlier conversation belongs to a different location. Strip the
+    // prior tool results so the model cannot carry their shape forward, and say
+    // so explicitly. This is what let Winchester's numbers leak into a Central
+    // IL answer.
+    const locationChanged =
+      !!sessionId && priorSessionPropertyId !== undefined &&
+      (priorSessionPropertyId ?? null) !== (propertyId ?? null);
+
+    let modelMessages = await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true });
+    if (locationChanged) {
+      const lastIdx = modelMessages.length - 1;
+      modelMessages = modelMessages
+        .map((m, i) => {
+          if (i === lastIdx || m.role === "user") return m;
+          if (Array.isArray(m.content)) {
+            const textOnly = m.content.filter((p: { type?: string }) => p?.type === "text");
+            return { ...m, content: textOnly } as typeof m;
+          }
+          return m;
+        })
+        .filter((m) => m.role !== "tool");
+    }
+
+    const lastUserText = (lastUser?.parts ?? [])
+      .filter((p) => p.type === "text")
+      .map((p) => (p as { text: string }).text)
+      .join(" ");
+    const mustFetch = needsFreshData(lastUserText);
+
+    const staleNote = locationChanged
+      ? `\n\nLOCATION CHANGED THIS TURN: the selector moved to ${allowedProperties[0]?.name ?? "a different location"}. Every number mentioned earlier in this conversation belongs to a different location and is void. Do not reuse, adjust or reason from any of it. Run the lookups again for this location before you say anything numeric.`
+      : "";
+    const fetchNote = mustFetch
+      ? `\n\nTHIS TURN REQUIRES A LOOKUP: the question asks about the account's data, so call the tool that answers it before you write your answer. You have no numbers until that tool returns. If it returns nothing or errors, say so plainly instead of producing a figure.`
+      : "";
+
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
-      system: SYSTEM_PROMPT + contextHeader,
-      messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
+      system: SYSTEM_PROMPT + contextHeader + staleNote + fetchNote,
+      messages: modelMessages,
       tools: buildTools(ctx),
       stopWhen: stepCountIs(8),
+      prepareStep: ({ stepNumber }) =>
+        stepNumber === 0 && mustFetch ? { toolChoice: "required" as const } : {},
     });
 
     const streamResponse = result.toUIMessageStreamResponse({
@@ -2047,11 +2093,20 @@ serve(async (req) => {
             ?.filter(p => p.type === "text")
             .map(p => (p as { text: string }).text)
             .join("\n");
+          const toolRuns = ctx.turn.toolRuns;
+          const unbacked = toolRuns === 0 && statesNumbers(text ?? "");
+          if (unbacked) {
+            console.error("jarvis unbacked numeric answer", {
+              sessionId, propertyId, question: lastUserText.slice(0, 200),
+            });
+          }
           await supabase.from("ai_agent_messages").insert({
             session_id: sessionId,
             role: "assistant",
             content: text ?? "",
             parts_json: responseMessage.parts,
+            tool_run_count: toolRuns,
+            tool_backed: !unbacked,
           });
         } catch (e) {
           console.error("persist assistant failed", e);
