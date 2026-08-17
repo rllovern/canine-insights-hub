@@ -94,16 +94,15 @@ async function getFreshAccessToken() {
 
 export function BobChat() {
   const { session } = useAuth();
-  const { activeProperty, properties } = useProperties();
-  // We keep useProperties() for the list, and use scope as the source of truth
-  // for the active property and for switching it.
-  const { setScope } = useScope();
+  const { properties } = useProperties();
+  // The sidebar location selector (ScopeContext) is the single source of truth
+  // for what Bob is allowed to look at.
+  const { mode, propertyId: scopedPropertyId, propertyIds, activeProperty, label: scopeLabel } = useScope();
   const { range, compareRange, compareMode } = useDashboard();
   const [params, setParams] = useSearchParams();
   const sessionParam = params.get("session");
   const [sessionId, setSessionId] = useState<string | null>(sessionParam);
   const initialQ = params.get("q");
-  const urlPropertyId = params.get("propertyId");
   const urlFrom = params.get("from");
   const urlTo = params.get("to");
   const didPrefill = useRef(false);
@@ -120,28 +119,18 @@ export function BobChat() {
     [compareMode, compareRange],
   );
 
-  // Hydrate active property from ?propertyId= if present
-  useEffect(() => {
-    if (!urlPropertyId) return;
-    if (activeProperty?.id === urlPropertyId) return;
-    const match = properties.find((p) => p.id === urlPropertyId);
-    if (match) setScope({ mode: "property", propertyId: match.id });
-  }, [urlPropertyId, properties, activeProperty?.id, setScope]);
-
-  const urlProperty = urlPropertyId ? properties.find((p) => p.id === urlPropertyId) ?? null : null;
-  const effectiveProperty =
-    (urlPropertyId && activeProperty?.id === urlPropertyId ? activeProperty : null) ??
-    urlProperty ??
-    (!urlPropertyId ? activeProperty : null);
+  const effectiveProperty = activeProperty;
   const effectiveFrom = urlFrom ?? iso.from;
   const effectiveTo = urlTo ?? iso.to;
-  const effectivePropertyId = urlPropertyId ?? activeProperty?.id ?? null;
+  const effectivePropertyId = mode === "property" ? scopedPropertyId : null;
 
   latestContextRef.current = {
     propertyId: effectivePropertyId,
     propertyName: effectiveProperty?.name ?? null,
     propertySlug: effectiveProperty?.slug ?? null,
-    bobHeaderProperty: activeProperty?.name ?? (urlPropertyId ? "Loading property..." : "No property"),
+    scopeMode: mode,
+    propertyIds: propertyIds,
+    scopeLabel,
     from: effectiveFrom,
     to: effectiveTo,
     compareFrom: cmpIso?.from ?? null,
