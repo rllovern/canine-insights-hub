@@ -20,21 +20,23 @@ import {
 import {
   Tool, ToolHeader, ToolContent, ToolInput, ToolOutput,
 } from "@/components/ai-elements/tool";
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
-import { History } from "lucide-react";
-import bobMark from "@/assets/jarvis-mark.png";
+import { History, Plus, X, ArrowUp } from "lucide-react";
+import { BOB_STATUS, type BobMood } from "./BobFace";
 import { toast } from "@/hooks/use-toast";
 
 const QUICK_PROMPTS = [
-  "Why are my leads down this month?",
-  "Is my ad spend working right now?",
-  "How does this month compare to the same time last year?",
-  "Walk me through what these numbers mean",
+  "Why are my leads down?",
+  "Is my ad spend working?",
+  "How am I doing vs last year?",
+  "What do these numbers mean?",
 ];
+
+const GREETING =
+  "Hi, I'm Bob! I keep an eye on your ads, calls, leads and sales — and I explain them in plain English. Ask me anything, or tap a question below.";
 
 type LatestBobContext = {
   propertyId: string | null;
