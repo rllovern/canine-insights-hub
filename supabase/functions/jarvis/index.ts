@@ -265,12 +265,6 @@ function totalsOf(data: unknown) {
   return t ?? null;
 }
 
-function _unusedSecondsBetween(a: string | null | undefined, b: string | null | undefined) {
-  if (!a || !b) return null;
-  const diff = new Date(a).getTime() - new Date(b).getTime();
-  return Number.isFinite(diff) ? Math.max(0, Math.round(diff / 1000)) : null;
-}
-
 function percentile(values: number[], p: number) {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
