@@ -1743,21 +1743,23 @@ serve(async (req) => {
       if (sessErr) throw new Error(sessErr.message);
       sessionId = sess.id;
     } else {
-      await supabase.from("ai_agent_sessions")
+      // Don't block the model call on a bookkeeping update.
+      void supabase.from("ai_agent_sessions")
         .update({ updated_at: new Date().toISOString() })
-        .eq("id", sessionId).eq("user_id", user.id);
+        .eq("id", sessionId).eq("user_id", user.id)
+        .then(({ error }) => { if (error) console.error("session touch failed", error.message); });
     }
 
     // Persist newest user message
     const lastUser = [...messages].reverse().find(m => m.role === "user");
     if (lastUser) {
       const text = lastUser.parts?.filter(p => p.type === "text").map(p => (p as { text: string }).text).join("\n");
-      await supabase.from("ai_agent_messages").insert({
+      void supabase.from("ai_agent_messages").insert({
         session_id: sessionId,
         role: "user",
         content: text ?? "",
         parts_json: lastUser.parts,
-      });
+      }).then(({ error }) => { if (error) console.error("persist user failed", error.message); });
     }
 
     const ctx: Ctx = {
