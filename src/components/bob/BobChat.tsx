@@ -354,6 +354,22 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
 
   useEffect(() => { if (error && setMood) setMood("concerned", 5000); }, [error, setMood]);
 
+  // Live "what Bob is doing right now" line, derived from the streaming tool parts.
+  const activity = (() => {
+    if (!isLoading) return null;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return "Getting your numbers…";
+    const running = [...(last.parts ?? [])].reverse().find((p) => {
+      const t = (p as { type?: string }).type ?? "";
+      const s = (p as { state?: string }).state ?? "";
+      return (t.startsWith("tool-") || t === "dynamic-tool") &&
+        (s === "input-streaming" || s === "input-available");
+    }) as { type?: string; toolName?: string } | undefined;
+    if (!running) return "Thinking it through…";
+    const name = running.toolName ?? (running.type ?? "").replace(/^tool-/, "");
+    return TOOL_ACTIVITY[name] ?? "Looking that up…";
+  })();
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Header — leaves room for Bob peeking over the corner */}
@@ -361,7 +377,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
         <div className="min-w-0">
           <div className="text-base font-bold leading-tight">Bob</div>
           <div className="truncate text-xs text-muted-foreground">
-            {isLoading ? BOB_STATUS.thinking : BOB_STATUS[mood]}
+            {isLoading ? (activity ?? BOB_STATUS.thinking) : BOB_STATUS[mood]}
           </div>
           <div className="truncate text-[10px] text-muted-foreground/80">
             {scopeLabel} · {effectiveFrom} → {effectiveTo}
