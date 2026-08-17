@@ -27,6 +27,8 @@ interface MessageRow {
   role: string;
   content: string | null;
   created_at: string;
+  tool_backed: boolean | null;
+  tool_run_count: number | null;
 }
 
 interface AuthUser {
@@ -69,7 +71,7 @@ export default function BobLogs() {
           .limit(1000),
         supabase
           .from("ai_agent_messages")
-          .select("id,session_id,role,content,created_at")
+          .select("id,session_id,role,content,created_at,tool_backed,tool_run_count")
           .order("created_at", { ascending: true })
           .limit(5000),
         supabase.from("properties").select("id,name"),
@@ -240,6 +242,16 @@ export default function BobLogs() {
                                   <div key={m.id} className="space-y-1">
                                     <div className="text-xs font-medium text-muted-foreground">
                                       {m.role === "user" ? label(s.user_id) : "Bob"} · {fmt(m.created_at)}
+                                      {m.role === "assistant" && m.tool_backed === false && (
+                                        <span className="ml-2 rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-destructive">
+                                          unverified · no lookup
+                                        </span>
+                                      )}
+                                      {m.role === "assistant" && (m.tool_run_count ?? 0) > 0 && (
+                                        <span className="ml-2 text-[10px] text-muted-foreground">
+                                          {m.tool_run_count} lookup{m.tool_run_count === 1 ? "" : "s"}
+                                        </span>
+                                      )}
                                     </div>
                                     <div
                                       className={cn(
