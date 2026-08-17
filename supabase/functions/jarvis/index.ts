@@ -832,12 +832,13 @@ function buildTools(ctx: Ctx) {
         const from = new Date(to.getTime() - i.days * 86400_000);
         const { data, error } = await ctx.supabase
           .from("v_lead_counts_daily")
-          .select("date,ad_source,campaign,cost,clicks,impressions,records,good_leads")
+          .select("date,ad_source,campaign,cost,records,good_leads")
           .eq("property_id", id)
           .gte("date", from.toISOString().slice(0, 10))
           .lte("date", to.toISOString().slice(0, 10))
           .order("date");
         if (error) throw new Error(error.message);
+        const traffic = await fetchTraffic(ctx, id, from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
         const inScope = await dashboardScope(ctx, id);
         const rows = (data ?? []).filter(inScope);
         const byDate = new Map<string, { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }>();
@@ -845,10 +846,11 @@ function buildTools(ctx: Ctx) {
         for (const r of rows) {
           const date = r.date;
           const source = r.ad_source ?? "Unknown";
+          const tr = traffic.get(trafficKey(r.date, r.ad_source, r.campaign)) ?? { clicks: 0, impressions: 0 };
           const add = (bucket: { cost: number; clicks: number; impressions: number; calls: number; good_leads: number }) => {
             bucket.cost += Number(r.cost ?? 0);
-            bucket.clicks += Number(r.clicks ?? 0);
-            bucket.impressions += Number(r.impressions ?? 0);
+            bucket.clicks += tr.clicks;
+            bucket.impressions += tr.impressions;
             bucket.calls += Number(r.records ?? 0);
             bucket.good_leads += Number(r.good_leads ?? 0);
           };
