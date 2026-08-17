@@ -1,14 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useScope } from "@/contexts/ScopeContext";
 import { rangeToISO, type DateRange } from "@/lib/metrics";
 
 type Props = {
   prompt: string;
   label?: string;
   range?: DateRange;
-  propertyId?: string;
   variant?: "default" | "outline" | "ghost" | "secondary";
   size?: "default" | "sm" | "icon";
   className?: string;
@@ -16,26 +14,22 @@ type Props = {
 
 /**
  * Embedded Bob entry point. Renders a small "Ask Bob" / "Run with Bob"
- * button that deep-links to /assistant with prompt + scope params, inheriting
- * the current property + date range when not explicitly overridden.
+ * button that deep-links to /assistant with the prompt (and optionally a date
+ * range). The location is always taken from the sidebar location selector.
  */
 export function AskBobButton({
   prompt,
   label = "Ask Bob",
   range,
-  propertyId,
   variant = "outline",
   size = "sm",
   className,
 }: Props) {
   const nav = useNavigate();
-  const { activeProperty } = useScope();
 
   const go = () => {
     const sp = new URLSearchParams();
     sp.set("q", prompt);
-    const pid = propertyId ?? activeProperty?.id;
-    if (pid) sp.set("propertyId", pid);
     if (range) {
       try {
         const iso = rangeToISO(range);
