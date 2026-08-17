@@ -12,9 +12,6 @@ import {
   Conversation, ConversationContent, ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import { MessageResponse } from "@/components/ai-elements/message";
-import {
-  Tool, ToolHeader, ToolContent, ToolInput, ToolOutput,
-} from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -32,20 +29,6 @@ const QUICK_PROMPTS = [
 
 const GREETING =
   "Hi, I'm Bob! I keep an eye on your ads, calls, leads and sales — and I explain them in plain English. Ask me anything, or tap a question below.";
-
-// Plain-English label for whatever lookup Bob is running right now.
-const TOOL_ACTIVITY: Record<string, string> = {
-  list_locations: "Checking which locations you can see…",
-  get_property_context: "Checking your location setup…",
-  get_portfolio_trend: "Rolling up all your locations…",
-  get_trend_windows: "Comparing this period to before…",
-  get_source_health: "Checking your data feeds…",
-  get_call_summary: "Reading through your calls…",
-  get_lead_quality: "Sorting your leads by quality…",
-  get_ad_performance: "Looking at your ad spend…",
-  get_budget_pacing: "Checking your budget pacing…",
-  get_sales_summary: "Pulling your sales from the CRM…",
-};
 
 type LatestBobContext = {
   propertyId: string | null;
@@ -231,7 +214,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     [setSessionId],
   );
 
-  const { messages, sendMessage, status, error, setMessages } = useChat({
+  const { messages, sendMessage, status, error, setMessages, regenerate } = useChat({
     id: sessionId ?? "new",
     transport,
     onError: (e) => toast({ title: "Bob hit a problem", description: e.message, variant: "destructive" }),
@@ -368,21 +351,17 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
 
   useEffect(() => { if (error && setMood) setMood("concerned", 5000); }, [error, setMood]);
 
-  // Live "what Bob is doing right now" line, derived from the streaming tool parts.
-  const activity = (() => {
-    if (!isLoading) return null;
-    const last = messages[messages.length - 1];
-    if (!last || last.role !== "assistant") return "Getting your numbers…";
-    const running = [...(last.parts ?? [])].reverse().find((p) => {
-      const t = (p as { type?: string }).type ?? "";
-      const s = (p as { state?: string }).state ?? "";
-      return (t.startsWith("tool-") || t === "dynamic-tool") &&
-        (s === "input-streaming" || s === "input-available");
-    }) as { type?: string; toolName?: string } | undefined;
-    if (!running) return "Thinking it through…";
-    const name = running.toolName ?? (running.type ?? "").replace(/^tool-/, "");
-    return TOOL_ACTIVITY[name] ?? "Looking that up…";
-  })();
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // The user only wants a "thinking" state — no per-tool activity chatter.
+  const activity = isLoading ? BOB_STATUS.thinking : null;
+
+  // A turn that ended with no text at all (worker recycled mid-run) must not
+  // look like Bob simply ignored the question.
+  const lastMessage = messages[messages.length - 1];
+  const droppedAnswer =
+    !isLoading && !error && !!lastMessage && lastMessage.role === "assistant" &&
+    !(lastMessage.parts ?? []).some((p) => p.type === "text" && (p as { text?: string }).text?.trim());
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -398,12 +377,13 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Popover>
+          <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
             <PopoverTrigger asChild>
               <Button size="icon" variant="ghost" className="size-7 rounded-full" aria-label="Recent sessions">
                 <History className="size-3.5" />
               </Button>
             </PopoverTrigger>
+            {historyOpen && (
             <PopoverContent align="end" className="w-72 p-1">
               {recentSessions.length === 0 ? (
                 <div className="px-2 py-3 text-xs text-muted-foreground">No sessions yet.</div>
@@ -413,7 +393,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => setSessionId(s.id)}
+                      onClick={() => { setSessionId(s.id); setHistoryOpen(false); }}
                       className={`w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted/60 ${
                         s.id === sessionId ? "bg-muted/60" : ""
                       }`}
@@ -427,6 +407,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                 </div>
               )}
             </PopoverContent>
+            )}
           </Popover>
           <Button
             size="icon"
@@ -462,7 +443,13 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
           ) : (
             <>
               {messages.length === 0 && <BobBubble>{GREETING}</BobBubble>}
-              {messages.map((m) => (
+              {messages.map((m) => {
+                const textParts = (m.parts ?? []).filter(
+                  (p) => p.type === "text" && (p as { text?: string }).text?.trim(),
+                );
+                // Tool calls are internal plumbing — never shown.
+                if (textParts.length === 0) return null;
+                return (
                 <div
                   key={m.id}
                   className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
@@ -480,33 +467,27 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
                         : undefined
                     }
                   >
-                    {m.parts.map((part, i) => {
-                      if (part.type === "text") {
-                        return <MessageResponse key={i}>{part.text}</MessageResponse>;
-                      }
-                      if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
-                        const tp = part as any;
-                        const name = tp.toolName ?? tp.type.replace(/^tool-/, "");
-                        return (
-                          <Tool key={i} defaultOpen={false} className="my-1 bg-background/60 text-xs">
-                            <ToolHeader
-                              type={tp.type === "dynamic-tool" ? "dynamic-tool" : (tp.type as any)}
-                              state={tp.state}
-                              toolName={tp.type === "dynamic-tool" ? name : (undefined as any)}
-                              title={name}
-                            />
-                            <ToolContent>
-                              <ToolInput input={tp.input} />
-                              <ToolOutput output={tp.output} errorText={tp.errorText} />
-                            </ToolContent>
-                          </Tool>
-                        );
-                      }
-                      return null;
-                    })}
+                    {textParts.map((part, i) => (
+                      <MessageResponse key={i}>{(part as { text: string }).text}</MessageResponse>
+                    ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
+              {droppedAnswer && (
+                <div className="flex justify-start">
+                  <div className="max-w-[92%] rounded-[18px] rounded-bl-[4px] bg-muted px-3.5 py-2.5 text-sm">
+                    That one got cut off before I could answer.{" "}
+                    <button
+                      type="button"
+                      className="underline underline-offset-2"
+                      onClick={() => regenerate()}
+                    >
+                      Tap to try again
+                    </button>
+                  </div>
+                </div>
+              )}
               {isLoading && (
                 <div className="flex justify-start">
                   <div

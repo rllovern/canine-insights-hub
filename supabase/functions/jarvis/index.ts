@@ -32,8 +32,10 @@ WHAT YOU ARE EXPERT IN
 - Macro conditions: consumer discretionary spending softens with rate and price pressure, and premium services like board-and-train feel it before basic obedience does.
 
 HOW YOU WORK (agentic)
-- Never invent a number. Always pull real data with your tools before answering, and pull from more than one place when the question is about a change over time.
-- You can chain several lookups in a single answer. Do it. A good answer to "why are my leads down" checks the current window, the same-length prior window, the same period last year, the trailing twelve months, ad spend and click-through rate, call volume, lead quality mix, and whether the data feeds are current.
+- Never invent a number. Always pull real data with your tools before answering.
+- Use the ONE-CALL diagnosis lookups first. For any "why are my leads down / is this normal / how are we doing" question, call diagnose_leads once — it already returns the current window, the same-length prior window, the same period last year, the last six months, the breakdown by source, and feed freshness. For any spend, budget, cost or "are the ads working" question, call diagnose_ad_spend once. For all-locations questions, call get_portfolio_trend once.
+- Two to three lookups is the ceiling for a normal answer. Do NOT chain compare_periods, get_trend_windows, the ads tool, the call-tracking tool and the source-health tool one after another — the one-call lookups cover all of that. Reach for a specialist tool only when the diagnosis leaves one specific question open.
+- ALWAYS finish with a written answer. Never end your turn on a lookup with nothing said.
 - Always know which location and which date range you are talking about, and name them naturally in the answer.
 - You only read data. You never change anything, and you never claim you did.
 
@@ -1578,6 +1580,144 @@ function buildTools(ctx: Ctx) {
       }),
     }),
 
+    diagnose_leads: tool({
+      description:
+        "ONE-CALL DIAGNOSIS for 'why are my leads down', 'is this normal', 'how are we doing'. Returns, in a single lookup: the selected window, the same-length prior window, the same period last year, the last 6 months by month, the current window broken out by source, and the freshness/failure state of every data feed. Use this INSTEAD of chaining compare_periods + get_trend_windows + get_ctm_performance + get_google_ads_performance + get_source_health. Only drill into another tool if this leaves a specific question open.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        days: z.number().int().min(1).max(365).optional(),
+      }),
+      execute: wrap(ctx, "diagnose_leads", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "diagnose_leads");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
+        const d = (x: Date) => x.toISOString().slice(0, 10);
+        const fromD = new Date(from);
+        const toD = new Date(to);
+        const spanDays = Math.max(1, Math.round((toD.getTime() - fromD.getTime()) / 86400_000) + 1);
+        const prevTo = new Date(fromD.getTime() - 86400_000);
+        const prevFrom = new Date(prevTo.getTime() - (spanDays - 1) * 86400_000);
+        const lyFrom = new Date(Date.UTC(fromD.getUTCFullYear() - 1, fromD.getUTCMonth(), fromD.getUTCDate()));
+        const lyTo = new Date(Date.UTC(toD.getUTCFullYear() - 1, toD.getUTCMonth(), toD.getUTCDate()));
+        const now = new Date();
+        const y = now.getUTCFullYear();
+        const m = now.getUTCMonth();
+        const monthSpans = [] as Array<{ month: string; from: string; to: string }>;
+        for (let back = 5; back >= 0; back--) {
+          const start = new Date(Date.UTC(y, m - back, 1));
+          const end = new Date(Date.UTC(y, m - back + 1, 0));
+          monthSpans.push({ month: d(start).slice(0, 7), from: d(start), to: d(end > now ? now : end) });
+        }
+        const call = (f: string, t: string) =>
+          ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: f, _to: t });
+        // Everything in one parallel batch — this whole diagnosis is a single
+        // model step, so the worker never has to survive a long tool chain.
+        const [current, previous, lastYear, months, srcRes, runRes] = await Promise.all([
+          call(from, to),
+          call(d(prevFrom), d(prevTo)),
+          call(d(lyFrom), d(lyTo)),
+          Promise.all(monthSpans.map((s) => call(s.from, s.to))),
+          ctx.supabase.from("property_data_sources")
+            .select("source,is_connected,last_synced_at").eq("property_id", id),
+          ctx.supabase.from("sync_runs")
+            .select("source,status,started_at,error_message")
+            .eq("property_id", id).order("started_at", { ascending: false }).limit(60),
+        ]);
+        const latest = new Map<string, Record<string, unknown>>();
+        for (const r of ((runRes.data ?? []) as Array<Record<string, unknown>>)) {
+          const k = String(r.source);
+          if (!latest.has(k)) latest.set(k, r);
+        }
+        const nowMs = Date.now();
+        const feeds = ((srcRes.data ?? []) as Array<Record<string, unknown>>).map((s) => {
+          const last = s.last_synced_at ? new Date(String(s.last_synced_at)).getTime() : null;
+          const run = latest.get(String(s.source)) ?? null;
+          return {
+            source: s.source,
+            is_connected: s.is_connected,
+            hours_since_sync: last ? Math.round(((nowMs - last) / 3_600_000) * 10) / 10 : null,
+            latest_run_status: run?.status ?? null,
+            stale: last ? nowMs - last > 12 * 3_600_000 : true,
+          };
+        });
+        return {
+          property_id: id,
+          current: { range: { from, to }, totals: totalsOf(current.data), by_source: (current.data as { by_source?: unknown })?.by_source ?? null },
+          previous_same_length: { range: { from: d(prevFrom), to: d(prevTo) }, totals: totalsOf(previous.data) },
+          last_year_same_period: { range: { from: d(lyFrom), to: d(lyTo) }, totals: totalsOf(lastYear.data) },
+          last_6_months_by_month: monthSpans.map((s, idx) => ({ month: s.month, totals: totalsOf(months[idx].data) })),
+          feeds,
+          any_stale_feed: feeds.some((f) => f.is_connected && f.stale),
+          any_failing_feed: feeds.some((f) => f.latest_run_status && String(f.latest_run_status) !== "success"),
+        };
+      }),
+    }),
+
+    diagnose_ad_spend: tool({
+      description:
+        "ONE-CALL DIAGNOSIS for 'is my ad spend working', 'how are the ads doing', budget and cost questions. Returns spend, impressions, clicks, click-through rate, cost per click and cost per good lead for the selected window and the same-length prior window, split by source, plus feed freshness. Use this INSTEAD of chaining the ads, call-tracking and source-health tools.",
+      inputSchema: z.object({
+        property_id: z.string().uuid().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        days: z.number().int().min(1).max(365).optional(),
+      }),
+      execute: wrap(ctx, "diagnose_ad_spend", async (i) => {
+        const id = resolveProperty(ctx, i.property_id, "diagnose_ad_spend");
+        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
+        const d = (x: Date) => x.toISOString().slice(0, 10);
+        const fromD = new Date(from);
+        const toD = new Date(to);
+        const spanDays = Math.max(1, Math.round((toD.getTime() - fromD.getTime()) / 86400_000) + 1);
+        const prevTo = new Date(fromD.getTime() - 86400_000);
+        const prevFrom = new Date(prevTo.getTime() - (spanDays - 1) * 86400_000);
+        const call = (f: string, t: string) =>
+          ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: f, _to: t });
+        const [current, previous, srcRes] = await Promise.all([
+          call(from, to),
+          call(d(prevFrom), d(prevTo)),
+          ctx.supabase.from("property_data_sources")
+            .select("source,is_connected,last_synced_at").eq("property_id", id),
+        ]);
+        const derive = (payload: unknown) => {
+          const t = (totalsOf(payload) ?? {}) as Record<string, number>;
+          const cost = Number(t.cost ?? 0);
+          const clicks = Number(t.clicks ?? 0);
+          const impressions = Number(t.impressions ?? 0);
+          const good = Number(t.good_leads ?? 0) + Number(t.projected_sale ?? 0);
+          return {
+            ...t,
+            ctr_pct: impressions ? Math.round((clicks / impressions) * 10000) / 100 : null,
+            cost_per_click: clicks ? Math.round((cost / clicks) * 100) / 100 : null,
+            cost_per_good_lead: good ? Math.round((cost / good) * 100) / 100 : null,
+          };
+        };
+        const nowMs = Date.now();
+        return {
+          property_id: id,
+          current: {
+            range: { from, to },
+            totals: derive(current.data),
+            by_source: (current.data as { by_source?: unknown })?.by_source ?? null,
+          },
+          previous_same_length: {
+            range: { from: d(prevFrom), to: d(prevTo) },
+            totals: derive(previous.data),
+          },
+          feeds: ((srcRes.data ?? []) as Array<Record<string, unknown>>).map((s) => ({
+            source: s.source,
+            is_connected: s.is_connected,
+            hours_since_sync: s.last_synced_at
+              ? Math.round(((nowMs - new Date(String(s.last_synced_at)).getTime()) / 3_600_000) * 10) / 10
+              : null,
+          })),
+        };
+      }),
+    }),
+
     get_client_summary_context: tool({
       description:
         "Collect the facts needed to write a CLIENT-SAFE summary: wins, risks, performance deltas, lead flow, lead handling summary, account stability, planned next steps, internal caveats. Use BEFORE writing a client_summary report.",
@@ -1790,7 +1930,7 @@ serve(async (req) => {
       system: SYSTEM_PROMPT + contextHeader,
       messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
       tools: buildTools(ctx),
-      stopWhen: stepCountIs(24),
+      stopWhen: stepCountIs(8),
     });
 
     const streamResponse = result.toUIMessageStreamResponse({
