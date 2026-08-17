@@ -3,6 +3,9 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { DashboardProvider } from "@/contexts/DashboardContext";
 import { BobCommandBar } from "@/components/bob/BobCommandBar";
+import { BobDrawer } from "@/components/bob/BobDrawer";
+import { BobLauncher } from "@/components/bob/BobLauncher";
+import { BobProvider } from "@/contexts/BobContext";
 import { TourProvider } from "@/contexts/TourContext";
 import { TourOverlay } from "@/components/tour/TourOverlay";
 
@@ -10,6 +13,7 @@ export function AppShell() {
   return (
     <DashboardProvider>
       <TourProvider>
+      <BobProvider>
       <div className="h-screen flex bg-background overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
@@ -19,8 +23,11 @@ export function AppShell() {
           </main>
         </div>
         <BobCommandBar />
+        <BobLauncher />
+        <BobDrawer />
       </div>
       <TourOverlay />
+      </BobProvider>
       </TourProvider>
     </DashboardProvider>
   );

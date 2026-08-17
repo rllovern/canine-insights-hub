@@ -1,4 +1,4 @@
-import { BarChart3, PhoneCall, Settings, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, Sparkles, LayoutDashboard, Database, Receipt } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, LayoutDashboard, Database, Receipt } from "lucide-react";
 
 export type NavItem = {
   key: string;
@@ -15,7 +15,6 @@ export type NavItem = {
 export const COMMAND_ITEM: NavItem = { key: "command", to: "/command", label: "Command", icon: LayoutDashboard };
 export const BUDGET_ITEM: NavItem = { key: "budget", to: "/budget", label: "Budget Pacing", icon: Wallet };
 export const SALES_ITEM: NavItem = { key: "sales", to: "/sales", label: "Sale Records", icon: Receipt };
-export const BOB_ITEM: NavItem = { key: "bob", to: "/assistant", label: "Bob", icon: Sparkles };
 
 export const MONITOR_ITEMS: NavItem[] = [
   { key: "dashboard", to: "/dashboard", label: "PPC Overview", icon: BarChart3 },

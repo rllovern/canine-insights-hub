@@ -1,7 +1,7 @@
-import { useNavigate } from "react-router-dom";
+import { useBob } from "@/contexts/BobContext";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { rangeToISO, type DateRange } from "@/lib/metrics";
+import { type DateRange } from "@/lib/metrics";
 
 type Props = {
   prompt: string;
@@ -25,20 +25,9 @@ export function AskBobButton({
   size = "sm",
   className,
 }: Props) {
-  const nav = useNavigate();
+  const { openBob } = useBob();
 
-  const go = () => {
-    const sp = new URLSearchParams();
-    sp.set("q", prompt);
-    if (range) {
-      try {
-        const iso = rangeToISO(range);
-        sp.set("from", iso.from);
-        sp.set("to", iso.to);
-      } catch { /* noop */ }
-    }
-    nav(`/assistant?${sp.toString()}`);
-  };
+  const go = () => openBob(prompt);
 
   return (
     <Button

@@ -277,7 +277,11 @@ export function BobChat() {
     })();
   }, [accessToken, sessionId]);
 
-  useEffect(() => { textareaRef.current?.focus(); }, [sessionId, status]);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const t = window.setTimeout(() => textareaRef.current?.focus(), 80);
+    return () => window.clearTimeout(t);
+  }, [sessionId, status, drawerOpen]);
 
   const onSubmit = (msg: { text: string }, evt: React.FormEvent) => {
     evt.preventDefault();
