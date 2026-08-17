@@ -24,8 +24,7 @@ import {
 } from "@/lib/leadModel";
 import { useWonAttribution } from "@/lib/verified-sales";
 import { usePublicToken } from "@/contexts/PublicTokenContext";
-
-const PPC_SOURCE = "Google PPC";
+import { filterByCampaignScope } from "@/lib/campaignScope";
 
 function isoDay(d: Date | string): string {
   if (typeof d === "string") return d.slice(0, 10);
@@ -65,20 +64,7 @@ function useLabelRuleFilter(rows: any[]) {
     },
   });
 
-  return useMemo(() => {
-    if (!data || data.length === 0) return rows;
-    const allowed = new Map<string, Set<string>>();
-    for (const l of data) {
-      if (!allowed.has(l.property_id)) allowed.set(l.property_id, new Set());
-      allowed.get(l.property_id)!.add(l.campaign);
-    }
-    return rows.filter((r) => {
-      if (r.ad_source !== PPC_SOURCE) return true;
-      const set = allowed.get(r.property_id);
-      if (!set) return true; // property has no labels -> unfiltered
-      return set.has(r.campaign);
-    });
-  }, [rows, data]);
+  return useMemo(() => filterByCampaignScope(rows, data), [rows, data]);
 }
 
 export default function CallTracking() {

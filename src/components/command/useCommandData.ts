@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { eachDateISO, rangeToISO, priorRange, type DateRange } from "@/lib/metrics";
 import { totalLeads as canonicalTotalLeads, qualityRate as canonicalQualityRate, type LeadCounts } from "@/lib/leadModel";
 import { fetchVerifiedSalesByDate } from "@/lib/verified-sales";
+import { buildCampaignScope, isRowInScope, PPC_SOURCE, type CampaignLabelRow } from "@/lib/campaignScope";
 
 export type CommandMode = "business" | "ads";
 
@@ -51,7 +52,15 @@ export const DEFAULT_COMMAND_TARGETS: CommandTargets = {
   monthlyBudget: null,
 };
 
-const PPC_SOURCE = "Google PPC";
+async function fetchCampaignLabels(propertyIds: string[] | null): Promise<CampaignLabelRow[]> {
+  if (!propertyIds || propertyIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("campaign_labels")
+    .select("property_id, campaign")
+    .in("property_id", propertyIds);
+  if (error) throw error;
+  return (data ?? []) as CampaignLabelRow[];
+}
 
 function zeroDay(date: string): DailyAgg {
   return { date, cost: 0, good_leads: 0, bad_leads: 0, projected_sale: 0, verified_sale: 0, calls: 0 };
@@ -69,25 +78,14 @@ async function fetchWindow(
   //  - For PPC rows on properties that ship a `campaign_labels` allow-list
   //    (shared Google Ads accounts like Winchester / NoVA), only count
   //    campaigns labeled to this location.
-  let allowed: Map<string, Set<string>> | null = null;
-  if (propertyIds && propertyIds.length > 0) {
-    const { data: labels, error: labelErr } = await supabase
-      .from("campaign_labels")
-      .select("property_id, campaign")
-      .in("property_id", propertyIds);
-    if (labelErr) throw labelErr;
-    if (labels && labels.length > 0) {
-      allowed = new Map();
-      for (const l of labels as any[]) {
-        if (!allowed.has(l.property_id)) allowed.set(l.property_id, new Set());
-        allowed.get(l.property_id)!.add(l.campaign as string);
-      }
-    }
-  }
+  const labels = await fetchCampaignLabels(propertyIds);
 
+  // Records (calls + forms) come from the SAME rows as the leads/cost totals
+  // so the KPI cards and the source breakdown can never diverge. No Entry /
+  // Spam / Bad / Good / sales are slices INSIDE records, never additions.
   let dm = supabase
     .from("daily_metrics")
-    .select("date, property_id, ad_source, campaign, cost, good_leads, bad_leads, projected_sale, verified_sale")
+    .select("date, property_id, ad_source, campaign, cost, impressions, clicks, record_count, good_leads, bad_leads, projected_sale, verified_sale")
     .neq("ad_source", "GHL Won")
     .gte("date", from)
     .lte("date", to);
@@ -95,40 +93,22 @@ async function fetchWindow(
   const dmRes = await dm;
   if (dmRes.error) throw dmRes.error;
 
-  // Records superset (calls + forms) — canonical source for the funnel's
-  // top stage. No Entry / Spam / Bad / Good / sales are slices
-  // INSIDE records, never additions on top. Counting ctm_calls rows here
-  // would double-count by stacking call rows on top of records.
-  let rc = supabase
-    .from("v_lead_counts_daily")
-    .select("date, records")
-    .gte("date", from)
-    .lte("date", to);
-  if (propertyIds) rc = rc.in("property_id", propertyIds);
-  const rcRes = await rc;
-  if (rcRes.error) throw rcRes.error;
+  const rows = (dmRes.data ?? []) as any[];
+  const scope = buildCampaignScope(labels, rows);
 
   const map = new Map<string, DailyAgg>();
   for (const d of eachDateISO(new Date(from), new Date(to))) map.set(d, zeroDay(d));
-  for (const r of (dmRes.data ?? []) as any[]) {
-    if (r.ad_source === PPC_SOURCE && allowed) {
-      const set = allowed.get(r.property_id);
-      // Property has labels but this campaign isn't one of them → skip.
-      if (set && !set.has(r.campaign)) continue;
-    }
+  for (const r of rows) {
+    if (!isRowInScope(r, scope)) continue;
     const day = map.get(r.date) ?? zeroDay(r.date);
     day.cost += Number(r.cost ?? 0);
     day.good_leads += Number(r.good_leads ?? 0);
     day.bad_leads += Number(r.bad_leads ?? 0);
     day.projected_sale += Number(r.projected_sale ?? 0);
     day.verified_sale += Number(r.verified_sale ?? 0);
-    map.set(r.date, day);
-  }
-  for (const r of (rcRes.data ?? []) as any[]) {
-    const day = map.get(r.date) ?? zeroDay(r.date);
     // `calls` is kept as the internal field name to avoid a wide rename;
-    // semantically it now holds Records = calls + forms.
-    day.calls += Number(r.records ?? 0);
+    // semantically it holds Records = calls + forms.
+    day.calls += Number(r.record_count ?? 0);
     map.set(r.date, day);
   }
   return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
@@ -202,37 +182,28 @@ async function fetchPpcWindow(
   from: string,
   to: string,
 ): Promise<DailyAgg[]> {
-  // Build the allowed campaign set from campaign_labels so PPC rows that
-  // belong to a different location are excluded from the Ads view. If a property has no
-  // labels, we don't filter — that keeps locations without a mapping working.
-  let allowed: Set<string> | null = null;
-  if (propertyIds && propertyIds.length > 0) {
-    const { data: labels, error: labelErr } = await supabase
-      .from("campaign_labels")
-      .select("campaign")
-      .in("property_id", propertyIds);
-    if (labelErr) throw labelErr;
-    if (labels && labels.length > 0) {
-      allowed = new Set((labels as any[]).map((r) => r.campaign as string));
-    }
-  }
+  // Shared Google Ads accounts (NoVA / Winchester) scope PPC rows through
+  // campaign_labels. Call-tracking rows under Google PPC carry no spend
+  // signals and are never in the allow-list, so they always pass through.
+  const labels = await fetchCampaignLabels(propertyIds);
 
   let q = supabase
     .from("daily_metrics")
-    .select("date, campaign, cost, good_leads, bad_leads, projected_sale, verified_sale, record_count")
+    .select("date, property_id, ad_source, campaign, cost, impressions, clicks, good_leads, bad_leads, projected_sale, verified_sale, record_count")
     .eq("ad_source", PPC_SOURCE)
     .gte("date", from)
     .lte("date", to);
   if (propertyIds) q = q.in("property_id", propertyIds);
-  if (allowed && allowed.size > 0) {
-    q = q.in("campaign", Array.from(allowed));
-  }
   const res = await q;
   if (res.error) throw res.error;
 
+  const rows = (res.data ?? []) as any[];
+  const scope = buildCampaignScope(labels, rows);
+
   const map = new Map<string, DailyAgg>();
   for (const d of eachDateISO(new Date(from), new Date(to))) map.set(d, zeroDay(d));
-  for (const r of (res.data ?? []) as any[]) {
+  for (const r of rows) {
+    if (!isRowInScope(r, scope)) continue;
     const day = map.get(r.date) ?? zeroDay(r.date);
     day.cost += Number(r.cost ?? 0);
     day.good_leads += Number(r.good_leads ?? 0);
