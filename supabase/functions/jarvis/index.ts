@@ -1119,7 +1119,8 @@ function buildTools(ctx: Ctx) {
         if (i.campaign) q = q.eq("campaign", i.campaign);
         const { data, error } = await q;
         if (error) throw new Error(error.message);
-        const rows = data ?? [];
+        const inScope = await dashboardScope(ctx, id);
+        const rows = (data ?? []).filter(inScope);
         const tot = { cost: 0, impressions: 0, clicks: 0, leads: 0, bad_leads: 0, good_leads: 0, projected_sale: 0, verified_sale: 0, quality_num: 0 };
         const byCampaign = new Map<string, { campaign: string; cost: number; clicks: number; impressions: number; leads: number }>();
         const byDate = new Map<string, { date: string; cost: number; clicks: number; leads: number }>();
