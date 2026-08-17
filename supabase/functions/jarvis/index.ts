@@ -206,6 +206,8 @@ type Ctx = {
   scopeMode: "agency" | "property";
   /** Every property id this request is allowed to touch (already access-checked). */
   allowedProperties: { id: string; name: string }[];
+  /** Per-request counter: how many data tools actually executed this turn. */
+  turn: { toolRuns: number };
 };
 
 type ToolPropertyInput = {
@@ -240,6 +242,7 @@ function wrap<I, O>(
 ) {
   return async (input: I) => {
     const start = Date.now();
+    ctx.turn.toolRuns += 1;
     try {
       const out = await fn(input);
       await logToolRun(ctx, name, input, out, "success", Date.now() - start);
