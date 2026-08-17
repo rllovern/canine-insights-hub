@@ -154,17 +154,19 @@ function Connector() {
 function LeadMix({
   bad,
   good,
-  projected,
+  other,
   crmWins,
   total,
+  records,
   benchmarkLabel,
   benchmarkRate,
 }: {
   bad: number;
   good: number;
-  projected: number;
+  other: number;
   crmWins: number;
   total: number;
+  records: number;
   benchmarkLabel: string;
   benchmarkRate: string;
 }) {
@@ -178,22 +180,29 @@ function LeadMix({
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="cursor-help">
-          <div className="text-[10.5px] text-slate-500 mb-0.5">Lead Mix</div>
+          <div className="text-[10.5px] text-slate-500 mb-0.5">Scored mix</div>
           <div className={cn("text-base font-bold tabular-nums", numCls)}>
-            {total} <span className="text-[10.5px] font-normal text-slate-500">total</span>
+            {total} <span className="text-[10.5px] font-normal text-slate-500">scored calls</span>
           </div>
+          <div className="text-[10px] text-slate-400 tabular-nums">of {records} records</div>
         </div>
       </TooltipTrigger>
       <TooltipContent className="text-xs leading-snug">
-        <div className="font-semibold mb-1">Lead mix · {total} total</div>
+        <div className="font-semibold mb-1">Scored mix · {total} of {records} records</div>
         <div className="tabular-nums">
           <span className="text-rose-600">{bad} bad</span> ·{" "}
-          <span className="text-purple-600">{good} good</span> ·{" "}
-          <span className="text-amber-600">{projected} projected</span>
+          <span className="text-purple-600">{good} good</span>
+          {other > 0 && (
+            <>
+              {" "}·{" "}
+              <span className="text-slate-500">{other} other scored</span>
+            </>
+          )}
         </div>
         <div className="text-[10px] text-slate-400 mt-1">
-          All three are CTM call outcomes and sum to {total}. CRM wins ({crmWins}) are counted
-          separately by Date marked Won and are not part of this mix.
+          These are call-scoring outcomes and sum to {total} scored calls. Spam and un-scored
+          records are not in this base. CRM wins ({crmWins}) are counted separately by Date marked
+          Won and are not part of this mix.
         </div>
         {judged && (
           <div className={cn("mt-1 font-semibold tabular-nums", TIER_TEXT[tier])}>
@@ -206,8 +215,37 @@ function LeadMix({
   );
 }
 
-function QualifiedStage({ good, projected, bad, qualityRate, base, qualityRatePct, hasBase, leadsConvPct }: { good: number; projected: number; bad: number; qualityRate: number; base: number; qualityRatePct: number; hasBase: boolean; leadsConvPct: number }) {
-  const total = good + projected;
+/** Records → Scored calls. Makes the drop visible instead of implicit. */
+function ScoredStage({ scored, records, unscored, scoredPct }: { scored: number; records: number; unscored: number; scoredPct: number }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex flex-col items-center text-center flex-1 rounded-md p-0.5 cursor-help">
+          <div className="flex size-9 items-center justify-center rounded-full bg-sky-100">
+            <ClipboardCheck className="size-4 text-sky-600" />
+          </div>
+          <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Scored calls</div>
+          <div className="text-[13px] font-bold tabular-nums mt-0.5 leading-tight text-slate-900">{fmtNumber(scored)}</div>
+          <div className="text-[10px] text-slate-500 tabular-nums mt-0.5">
+            {records ? `${scored} of ${records} scored` : "—"}
+          </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-xs leading-snug">
+        <div className="font-semibold">Scored calls</div>
+        <div className="mt-1">
+          The records call tracking gave a quality outcome. {fmtNumber(unscored)} of {fmtNumber(records)} records
+          are not in this base — spam, or not scored yet.
+        </div>
+        <div className="text-slate-400 text-[10px] mt-1 tabular-nums">
+          {scoredPct.toFixed(0)}% of records scored
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function GoodStage({ good, bad, qualityRate, base, qualityRatePct, hasBase }: { good: number; bad: number; qualityRate: number; base: number; qualityRatePct: number; hasBase: boolean }) {
   // Grade against the shared quality target (green >= 30%, amber >= 25%),
   // not a good-vs-bad head count.
   const numCls = !hasBase ? "text-slate-900" : TIER_TEXT[qualityTier(qualityRate, base)];
@@ -218,22 +256,24 @@ function QualifiedStage({ good, projected, bad, qualityRate, base, qualityRatePc
           <div className="flex size-9 items-center justify-center rounded-full bg-emerald-100">
             <Award className="size-4 text-emerald-600" />
           </div>
-          <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Qualified Leads</div>
-          <div className={cn("text-[13px] font-bold tabular-nums mt-0.5 leading-tight", numCls)}>{fmtNumber(total)}</div>
+          <div className="mt-1 text-[10px] font-medium text-slate-600 leading-tight">Good Calls</div>
+          <div className={cn("text-[13px] font-bold tabular-nums mt-0.5 leading-tight", numCls)}>{fmtNumber(good)}</div>
           <div className="text-[10px] text-slate-500 tabular-nums mt-0.5">
-            {hasBase ? `${qualityRatePct.toFixed(0)}% quality` : `${leadsConvPct.toFixed(0)}% of records`}
+            {hasBase ? `${good} of ${base} scored` : "—"}
           </div>
         </div>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-snug">
-        <div className="font-semibold">Qualified leads (good + projected)</div>
+        <div className="font-semibold">Good calls</div>
         <div className="mt-1 tabular-nums">
           <span className="text-purple-600 font-medium">{good} good</span>
           <span className="text-slate-400"> · </span>
-          <span className="text-amber-600 font-medium">{projected} projected</span>
+          <span className="text-rose-600 font-medium">{bad} bad</span>
         </div>
-        <div className="text-slate-400 text-[10px] mt-0.5">Source: CTM scored + CTM transcript projection</div>
-        <div className="mt-1">Good and projected are parallel quality outcomes, not a sequence. Both count toward quality rate.</div>
+        <div className="text-slate-400 text-[10px] mt-0.5">Source: call scoring (daily_metrics.good_leads)</div>
+        {hasBase && (
+          <div className="mt-1 tabular-nums">Quality rate {qualityRatePct.toFixed(1)}% — good ÷ {base} scored calls.</div>
+        )}
       </TooltipContent>
     </Tooltip>
   );
