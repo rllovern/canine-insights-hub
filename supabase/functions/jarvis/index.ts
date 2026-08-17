@@ -291,15 +291,6 @@ function statesNumbers(text: string) {
   return /\d/.test(text ?? "");
 }
 
-function _unusedLogToolContext(name: string, input: ToolPropertyInput, ctx: Ctx) {
-  if (!DEBUG) return;
-  console.log("[Jarvis Tool Context]", {
-    toolName: name,
-    inputPropertyId: input?.property_id ?? input?.propertyId ?? null,
-    fallbackPropertyIdFromSession: ctx.defaultPropertyId,
-  });
-}
-
 function resolveProperty(ctx: Ctx, input?: string | ToolPropertyInput | null, toolName?: string) {
   const raw = typeof input === "string" || input == null
     ? input
