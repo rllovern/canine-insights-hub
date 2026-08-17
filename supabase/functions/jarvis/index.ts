@@ -1449,22 +1449,36 @@ function buildTools(ctx: Ctx) {
           },
         };
         const entries = Object.entries(windows);
-        const results = await Promise.all(entries.map(([, w]) =>
-          ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: w.from, _to: w.to })
-        ));
-        const out: Record<string, unknown> = {};
-        entries.forEach(([k, w], idx) => {
-          out[k] = { range: w, data: results[idx].data ?? null, error: results[idx].error?.message ?? null };
-        });
-        const months: Array<{ month: string; data: unknown }> = [];
+        const monthSpans: Array<{ month: string; from: string; to: string }> = [];
         for (let back = 11; back >= 0; back--) {
           const start = new Date(Date.UTC(y, m - back, 1));
           const end = new Date(Date.UTC(y, m - back + 1, 0));
-          const { data } = await ctx.supabase.rpc("ai_assistant_context", {
-            _property_id: id, _from: d(start), _to: d(end > now ? now : end),
+          monthSpans.push({
+            month: d(start).slice(0, 7),
+            from: d(start),
+            to: d(end > now ? now : end),
           });
-          months.push({ month: d(start).slice(0, 7), data: data ?? null });
         }
+        // One parallel batch for the comparison windows AND all 12 months —
+        // the monthly loop used to run one round-trip at a time.
+        const [windowResults, monthResults] = await Promise.all([
+          Promise.all(entries.map(([, w]) =>
+            ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: w.from, _to: w.to })
+          )),
+          Promise.all(monthSpans.map((s) =>
+            ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: s.from, _to: s.to })
+          )),
+        ]);
+        const out: Record<string, unknown> = {};
+        entries.forEach(([k, w], idx) => {
+          out[k] = { range: w, data: windowResults[idx].data ?? null, error: windowResults[idx].error?.message ?? null };
+        });
+        // Months carry totals only — the per-source breakdown for 12 months
+        // bloated the payload (and the model's input tokens) for no gain.
+        const months = monthSpans.map((s, idx) => ({
+          month: s.month,
+          totals: totalsOf(monthResults[idx].data),
+        }));
         return { property_id: id, windows: out, trailing_12_months_by_month: months };
       }),
     }),
