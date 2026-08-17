@@ -1728,7 +1728,7 @@ function buildTools(ctx: Ctx) {
           const cost = Number(t.cost ?? 0);
           const clicks = Number(t.clicks ?? 0);
           const impressions = Number(t.impressions ?? 0);
-          const good = Number(t.good_leads ?? 0) + Number(t.projected_sale ?? 0);
+          const good = Number(t.good_leads ?? 0);
           return {
             ...t,
             ctr_pct: impressions ? Math.round((clicks / impressions) * 10000) / 100 : null,
