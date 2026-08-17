@@ -10,7 +10,7 @@ export function BobLauncher() {
   return (
     <div
       className={cn(
-        "fixed right-5 bottom-20 sm:bottom-6 z-40 flex items-end gap-3",
+        "fixed right-6 bottom-20 sm:bottom-6 z-40 flex items-end gap-3",
         open && "pointer-events-none opacity-0 scale-90 transition-all",
       )}
     >
@@ -26,7 +26,7 @@ export function BobLauncher() {
         aria-label="Ask Bob"
         title="Ask Bob"
         onClick={() => openBob()}
-        className="cursor-pointer rounded-full transition-transform hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="cursor-pointer rounded-full p-1 transition-transform hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         <BobFace scale={0.72} mood={mood} gx={gx} gy={gy} lid={lid} />
       </button>
