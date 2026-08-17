@@ -242,17 +242,42 @@ function resolveProperty(ctx: Ctx, input?: string | ToolPropertyInput | null, to
 }
 function resolveRange(ctx: Ctx, from?: string, to?: string, days?: number) {
   if (from && to) return { from, to };
+  // The dashboard's date selector is the source of truth. A tool-supplied
+  // `days` may never silently re-window the answer away from the cards.
+  if (ctx.defaultFrom && ctx.defaultTo) {
+    return { from: ctx.defaultFrom, to: ctx.defaultTo };
+  }
   if (days) {
     const t = new Date();
     const f = new Date(t.getTime() - days * 86400_000);
     return { from: f.toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) };
   }
-  if (ctx.defaultFrom && ctx.defaultTo) {
-    return { from: ctx.defaultFrom, to: ctx.defaultTo };
-  }
   const t = new Date();
   const f = new Date(t.getTime() - 30 * 86400_000);
   return { from: f.toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) };
+}
+
+/**
+ * Dashboard scope rules, mirrored exactly (see useCommandData.fetchWindow):
+ *  - the `GHL Won` disposition feed is not a media source and is excluded
+ *  - on shared Google Ads accounts, only campaigns labeled to this location count
+ * Any row-level read of daily_metrics / v_lead_counts_daily must run through
+ * this filter or Bob will quote numbers the cards never show.
+ */
+const PPC_SOURCE = "Google PPC";
+
+async function dashboardScope(ctx: Ctx, propertyId: string) {
+  const { data } = await ctx.supabase
+    .from("campaign_labels")
+    .select("campaign")
+    .eq("property_id", propertyId);
+  const allowed = (data ?? []).map((r: { campaign: string }) => r.campaign);
+  const set = allowed.length > 0 ? new Set(allowed) : null;
+  return (row: { ad_source?: string | null; campaign?: string | null }) => {
+    if ((row.ad_source ?? "") === "GHL Won") return false;
+    if (set && (row.ad_source ?? "") === PPC_SOURCE && !set.has(row.campaign ?? "")) return false;
+    return true;
+  };
 }
 
 function secondsBetween(a: string | null | undefined, b: string | null | undefined) {
