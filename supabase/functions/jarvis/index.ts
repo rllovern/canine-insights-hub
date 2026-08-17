@@ -1790,7 +1790,7 @@ serve(async (req) => {
       system: SYSTEM_PROMPT + contextHeader,
       messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
       tools: buildTools(ctx),
-      stopWhen: stepCountIs(50),
+      stopWhen: stepCountIs(24),
     });
 
     const streamResponse = result.toUIMessageStreamResponse({
