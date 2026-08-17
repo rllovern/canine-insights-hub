@@ -164,10 +164,18 @@ export function BobChat() {
             compareTo: latest?.compareTo ?? null,
             sessionId: latest?.sessionId ?? null,
             pageContext,
+            scope: {
+              mode: latest?.scopeMode ?? "agency",
+              propertyId: latest?.propertyId ?? null,
+              propertyIds: latest?.propertyIds ?? null,
+              label: latest?.scopeLabel ?? null,
+            },
             context: {
               propertyId: latest?.propertyId ?? null,
               propertyName: latest?.propertyName ?? null,
               propertySlug: latest?.propertySlug ?? null,
+              scopeMode: latest?.scopeMode ?? "agency",
+              scopeLabel: latest?.scopeLabel ?? null,
               dateRange,
               compareRange: latest?.compareFrom && latest?.compareTo
                 ? { from: latest.compareFrom, to: latest.compareTo }
@@ -180,7 +188,8 @@ export function BobChat() {
               selectedPropertyId: latest?.propertyId ?? null,
               selectedPropertyName: latest?.propertyName ?? null,
               selectedPropertySlug: latest?.propertySlug ?? null,
-              bobHeaderProperty: latest?.bobHeaderProperty ?? "No property",
+              scopeLabel: latest?.scopeLabel ?? null,
+              scopeMode: latest?.scopeMode ?? "agency",
               dateRange,
               requestBodyPropertyId: payload?.propertyId,
               requestBodyContext: payload?.context,
