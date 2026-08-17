@@ -93,7 +93,14 @@ async function getFreshAccessToken() {
   return refreshData.session.access_token;
 }
 
-export function BobChat() {
+type BobChatProps = {
+  mood?: BobMood;
+  setMood?: (m: BobMood, hold?: number) => void;
+  onThinkingChange?: (v: boolean) => void;
+  onClose?: () => void;
+};
+
+export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: BobChatProps) {
   const { session } = useAuth();
   const { properties } = useProperties();
   // The sidebar location selector (ScopeContext) is the single source of truth
