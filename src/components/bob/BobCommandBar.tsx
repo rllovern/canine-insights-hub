@@ -4,9 +4,7 @@ import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
 } from "@/components/ui/command";
 import { Sparkles, BarChart3, PhoneCall, FileText, Target, GitCompare, Search } from "lucide-react";
-import { useScope } from "@/contexts/ScopeContext";
-import { useDashboard } from "@/contexts/DashboardContext";
-import { rangeToISO } from "@/lib/metrics";
+import { useBob } from "@/contexts/BobContext";
 
 const QUICK = [
   { label: "Why are my leads down?", q: "Why are my leads down this month?" },
@@ -20,14 +18,12 @@ const NAV = [
   { label: "Call Tracking", to: "/calls", icon: PhoneCall },
   { label: "Lead Performance", to: "/lead-performance", icon: Target },
   { label: "Reports", to: "/reports", icon: FileText },
-  { label: "Bob (Assistant)", to: "/assistant", icon: Sparkles },
 ];
 
 export function BobCommandBar() {
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
-  const { activeProperty } = useScope();
-  const { range } = useDashboard();
+  const { openBob } = useBob();
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -42,17 +38,7 @@ export function BobCommandBar() {
 
   const ask = (q: string) => {
     setOpen(false);
-    const sp = new URLSearchParams();
-    sp.set("q", q);
-    if (activeProperty?.id) sp.set("propertyId", activeProperty.id);
-    if (range) {
-      try {
-        const iso = rangeToISO(range);
-        sp.set("from", iso.from);
-        sp.set("to", iso.to);
-      } catch { /* noop */ }
-    }
-    nav(`/assistant?${sp.toString()}`);
+    openBob(q);
   };
 
   return (

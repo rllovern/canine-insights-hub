@@ -186,10 +186,10 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: "assistant",
     roles: STAFF_ROLES,
-    route: "/assistant",
-    target: t("page-root"),
+    route: "/command",
+    target: t("bob-launcher"),
     title: "Bob, your assistant",
-    body: "Ask questions in normal words, like \"how many good leads did Nova get last month?\" and it answers using your real data.",
+    body: "Ask questions in normal words, like \"how many good leads did Nova get last month?\" and he answers using your real data. He lives behind this button in the bottom-right corner of every page.",
   },
   {
     id: "finish",

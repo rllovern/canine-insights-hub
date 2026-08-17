@@ -14,7 +14,6 @@ import {
   BUDGET_ITEM,
   COMMAND_ITEM,
   DELIVER_ITEMS,
-  BOB_ITEM,
   MONITOR_ITEMS,
   SALES_ITEM,
   applyNavOrder,
@@ -131,8 +130,6 @@ export function MobileNav() {
               {deliverItems.map((it) => renderItem(it))}
             </>
           )}
-
-          {showRichNav && renderItem(BOB_ITEM)}
 
           {showAdminSection && adminItems.length > 0 && (
             <>

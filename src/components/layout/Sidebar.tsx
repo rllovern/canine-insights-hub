@@ -12,7 +12,6 @@ import {
   BUDGET_ITEM,
   COMMAND_ITEM,
   DELIVER_ITEMS,
-  BOB_ITEM,
   MONITOR_ITEMS,
   SALES_ITEM,
   applyNavOrder,
@@ -250,8 +249,6 @@ export function Sidebar() {
             {deliverItems.map((it) => renderItem(it, { groupKey: "deliver", items: deliverItems, setItems: setDeliverItems }))}
           </>
         )}
-
-        {showRichNav && renderItem(BOB_ITEM, { accent: true })}
 
         {showAdminSection && adminItems.length > 0 && (
           <>

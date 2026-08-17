@@ -1,12 +1,12 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useBob } from "@/contexts/BobContext";
 import { rangeToISO } from "@/lib/metrics";
 import {
   Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton,
@@ -22,7 +22,6 @@ import {
 } from "@/components/ai-elements/tool";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
@@ -99,13 +98,7 @@ export function BobChat() {
   // for what Bob is allowed to look at.
   const { mode, propertyId: scopedPropertyId, propertyIds, activeProperty, label: scopeLabel } = useScope();
   const { range, compareRange, compareMode } = useDashboard();
-  const [params, setParams] = useSearchParams();
-  const sessionParam = params.get("session");
-  const [sessionId, setSessionId] = useState<string | null>(sessionParam);
-  const initialQ = params.get("q");
-  const urlFrom = params.get("from");
-  const urlTo = params.get("to");
-  const didPrefill = useRef(false);
+  const { sessionId, setSessionId, pending, clearPending, open: drawerOpen } = useBob();
   const [input, setInput] = useState("");
   const [recentSessions, setRecentSessions] = useState<
     { id: string; title: string | null; updated_at: string }[]
@@ -120,8 +113,8 @@ export function BobChat() {
   );
 
   const effectiveProperty = activeProperty;
-  const effectiveFrom = urlFrom ?? iso.from;
-  const effectiveTo = urlTo ?? iso.to;
+  const effectiveFrom = iso.from;
+  const effectiveTo = iso.to;
   const effectivePropertyId = mode === "property" ? scopedPropertyId : null;
 
   latestContextRef.current = {
@@ -213,12 +206,11 @@ export function BobChat() {
           const sid = r.headers.get("x-session-id");
           if (sid && sid !== latestContextRef.current?.sessionId) {
             setSessionId(sid);
-            setParams((p) => { const n = new URLSearchParams(p); n.set("session", sid); return n; }, { replace: true });
           }
           return r;
         },
       }),
-    [setParams],
+    [setSessionId],
   );
 
   const { messages, sendMessage, status, error, setMessages } = useChat({
@@ -260,17 +252,16 @@ export function BobChat() {
     return () => { cancelled = true; };
   }, [sessionId, accessToken, messages.length, setMessages]);
 
-  // Auto-send prefilled query from Cmd+K — wait for property to hydrate
+  // Auto-send a prompt handed in by "Ask Bob" buttons / the command bar.
+  const sentNonce = useRef<number | null>(null);
   useEffect(() => {
-    if (initialQ && accessToken && effectivePropertyId && !didPrefill.current) {
-      didPrefill.current = true;
-      sendMessage({ text: initialQ });
-      const next = new URLSearchParams(params);
-      next.delete("q");
-      setParams(next, { replace: true });
-    }
+    if (!pending || !accessToken) return;
+    if (sentNonce.current === pending.nonce) return;
+    sentNonce.current = pending.nonce;
+    sendMessage({ text: pending.text });
+    clearPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQ, accessToken, effectivePropertyId]);
+  }, [pending, accessToken]);
 
   // Load recent sessions for the dropdown
   useEffect(() => {
@@ -286,7 +277,11 @@ export function BobChat() {
     })();
   }, [accessToken, sessionId]);
 
-  useEffect(() => { textareaRef.current?.focus(); }, [sessionId, status]);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const t = window.setTimeout(() => textareaRef.current?.focus(), 80);
+    return () => window.clearTimeout(t);
+  }, [sessionId, status, drawerOpen]);
 
   const onSubmit = (msg: { text: string }, evt: React.FormEvent) => {
     evt.preventDefault();
@@ -334,9 +329,9 @@ export function BobChat() {
   }, [isLoading, messages]);
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
-      <Card className="flex flex-col min-h-0 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 pr-12 border-b">
           <img src={bobMark} alt="Bob" width={24} height={24} className="size-6" />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold leading-tight">Bob</div>
@@ -362,10 +357,6 @@ export function BobChat() {
                       type="button"
                       onClick={() => {
                         setSessionId(s.id);
-                        const n = new URLSearchParams(params);
-                        n.set("session", s.id);
-                        n.delete("q");
-                        setParams(n, { replace: true });
                       }}
                       className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted/60 ${
                         s.id === sessionId ? "bg-muted/60" : ""
@@ -381,8 +372,8 @@ export function BobChat() {
               )}
             </PopoverContent>
           </Popover>
-          <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); setParams({}, { replace: true }); }}>
-            New session
+          <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); }}>
+            New
           </Button>
         </div>
 
@@ -482,8 +473,7 @@ export function BobChat() {
             </PromptInputFooter>
           </PromptInput>
         </div>
-      </Card>
-
+      </div>
     </div>
   );
 }

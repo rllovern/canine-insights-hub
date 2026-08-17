@@ -1,7 +1,7 @@
-import { useNavigate } from "react-router-dom";
+import { useBob } from "@/contexts/BobContext";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { rangeToISO, type DateRange } from "@/lib/metrics";
+import { type DateRange } from "@/lib/metrics";
 
 type Props = {
   prompt: string;
@@ -14,31 +14,19 @@ type Props = {
 
 /**
  * Embedded Bob entry point. Renders a small "Ask Bob" / "Run with Bob"
- * button that deep-links to /assistant with the prompt (and optionally a date
- * range). The location is always taken from the sidebar location selector.
+ * button that opens the Bob drawer with the prompt prefilled and sent. The
+ * location and dates always come from the sidebar selectors.
  */
 export function AskBobButton({
   prompt,
   label = "Ask Bob",
-  range,
   variant = "outline",
   size = "sm",
   className,
 }: Props) {
-  const nav = useNavigate();
+  const { openBob } = useBob();
 
-  const go = () => {
-    const sp = new URLSearchParams();
-    sp.set("q", prompt);
-    if (range) {
-      try {
-        const iso = rangeToISO(range);
-        sp.set("from", iso.from);
-        sp.set("to", iso.to);
-      } catch { /* noop */ }
-    }
-    nav(`/assistant?${sp.toString()}`);
-  };
+  const go = () => openBob(prompt);
 
   return (
     <Button

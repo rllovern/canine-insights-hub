@@ -1,9 +1,13 @@
-import { BobChat } from "@/components/bob/BobChat";
+import { useEffect } from "react";
+import { Navigate } from "react-router-dom";
+import { useBob } from "@/contexts/BobContext";
 
+/**
+ * Bob no longer lives on his own page — he is a drawer. This route just opens
+ * the drawer and bounces back to the dashboard so old links keep working.
+ */
 export default function Assistant() {
-  return (
-    <div className="space-y-3">
-      <BobChat />
-    </div>
-  );
+  const { openBob } = useBob();
+  useEffect(() => { openBob(); }, [openBob]);
+  return <Navigate to="/command" replace />;
 }
