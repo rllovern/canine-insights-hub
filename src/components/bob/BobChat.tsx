@@ -325,9 +325,9 @@ export function BobChat() {
   }, [isLoading, messages]);
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
-      <Card className="flex flex-col min-h-0 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 pr-12 border-b">
           <img src={bobMark} alt="Bob" width={24} height={24} className="size-6" />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold leading-tight">Bob</div>
@@ -353,10 +353,6 @@ export function BobChat() {
                       type="button"
                       onClick={() => {
                         setSessionId(s.id);
-                        const n = new URLSearchParams(params);
-                        n.set("session", s.id);
-                        n.delete("q");
-                        setParams(n, { replace: true });
                       }}
                       className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted/60 ${
                         s.id === sessionId ? "bg-muted/60" : ""
@@ -372,8 +368,8 @@ export function BobChat() {
               )}
             </PopoverContent>
           </Popover>
-          <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); setParams({}, { replace: true }); }}>
-            New session
+          <Button size="sm" variant="ghost" onClick={() => { setSessionId(null); }}>
+            New
           </Button>
         </div>
 
