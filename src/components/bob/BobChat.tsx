@@ -1,12 +1,12 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProperties } from "@/contexts/PropertyContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useBob } from "@/contexts/BobContext";
 import { rangeToISO } from "@/lib/metrics";
 import {
   Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton,
@@ -22,7 +22,6 @@ import {
 } from "@/components/ai-elements/tool";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
@@ -99,13 +98,7 @@ export function BobChat() {
   // for what Bob is allowed to look at.
   const { mode, propertyId: scopedPropertyId, propertyIds, activeProperty, label: scopeLabel } = useScope();
   const { range, compareRange, compareMode } = useDashboard();
-  const [params, setParams] = useSearchParams();
-  const sessionParam = params.get("session");
-  const [sessionId, setSessionId] = useState<string | null>(sessionParam);
-  const initialQ = params.get("q");
-  const urlFrom = params.get("from");
-  const urlTo = params.get("to");
-  const didPrefill = useRef(false);
+  const { sessionId, setSessionId, pending, clearPending, open: drawerOpen } = useBob();
   const [input, setInput] = useState("");
   const [recentSessions, setRecentSessions] = useState<
     { id: string; title: string | null; updated_at: string }[]
@@ -120,8 +113,8 @@ export function BobChat() {
   );
 
   const effectiveProperty = activeProperty;
-  const effectiveFrom = urlFrom ?? iso.from;
-  const effectiveTo = urlTo ?? iso.to;
+  const effectiveFrom = iso.from;
+  const effectiveTo = iso.to;
   const effectivePropertyId = mode === "property" ? scopedPropertyId : null;
 
   latestContextRef.current = {
