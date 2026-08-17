@@ -259,6 +259,18 @@ function secondsBetween(a: string | null | undefined, b: string | null | undefin
   return Number.isFinite(diff) ? Math.max(0, Math.round(diff / 1000)) : null;
 }
 
+/** Pull just the totals block out of an ai_assistant_context payload. */
+function totalsOf(data: unknown) {
+  const t = (data as { totals?: Record<string, unknown> } | null)?.totals;
+  return t ?? null;
+}
+
+function _unusedSecondsBetween(a: string | null | undefined, b: string | null | undefined) {
+  if (!a || !b) return null;
+  const diff = new Date(a).getTime() - new Date(b).getTime();
+  return Number.isFinite(diff) ? Math.max(0, Math.round(diff / 1000)) : null;
+}
+
 function percentile(values: number[], p: number) {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
