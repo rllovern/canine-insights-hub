@@ -359,6 +359,32 @@ function resolveRange(ctx: Ctx, from?: string, to?: string, days?: number) {
  */
 const PPC_SOURCE = "Google PPC";
 
+/**
+ * clicks/impressions are not exposed on v_lead_counts_daily — they live on
+ * daily_metrics. Fetch them once and join by date|ad_source|campaign.
+ */
+function trafficKey(date: string, source?: string | null, campaign?: string | null) {
+  return `${date}|${source ?? ""}|${campaign ?? ""}`;
+}
+
+async function fetchTraffic(ctx: Ctx, propertyId: string, from: string, to: string) {
+  const out = new Map<string, { clicks: number; impressions: number }>();
+  const { data } = await ctx.supabase
+    .from("daily_metrics")
+    .select("date,ad_source,campaign,clicks,impressions")
+    .eq("property_id", propertyId)
+    .gte("date", from)
+    .lte("date", to);
+  for (const r of (data ?? []) as Array<{ date: string; ad_source: string | null; campaign: string | null; clicks: number | null; impressions: number | null }>) {
+    const k = trafficKey(r.date, r.ad_source, r.campaign);
+    const cur = out.get(k) ?? { clicks: 0, impressions: 0 };
+    cur.clicks += Number(r.clicks ?? 0);
+    cur.impressions += Number(r.impressions ?? 0);
+    out.set(k, cur);
+  }
+  return out;
+}
+
 async function dashboardScope(ctx: Ctx, propertyId: string) {
   const { data } = await ctx.supabase
     .from("campaign_labels")
