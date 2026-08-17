@@ -42,7 +42,7 @@ export function BobDrawer() {
         <BobFace scale={0.62} mood={bob.mood} gx={bob.gx} gy={bob.gy} lid={bob.lid} />
       </div>
 
-      <div className="flex h-full flex-col overflow-hidden rounded-[22px] border bg-card/95 shadow-2xl backdrop-blur-xl">
+      <div className="flex h-full flex-col overflow-hidden rounded-[22px] border bg-card shadow-2xl">
         <BobChat mood={bob.mood} setMood={setMood} onThinkingChange={setThinking} onClose={closeBob} />
       </div>
     </div>
