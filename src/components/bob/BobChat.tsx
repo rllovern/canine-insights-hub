@@ -573,16 +573,16 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
 
       {/* Quick chips */}
       <div className="flex flex-wrap gap-2 px-3.5 pb-1.5 pt-2.5">
-        {QUICK_PROMPTS.map((p) => (
+        {quickPrompts.map((p) => (
           <button
-            key={p}
+            key={p.id}
             type="button"
             disabled={disabled || isLoading}
-            onClick={() => sendQuickPrompt(p)}
+            onClick={() => sendQuickPrompt(p.question)}
             className="rounded-full px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
             style={{ background: "hsl(var(--bob-bubble) / 0.1)", color: "hsl(var(--bob-bubble))" }}
           >
-            {p}
+            {p.label}
           </button>
         ))}
       </div>
