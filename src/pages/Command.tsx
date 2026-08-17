@@ -121,7 +121,7 @@ export default function Command() {
           </div>
           <div data-tour="kpi-qualified">
           <KpiSparkCard
-            label={isAds ? "PPC Qualified" : "Qualified Calls"}
+            label={isAds ? "PPC Good Calls" : "Good Calls"}
             value={fmtNumber(active.qualifiedCalls)}
             current={active.qualifiedCalls} prior={activePrior.qualifiedCalls}
             series={series("good_leads")}
