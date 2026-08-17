@@ -724,16 +724,7 @@ function buildTools(ctx: Ctx) {
         days: z.number().int().min(1).max(90).default(7),
       }),
       execute: wrap(ctx, "reconcile_ctm_to_ghl", async (i) => {
-        logToolContext("reconcile_ctm_to_ghl", i, ctx);
-        const id = i.property_id ?? i.propertyId ?? ctx.defaultPropertyId;
-        if (!id) {
-          return {
-            ok: false,
-            error: "missing_property_id",
-            message: "No property selected.",
-          };
-        }
-        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const id = resolveProperty(ctx, i, "reconcile_ctm_to_ghl");
         const cpuStart = Date.now();
         const CPU_BUDGET_MS = 8000;
         const toD = new Date();
