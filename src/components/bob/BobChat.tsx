@@ -298,11 +298,9 @@ export function BobChat() {
   };
 
   const isLoading = status === "submitted" || status === "streaming";
-  const needsPropertySelection =
-    !!accessToken && !effectivePropertyId && properties.length > 0;
   const noAccessibleProperties =
     !!accessToken && properties.length === 0;
-  const disabled = !accessToken || needsPropertySelection || noAccessibleProperties;
+  const disabled = !accessToken || noAccessibleProperties;
 
   // If the stream ends (status flips out of streaming) with a tool part still
   // stuck in input-streaming/input-available, the worker was likely killed
