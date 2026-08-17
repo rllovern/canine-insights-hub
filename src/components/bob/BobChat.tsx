@@ -343,7 +343,7 @@ export function BobChat() {
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold leading-tight">Bob</div>
             <div className="text-[11px] text-muted-foreground truncate">
-              Your marketing analyst · {activeProperty?.name ?? "No property"} · {effectiveFrom} → {effectiveTo}
+              Your marketing analyst · {scopeLabel} · {effectiveFrom} → {effectiveTo}
             </div>
           </div>
           <Popover>
@@ -402,30 +402,6 @@ export function BobChat() {
                 title="No properties available"
                 description="Your account doesn't have access to any properties yet. Ask an admin to grant access."
               />
-            ) : needsPropertySelection ? (
-              <ConversationEmptyState
-                icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
-                title="Pick a location so Bob knows what to look at"
-                description="Choose a location and Bob will pull its numbers."
-              >
-                <div className="mt-4 w-full max-w-xs">
-                  <Select
-                    onValueChange={(id) => {
-                      const p = properties.find((x) => x.id === id);
-                      if (p) setScope({ mode: "property", propertyId: p.id });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a property…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {properties.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </ConversationEmptyState>
             ) : messages.length === 0 ? (
               <ConversationEmptyState
                 icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
