@@ -16,18 +16,19 @@ export function BobDrawer() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, closeBob]);
 
-  if (!open) return null;
-
   const setMood = (m: BobMood, hold?: number) => bob.express(m, hold);
 
   return (
     <div
-      role="dialog"
+      role={open ? "dialog" : undefined}
       aria-label="Bob, your marketing analyst"
-      className="fixed right-3 bottom-3 sm:right-6 sm:bottom-6 z-50 w-[calc(100vw-1.5rem)] sm:w-[400px]"
+      aria-hidden={!open}
+      className={`fixed right-3 bottom-3 sm:right-6 sm:bottom-6 z-50 w-[calc(100vw-1.5rem)] sm:w-[400px] ${
+        open ? "visible pointer-events-auto" : "invisible pointer-events-none"
+      }`}
       style={{
         height: "min(660px, calc(100vh - 96px))",
-        animation: "drawerIn .38s cubic-bezier(.2,.9,.3,1.05) both",
+        animation: open ? "drawerIn .38s cubic-bezier(.2,.9,.3,1.05) both" : undefined,
       }}
     >
       {/* Bob peeking over the top-left corner of the card */}

@@ -345,17 +345,24 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     const key = `${last.id}:${(stuck as { type?: string }).type}`;
     if (interruptedNoticeShown.current === key) return;
     interruptedNoticeShown.current = key;
-    const stuckAny = stuck as { state?: string; output?: unknown; errorText?: string };
-    stuckAny.state = "output-error";
-    stuckAny.errorText =
+    const interruptionMessage =
       "Tool run was interrupted (likely exceeded compute budget). Try a narrower window (e.g. days: 7) or rerun.";
+    setMessages((current) => current.map((message) => {
+      if (message.id !== last.id) return message;
+      return {
+        ...message,
+        parts: (message.parts ?? []).map((part) => part === stuck
+          ? ({ ...part, state: "output-error", errorText: interruptionMessage } as UIMessage["parts"][number])
+          : part),
+      };
+    }));
     toast({
       title: "Bob's lookup was interrupted",
       description:
         "The last tool call didn't finish. Try a smaller window (e.g. last 7 days) and rerun.",
       variant: "destructive",
     });
-  }, [isLoading, messages]);
+  }, [isLoading, messages, setMessages]);
 
   // Keep Bob's face in sync with what the chat is doing.
   useEffect(() => { onThinkingChange?.(isLoading); }, [isLoading, onThinkingChange]);
