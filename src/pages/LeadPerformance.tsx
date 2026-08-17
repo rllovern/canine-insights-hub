@@ -68,7 +68,6 @@ export default function LeadPerformance() {
           <Badge variant="outline" className="text-[10px]">Showed/no-show provisional</Badge>
           <AskBobButton
             range={range}
-            propertyId={propertyId ?? undefined}
             prompt="Generate a lead performance report for the current scope and date range. Surface speed-to-lead, action-queue volume, and where leads are stalling."
             label="Run with Bob"
           />

@@ -141,6 +141,10 @@ type Ctx = {
   defaultPropertyId: string | null;
   defaultFrom: string | null;
   defaultTo: string | null;
+  /** Scope from the sidebar location selector. */
+  scopeMode: "agency" | "property";
+  /** Every property id this request is allowed to touch (already access-checked). */
+  allowedProperties: { id: string; name: string }[];
 };
 
 type ToolPropertyInput = {
@@ -201,8 +205,29 @@ function resolveProperty(ctx: Ctx, input?: string | ToolPropertyInput | null, to
     ? input
     : input.property_id ?? input.propertyId ?? null;
   if (toolName && typeof input !== "string") logToolContext(toolName, input ?? {}, ctx);
-  const id = raw ?? ctx.defaultPropertyId;
-  if (!id) throw new Error("no property specified and no active property in context");
+  const allowed = ctx.allowedProperties;
+  // Single-location scope: pinned. Anything else is out of view.
+  if (ctx.scopeMode === "property") {
+    const pinned = ctx.defaultPropertyId;
+    if (!pinned) throw new Error("no location is selected in the dashboard");
+    if (raw && raw !== pinned) {
+      const name = allowed.find((p) => p.id === pinned)?.name ?? "the selected location";
+      throw new Error(
+        `out_of_scope: the location selector is set to ${name}. You may only discuss that location. Tell the user to switch the location selector to look at another location.`,
+      );
+    }
+    return pinned;
+  }
+  // Agency scope: any accessible location, but nothing outside it.
+  const id = raw ?? (allowed.length === 1 ? allowed[0].id : null);
+  if (!id) {
+    throw new Error(
+      "missing_property_id: the selector is set to all locations. Call list_locations and then call this tool once per location you need.",
+    );
+  }
+  if (!allowed.some((p) => p.id === id)) {
+    throw new Error("out_of_scope: that location is not one this user can see.");
+  }
   return id;
 }
 function resolveRange(ctx: Ctx, from?: string, to?: string, days?: number) {
@@ -291,6 +316,17 @@ function sourceBundle(contact: Record<string, unknown> | undefined) {
 
 function buildTools(ctx: Ctx) {
   return {
+    list_locations: tool({
+      description:
+        "List the locations currently in scope (from the dashboard location selector). Call this first whenever the scope is all locations, then call the other tools once per location id.",
+      inputSchema: z.object({}),
+      execute: wrap(ctx, "list_locations", async () => ({
+        scope_mode: ctx.scopeMode,
+        locations: ctx.allowedProperties,
+        count: ctx.allowedProperties.length,
+      })),
+    }),
+
     get_property_context: tool({
       description:
         "Get the active property's name, connected data sources, and sync freshness. Always call this first when starting a new line of inquiry about a property.",
@@ -299,16 +335,7 @@ function buildTools(ctx: Ctx) {
         propertyId: z.string().uuid().optional().describe("Alias for property_id; defaults to active dashboard property"),
       }),
       execute: wrap(ctx, "get_property_context", async (input) => {
-        logToolContext("get_property_context", input, ctx);
-        const id = input.property_id ?? input.propertyId ?? ctx.defaultPropertyId;
-        if (!id) {
-          return {
-            ok: false,
-            error: "missing_property_id",
-            message: "No property selected.",
-          };
-        }
-        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const id = resolveProperty(ctx, input, "get_property_context");
         const [{ data: p }, { data: srcs }] = await Promise.all([
           ctx.supabase.from("properties").select("id,name,slug,timezone").eq("id", id).maybeSingle(),
           ctx.supabase.from("property_data_sources").select("source,is_connected,last_synced_at").eq("property_id", id),
@@ -697,16 +724,7 @@ function buildTools(ctx: Ctx) {
         days: z.number().int().min(1).max(90).default(7),
       }),
       execute: wrap(ctx, "reconcile_ctm_to_ghl", async (i) => {
-        logToolContext("reconcile_ctm_to_ghl", i, ctx);
-        const id = i.property_id ?? i.propertyId ?? ctx.defaultPropertyId;
-        if (!id) {
-          return {
-            ok: false,
-            error: "missing_property_id",
-            message: "No property selected.",
-          };
-        }
-        await assertPropertyAccess(ctx.supabase, ctx.userId, id);
+        const id = resolveProperty(ctx, i, "reconcile_ctm_to_ghl");
         const cpuStart = Date.now();
         const CPU_BUDGET_MS = 8000;
         const toD = new Date();
@@ -1559,13 +1577,19 @@ serve(async (req) => {
       );
     }
     const messages = rawMessages as UIMessage[];
+    const bodyScope = (body.scope ?? null) as
+      | { mode?: string; propertyId?: string | null; propertyIds?: string[] | null; label?: string | null }
+      | null;
     const activePropertyId =
+      (bodyScope?.mode === "agency" ? null : bodyScope?.propertyId ?? null) ??
       (body.propertyId as string | undefined) ??
       (body.property_id as string | undefined) ??
       (body.context?.propertyId as string | undefined) ??
       (body.context?.property_id as string | undefined) ??
       null;
-    const propertyId = activePropertyId;
+    const scopeMode: "agency" | "property" =
+      bodyScope?.mode === "agency" ? "agency" : (activePropertyId ? "property" : "agency");
+    const propertyId = scopeMode === "property" ? activePropertyId : null;
     const bodyDateRange = body.dateRange ?? body.context?.dateRange ?? null;
     const from = (body.from as string | undefined) ?? (bodyDateRange?.from as string | undefined) ?? null;
     const to = (body.to as string | undefined) ?? (bodyDateRange?.to as string | undefined) ?? null;
@@ -1590,17 +1614,33 @@ serve(async (req) => {
       { global: { headers: { Authorization: `Bearer ${userJwt}` } } },
     );
 
-    // Verify property access if provided
-    if (propertyId) {
-      const { data: ok } = await supabase.rpc("user_can_access_property", {
-        _user_id: user.id, _property_id: propertyId,
-      });
-      if (!ok) {
+    // Resolve the set of locations this user may actually be answered about.
+    // The dashboard location selector narrows it; access control caps it.
+    const { data: allProps } = await supabase
+      .from("properties")
+      .select("id,name")
+      .eq("is_active", true)
+      .order("name");
+    const accessChecks = await Promise.all(
+      (allProps ?? []).map(async (p) => {
+        const { data: ok } = await supabase.rpc("user_can_access_property", {
+          _user_id: user.id, _property_id: p.id,
+        });
+        return ok ? { id: p.id as string, name: p.name as string } : null;
+      }),
+    );
+    const accessible = accessChecks.filter(Boolean) as { id: string; name: string }[];
+
+    if (scopeMode === "property") {
+      if (!propertyId || !accessible.some((p) => p.id === propertyId)) {
         return new Response(JSON.stringify({ error: "Property access denied" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
+    const allowedProperties = scopeMode === "property"
+      ? accessible.filter((p) => p.id === propertyId)
+      : accessible;
 
     // Create or update session
     if (!sessionId) {
@@ -1645,6 +1685,8 @@ serve(async (req) => {
       defaultPropertyId: propertyId,
       defaultFrom: from,
       defaultTo: to,
+      scopeMode,
+      allowedProperties,
     };
 
     const gateway = createOpenAICompatible({
@@ -1653,7 +1695,10 @@ serve(async (req) => {
       headers: { "Lovable-API-Key": key },
     });
 
-    const contextHeader = `\n\nACTIVE CONTEXT:\n- property_id: ${propertyId ?? "(none)"}\n- date_range: ${from ?? "?"} → ${to ?? "?"}`;
+    const scopeLine = scopeMode === "property"
+      ? `SINGLE LOCATION: ${allowedProperties[0]?.name ?? "selected location"} (property_id ${propertyId})`
+      : `ALL LOCATIONS (${allowedProperties.length}): ${allowedProperties.map((p) => `${p.name} [${p.id}]`).join(", ") || "(none)"}`;
+    const contextHeader = `\n\nACTIVE CONTEXT:\n- scope: ${scopeLine}\n- date_range: ${from ?? "?"} → ${to ?? "?"}\n\nSCOPE RULES (non-negotiable):\n- The dashboard location selector is the only thing that decides which locations you may discuss.\n- In SINGLE LOCATION scope, every answer and every tool call is about that location only. If the user asks about another location by name, say you're currently looking at ${allowedProperties[0]?.name ?? "the selected location"} and they should switch the location selector. Never pull or guess another location's numbers.\n- In ALL LOCATIONS scope, call list_locations first, then run the per-location tools once per location id and roll up or compare, naming each location explicitly.\n- Never mention or infer data about a location that is not listed above.`;
 
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),

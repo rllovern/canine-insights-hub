@@ -24,9 +24,6 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { History } from "lucide-react";
@@ -44,7 +41,9 @@ type LatestBobContext = {
   propertyId: string | null;
   propertyName: string | null;
   propertySlug: string | null;
-  bobHeaderProperty: string;
+  scopeMode: "agency" | "property";
+  propertyIds: string[] | null;
+  scopeLabel: string;
   from: string;
   to: string;
   compareFrom: string | null;
@@ -95,16 +94,15 @@ async function getFreshAccessToken() {
 
 export function BobChat() {
   const { session } = useAuth();
-  const { activeProperty, properties } = useProperties();
-  // We keep useProperties() for the list, and use scope as the source of truth
-  // for the active property and for switching it.
-  const { setScope } = useScope();
+  const { properties } = useProperties();
+  // The sidebar location selector (ScopeContext) is the single source of truth
+  // for what Bob is allowed to look at.
+  const { mode, propertyId: scopedPropertyId, propertyIds, activeProperty, label: scopeLabel } = useScope();
   const { range, compareRange, compareMode } = useDashboard();
   const [params, setParams] = useSearchParams();
   const sessionParam = params.get("session");
   const [sessionId, setSessionId] = useState<string | null>(sessionParam);
   const initialQ = params.get("q");
-  const urlPropertyId = params.get("propertyId");
   const urlFrom = params.get("from");
   const urlTo = params.get("to");
   const didPrefill = useRef(false);
@@ -121,28 +119,18 @@ export function BobChat() {
     [compareMode, compareRange],
   );
 
-  // Hydrate active property from ?propertyId= if present
-  useEffect(() => {
-    if (!urlPropertyId) return;
-    if (activeProperty?.id === urlPropertyId) return;
-    const match = properties.find((p) => p.id === urlPropertyId);
-    if (match) setScope({ mode: "property", propertyId: match.id });
-  }, [urlPropertyId, properties, activeProperty?.id, setScope]);
-
-  const urlProperty = urlPropertyId ? properties.find((p) => p.id === urlPropertyId) ?? null : null;
-  const effectiveProperty =
-    (urlPropertyId && activeProperty?.id === urlPropertyId ? activeProperty : null) ??
-    urlProperty ??
-    (!urlPropertyId ? activeProperty : null);
+  const effectiveProperty = activeProperty;
   const effectiveFrom = urlFrom ?? iso.from;
   const effectiveTo = urlTo ?? iso.to;
-  const effectivePropertyId = urlPropertyId ?? activeProperty?.id ?? null;
+  const effectivePropertyId = mode === "property" ? scopedPropertyId : null;
 
   latestContextRef.current = {
     propertyId: effectivePropertyId,
     propertyName: effectiveProperty?.name ?? null,
     propertySlug: effectiveProperty?.slug ?? null,
-    bobHeaderProperty: activeProperty?.name ?? (urlPropertyId ? "Loading property..." : "No property"),
+    scopeMode: mode,
+    propertyIds: propertyIds,
+    scopeLabel,
     from: effectiveFrom,
     to: effectiveTo,
     compareFrom: cmpIso?.from ?? null,
@@ -176,10 +164,18 @@ export function BobChat() {
             compareTo: latest?.compareTo ?? null,
             sessionId: latest?.sessionId ?? null,
             pageContext,
+            scope: {
+              mode: latest?.scopeMode ?? "agency",
+              propertyId: latest?.propertyId ?? null,
+              propertyIds: latest?.propertyIds ?? null,
+              label: latest?.scopeLabel ?? null,
+            },
             context: {
               propertyId: latest?.propertyId ?? null,
               propertyName: latest?.propertyName ?? null,
               propertySlug: latest?.propertySlug ?? null,
+              scopeMode: latest?.scopeMode ?? "agency",
+              scopeLabel: latest?.scopeLabel ?? null,
               dateRange,
               compareRange: latest?.compareFrom && latest?.compareTo
                 ? { from: latest.compareFrom, to: latest.compareTo }
@@ -192,7 +188,8 @@ export function BobChat() {
               selectedPropertyId: latest?.propertyId ?? null,
               selectedPropertyName: latest?.propertyName ?? null,
               selectedPropertySlug: latest?.propertySlug ?? null,
-              bobHeaderProperty: latest?.bobHeaderProperty ?? "No property",
+              scopeLabel: latest?.scopeLabel ?? null,
+              scopeMode: latest?.scopeMode ?? "agency",
               dateRange,
               requestBodyPropertyId: payload?.propertyId,
               requestBodyContext: payload?.context,
@@ -301,11 +298,9 @@ export function BobChat() {
   };
 
   const isLoading = status === "submitted" || status === "streaming";
-  const needsPropertySelection =
-    !!accessToken && !effectivePropertyId && properties.length > 0;
   const noAccessibleProperties =
     !!accessToken && properties.length === 0;
-  const disabled = !accessToken || needsPropertySelection || noAccessibleProperties;
+  const disabled = !accessToken || noAccessibleProperties;
 
   // If the stream ends (status flips out of streaming) with a tool part still
   // stuck in input-streaming/input-available, the worker was likely killed
@@ -346,7 +341,7 @@ export function BobChat() {
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold leading-tight">Bob</div>
             <div className="text-[11px] text-muted-foreground truncate">
-              Your marketing analyst · {activeProperty?.name ?? "No property"} · {effectiveFrom} → {effectiveTo}
+              Your marketing analyst · {scopeLabel} · {effectiveFrom} → {effectiveTo}
             </div>
           </div>
           <Popover>
@@ -405,30 +400,6 @@ export function BobChat() {
                 title="No properties available"
                 description="Your account doesn't have access to any properties yet. Ask an admin to grant access."
               />
-            ) : needsPropertySelection ? (
-              <ConversationEmptyState
-                icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
-                title="Pick a location so Bob knows what to look at"
-                description="Choose a location and Bob will pull its numbers."
-              >
-                <div className="mt-4 w-full max-w-xs">
-                  <Select
-                    onValueChange={(id) => {
-                      const p = properties.find((x) => x.id === id);
-                      if (p) setScope({ mode: "property", propertyId: p.id });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a property…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {properties.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </ConversationEmptyState>
             ) : messages.length === 0 ? (
               <ConversationEmptyState
                 icon={<img src={bobMark} alt="" className="size-10 opacity-80" />}
