@@ -1,4 +1,4 @@
-import { Megaphone, PhoneCall, Award, ArrowRight, ArrowUp, ArrowDown, Info, Minus } from "lucide-react";
+import { Megaphone, PhoneCall, Award, ArrowRight, ArrowUp, ArrowDown, Info, Minus, ClipboardCheck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtCurrency, fmtNumber, safeDelta, deltaTone, DELTA_TONE_CLASS } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
