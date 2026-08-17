@@ -116,6 +116,7 @@ export function JourneyFunnel({
           target={QUALITY_TARGETS.green * 100}
           targetText={`${(QUALITY_TARGETS.green * 100).toFixed(0)}%`}
           tier={tier === "low-sample" ? null : tier}
+          footnote={t.totalLeads ? `${t.good} of ${t.totalLeads} scored calls` : undefined}
         />
         <LeadMix bad={t.bad} good={t.good} other={t.projected} crmWins={t.sales} total={t.totalLeads} records={t.calls} benchmarkLabel={benchmarkName} benchmarkRate={qualityBenchmark} />
       </div>
