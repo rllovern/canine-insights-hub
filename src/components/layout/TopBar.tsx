@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { AppRole } from "@/lib/types";
 import { TourHelpButton } from "@/components/tour/TourHelpButton";
+import { MeetBobButton } from "@/components/bob/MeetBobButton";
 import { MobileNav } from "./MobileNav";
 
 const PREVIEW_ROLE_LABELS: Record<Exclude<AppRole, "internal" | "viewer">, string> = {
@@ -54,6 +55,8 @@ export function TopBar() {
         <div data-tour="date-range" className="flex items-center">
           <DateRangePicker />
         </div>
+
+        <MeetBobButton />
 
         <TourHelpButton />
 

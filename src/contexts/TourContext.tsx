@@ -59,6 +59,14 @@ export function TourProvider({ children }: { children: ReactNode }) {
           { user_id: user.id, tour_key: TOUR_KEY, ...patch },
           { onConflict: "user_id,tour_key" },
         );
+      // Finishing (or dismissing) the walkthrough counts as meeting Bob —
+      // the tour already introduces him, so the standalone modal never fires.
+      await supabase
+        .from("user_tour_state")
+        .upsert(
+          { user_id: user.id, tour_key: "bob-intro-v1", completed_at: new Date().toISOString() },
+          { onConflict: "user_id,tour_key" },
+        );
     },
     [user?.id],
   );
