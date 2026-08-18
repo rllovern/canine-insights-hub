@@ -6,8 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { hadRecoveryPayloadAtLoad } from "@/lib/recoveryUrl";
 
 function hasRecoveryPayload() {
+  // The snapshot taken before the Supabase client booted is authoritative:
+  // detectSessionInUrl strips the recovery params from the URL during module
+  // init, long before this component mounts.
+  if (hadRecoveryPayloadAtLoad()) return true;
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const search = new URLSearchParams(window.location.search);
   return Boolean(hash.get("access_token") || hash.get("token_hash") || search.get("code") || search.get("token_hash"));
@@ -39,17 +44,28 @@ export default function ResetPassword() {
     // A reset link is single use: the form only unlocks when this page load
     // carries a fresh recovery payload in the URL. A leftover session is not
     // enough — a used link must send the person back to "Forgot password".
-    if (!hasRecoveryPayload()) {
-      setStatus("invalid");
-      supabase.auth.signOut();
-      return;
+    const fresh = hasRecoveryPayload();
+    let recovered = false;
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      // A PASSWORD_RECOVERY event proves this load carried a live recovery
+      // link even if the params were already consumed from the URL.
+      if (event === "PASSWORD_RECOVERY") recovered = true;
+      if (session && (fresh || recovered)) setStatus("ready");
+    });
+    if (fresh) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setStatus(session ? "ready" : "invalid");
+      });
+    } else {
+      // Give Supabase a moment to finish processing the URL; only give up
+      // (and burn any leftover session) when no recovery event arrives.
+      const t = setTimeout(() => {
+        if (recovered) return;
+        setStatus("invalid");
+        supabase.auth.signOut();
+      }, 2000);
+      return () => { clearTimeout(t); sub.subscription.unsubscribe(); };
     }
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session) setStatus("ready");
-    });
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setStatus(session ? "ready" : "invalid");
-    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
