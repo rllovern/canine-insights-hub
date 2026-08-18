@@ -6,8 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { hadRecoveryPayloadAtLoad } from "@/lib/recoveryUrl";
 
 function hasRecoveryPayload() {
+  // The snapshot taken before the Supabase client booted is authoritative:
+  // detectSessionInUrl strips the recovery params from the URL during module
+  // init, long before this component mounts.
+  if (hadRecoveryPayloadAtLoad()) return true;
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const search = new URLSearchParams(window.location.search);
   return Boolean(hash.get("access_token") || hash.get("token_hash") || search.get("code") || search.get("token_hash"));
