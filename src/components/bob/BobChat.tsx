@@ -329,6 +329,14 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     setHistoryOpen(false);
   };
 
+  // Deep links (e.g. Reports → "In chat") ask Bob to reopen a saved session.
+  useEffect(() => {
+    if (!restore) return;
+    if (restore.id !== sessionId) selectConversation(restore.id);
+    clearRestore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restore]);
+
   const isLoading = status === "submitted" || status === "streaming";
   const noAccessibleProperties =
     !!accessToken && properties.length === 0;
