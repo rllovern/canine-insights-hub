@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useBob } from "@/contexts/BobContext";
 
 /**
@@ -7,7 +7,12 @@ import { useBob } from "@/contexts/BobContext";
  * the drawer and bounces back to the dashboard so old links keep working.
  */
 export default function Assistant() {
-  const { openBob } = useBob();
-  useEffect(() => { openBob(); }, [openBob]);
+  const { openBob, openBobSession } = useBob();
+  const [params] = useSearchParams();
+  const session = params.get("session");
+  useEffect(() => {
+    if (session) openBobSession(session);
+    else openBob();
+  }, [session, openBob, openBobSession]);
   return <Navigate to="/command" replace />;
 }
