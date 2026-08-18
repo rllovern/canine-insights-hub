@@ -1,40 +1,52 @@
 # Stop the recurring loading-screen outage
 
-## What is happening now
+## Short answer: yes, the 100% storage warning is almost certainly the cause
 
-This is another backend database outage, not a browser, password, or rendering problem.
+A database disk at 100% is not a side effect of this outage — it is the classic cause of exactly this failure pattern. When the data disk fills, PostgreSQL can no longer write, in-flight statements stall, connections are never released, and every new connection attempt times out. Auth is just another database client, so sign-in and session refresh start returning 504s and the app hangs on `Loading…`.
 
-Confirmed at 23:42–23:48 UTC:
+That also explains why this keeps coming back after each restart: a restart frees temporary space and buys some hours, but the disk fills again and the same wall is hit.
 
-- Auth refresh requests repeatedly timed out with 504s, then failed because auth could not connect to the database.
-- A direct database query failed with `Connection terminated due to connection timeout`.
-- The database metrics endpoint also timed out.
-- PostgreSQL logged repeated statement timeouts, lost client connections, and a scheduled-job startup timeout.
-- The app remains on `Loading…` because `AuthContext` waits for the session request to finish before clearing its loading state.
+## What is confirmed right now
 
-## What changed and why it is recurring
+- Direct database queries fail with `Connection terminated due to connection timeout`.
+- The database metrics endpoint times out, so detailed health cannot be read.
+- The high-level Cloud status check still reports the backend as up, which is consistent with a saturated database rather than a downed service.
+- Auth requests time out with 504s and log failures to reach the users table.
+- PostgreSQL logged statement timeouts, lost client connections, and a scheduled-job startup timeout.
+- The app shows `Loading…` because the auth gate waits on the session, role, and security requests that never return.
 
-The strongest confirmed trigger is the sync recovery system added on August 16:
+## Why the disk filled
 
-- The `resync-failed` watchdog now treats stale freshness watermarks as retry candidates even when the latest sync run says success.
-- It runs every two minutes.
-- One tick can select 10 integrations, run them sequentially, retry each up to three times, wait 30 and 120 seconds inside the function, and allow up to five minutes per integration.
-- A GHL retry can start database-heavy synchronization and lead-fact rebuilding.
-- The database log shows the two-minute cron invoking `resync-failed`; one invocation query occupied about 47 seconds, and subsequent cron starts timed out.
+Two contributors, both worth fixing:
 
-This design permits overlapping recovery ticks and creates a feedback loop: a slow sync makes data look stale, the watchdog launches more syncs, database capacity is consumed, auth loses database access, and every signed-in user gets stuck on `Loading…`.
+1. **Storage growth.** The GHL mirror keeps raw contact, opportunity, and message payloads plus lead-fact and sync-log history. Backfills of thousands of opportunities per location, repeated lead-fact rebuilds, and write-ahead log growth all consume disk quickly.
+2. **The two-minute recovery job amplifies it.** The `resync-failed` watchdog treats stale freshness watermarks as retry candidates, runs every two minutes, can take up to 10 integrations per tick, retries each up to three times with in-function waits, and can trigger heavy GHL sync and lead-fact rebuild work. When the database is already struggling, this keeps generating more writes and log volume, which makes a full disk fill faster and stay full.
 
 ## Fix plan
 
-1. **Recover access immediately**
-   - Restart the Lovable Cloud backend.
+0. **Get the disk out of the red first**
+   - Increase the Lovable Cloud database disk size so the backend can write again.
+   - Confirm the database accepts connections and metrics respond before doing anything else.
+   - Note for later: disk size and instance compute are separate controls; this step is about disk, not CPU/memory.
+   - Once reachable, measure actual usage: largest tables and indexes, sync/log table sizes, raw payload columns, and write-ahead log size, so we know what is really consuming space.
+
+## Fix plan
+
+1. **Recover access**
+   - Restart the backend only if it is still unresponsive after the disk has headroom.
    - Poll database, auth, and metrics until all three respond normally.
    - Verify the Command dashboard with an authenticated browser session.
 
-2. **Contain the overload before it returns**
+2. **Contain the write amplification before it returns**
    - Disable the current every-two-minute `resync-failed` cron while the backend is recovering.
    - Confirm no overlapping recovery or scheduled-sync executions remain.
    - Inspect current sync runs, freshness rows, connection pressure, and the exact candidates that caused the retry storm.
+
+2b. **Reclaim and cap storage growth**
+   - Add retention to high-churn history: sync run logs, Bob conversation logs, raw webhook/payload records, and superseded lead-fact rows.
+   - Stop storing full raw API payloads where only mapped fields are used, or truncate them.
+   - Reclaim space on the biggest offenders after cleanup and confirm disk usage drops.
+   - Keep a recurring cleanup job so the disk cannot silently refill.
 
 3. **Replace the recovery job with bounded, non-overlapping work**
    - Add a database-backed lease so only one recovery invocation can run at a time.
@@ -54,15 +66,21 @@ This design permits overlapping recovery ticks and creates a feedback loop: a sl
    - Replace the indefinite `Loading…` state with a clear backend-unavailable screen and Retry action.
    - Do not log users out or discard their session during a temporary backend outage.
 
-6. **Validate the permanent fix**
+6. **Add an early warning**
+   - Surface database disk usage on the internal admin health surface.
+   - Warn well before saturation rather than discovering it as a full outage.
+
+7. **Validate the permanent fix**
    - Trigger one controlled failed integration and confirm only one retry worker runs.
    - Confirm backoff and recovery return the integration to the four-hour cadence after success.
-   - Confirm database health remains stable and sign-in/dashboard requests continue to answer during recovery.
+   - Confirm disk usage stays flat over a full sync cycle instead of climbing.
+   - Confirm sign-in and dashboard requests keep answering during recovery work.
    - Check both desktop and mobile loading-error states.
 
 ## Technical scope
 
-- Lovable Cloud restart and cron containment.
+- Lovable Cloud database disk increase, plus restart and cron containment.
+- Storage retention/cleanup migrations and a recurring cleanup job.
 - Recovery scheduling migration and `resync-failed` refactor.
 - Narrow GHL recovery behavior where needed.
 - Auth loading timeout/error state in `AuthContext`, `RequireAuth`, and the root redirect.
