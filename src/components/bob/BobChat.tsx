@@ -93,7 +93,7 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
   // for what Bob is allowed to look at.
   const { mode, propertyId: scopedPropertyId, propertyIds, activeProperty, label: scopeLabel } = useScope();
   const { range, compareRange, compareMode } = useDashboard();
-  const { sessionId, setSessionId, pending, clearPending, open: drawerOpen } = useBob();
+  const { sessionId, setSessionId, pending, clearPending, open: drawerOpen, restore, clearRestore } = useBob();
   const [input, setInput] = useState("");
   const [recentSessions, setRecentSessions] = useState<
     { id: string; title: string | null; updated_at: string }[]
