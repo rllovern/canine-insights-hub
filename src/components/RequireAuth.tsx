@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
+import { BackendUnavailable } from "@/components/BackendUnavailable";
 
 interface RequireAuthProps {
   children: ReactNode;
@@ -12,11 +13,22 @@ interface RequireAuthProps {
 }
 
 export function RequireAuth({ children, requireSuperAdmin, requireStaff }: RequireAuthProps) {
-  const { user, loading, roleLoading, mustChangePassword, securityLoading } = useAuth();
+  const {
+    user,
+    loading,
+    roleLoading,
+    mustChangePassword,
+    securityLoading,
+    backendUnavailable,
+    retryBackend,
+  } = useAuth();
   const { isSuperAdmin, isStaff } = usePreviewMode();
   const location = useLocation();
 
   const gated = requireSuperAdmin || requireStaff;
+  if (backendUnavailable) {
+    return <BackendUnavailable onRetry={retryBackend} />;
+  }
   if (loading || (user && securityLoading) || (gated && user && roleLoading)) {
     return (
       <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">

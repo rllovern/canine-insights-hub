@@ -1,9 +1,14 @@
-// Between-cron auto-recovery pass. Runs every 2 minutes via pg_cron.
-// Any (property, source) pair whose most recent sync_runs row is a failure
-// (or a stuck "running" older than 5 minutes), or whose last success is older
-// than 5 hours, is re-invoked with the standard 3-attempt policy. Retries
-// continue every 2 minutes until a success is recorded, at which point the
-// pair falls back to the normal 4-hour scheduled cadence.
+// Between-cron auto-recovery pass.
+//
+// Bounded by design: ONE pair per tick, ONE invocation per tick, a hard
+// wall-clock ceiling, and no in-function sleeping. Earlier versions took up
+// to 10 pairs per tick, retried each 3 times with 30s/120s sleeps inside the
+// function, and allowed 5 minutes per pair. At a 2-minute cadence that let
+// ticks overlap and pile database work on top of already-slow syncs, which
+// saturated the database and took auth down with it.
+//
+// Retry spacing is now owned by the cron cadence plus `backoff_until` on
+// property_data_sources, not by sleeping inside the request.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -29,7 +34,11 @@ function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-const ATTEMPT_WAITS_MS = [0, 30_000, 120_000];
+// Recovery re-pulls a short window only. A 30-day window turns every
+// recovery attempt into a heavy backfill, which is what we are trying not to
+// do while a source is already struggling. Scheduled full syncs still cover
+// the wider window.
+const RECOVERY_WINDOW_DAYS = 7;
 
 // ----- Failure classification --------------------------------------
 // Auth / scope / config failures never recover on their own. Retrying them
@@ -53,11 +62,11 @@ function isHardFailure(msg: string | null): boolean {
   return HARD_FAILURE_PATTERNS.some((re) => re.test(msg));
 }
 
-const PER_PAIR_TIMEOUT_MS = 5 * 60_000;
-// Per-tick candidate cap so a single 2-minute run can't blow past platform
-// wall-time when many pairs fail at once. Remaining pairs are picked up on
-// the next tick 2 minutes later.
-const MAX_CANDIDATES_PER_TICK = 10;
+// Hard ceiling on a single child sync invocation. If it has not answered by
+// then we give up on this tick rather than holding the slot open.
+const INVOKE_TIMEOUT_MS = 60_000;
+// Exactly one pair per tick. Remaining pairs are picked up on later ticks.
+const MAX_CANDIDATES_PER_TICK = 1;
 
 // ----- Data-freshness thresholds -------------------------------------
 // A run that reports "success" is not proof the data moved: a phase can be
@@ -65,10 +74,13 @@ const MAX_CANDIDATES_PER_TICK = 10;
 // These ceilings are judged on sync_watermarks.last_fresh_at, so a source
 // that stops producing data is recovered even when every run looks green.
 const FRESHNESS_MAX_AGE_MS: Record<string, number> = {
-  ghl: 3 * 3_600_000,
+  // Must stay comfortably ABOVE the 4h scheduled cadence. A 3h ceiling meant
+  // every GHL pair looked stale for an hour of every cycle, so the recovery
+  // job re-ran heavy GHL syncs continuously even when nothing was broken.
+  ghl: 6 * 3_600_000,
   ctm: 6 * 3_600_000,
-  google_ads: 8 * 3_600_000,
-  ga4: 8 * 3_600_000,
+  google_ads: 10 * 3_600_000,
+  ga4: 10 * 3_600_000,
   keyword_com: 26 * 3_600_000,
 };
 
@@ -221,7 +233,7 @@ Deno.serve(async (req) => {
     candidates.push({ property_id, source });
   }
 
-  const date_from = isoDaysAgo(30);
+  const date_from = isoDaysAgo(RECOVERY_WINDOW_DAYS);
   const date_to = isoToday();
   let recovered = 0;
   let stillFailing = 0;
@@ -233,9 +245,16 @@ Deno.serve(async (req) => {
     let error_message: string | null = null;
     let rows_written: number | null = null;
     try {
-      const { data, error } = await admin.functions.invoke(fnName, {
-        body: { property_id, date_from, date_to },
-      });
+      const timeout = new Promise<never>((_res, rej) =>
+        setTimeout(
+          () => rej(new Error(`child sync timed out after ${INVOKE_TIMEOUT_MS / 1000}s`)),
+          INVOKE_TIMEOUT_MS,
+        )
+      );
+      const { data, error } = await Promise.race([
+        admin.functions.invoke(fnName, { body: { property_id, date_from, date_to } }),
+        timeout,
+      ]);
       if (error) {
         status = "failure";
         error_message = String(error.message ?? error);
@@ -252,7 +271,9 @@ Deno.serve(async (req) => {
     return { started_at, status, error_message, rows_written };
   }
 
-  const FAILURE_GRACE = 5; // free fast retries before the breaker engages
+  // Free retries before the breaker engages. Kept low so a genuinely broken
+  // pair moves onto exponential backoff within minutes instead of hammering.
+  const FAILURE_GRACE = 2;
   async function recordHealth(
     property_id: string,
     source: string,
@@ -305,38 +326,25 @@ Deno.serve(async (req) => {
     const fnName = SOURCE_TO_FN[c.source];
     if (!fnName) continue;
     const run_group_id = crypto.randomUUID();
-    const pairDeadline = Date.now() + PER_PAIR_TIMEOUT_MS;
-    let lastStatus: "success" | "failure" = "failure";
-    let lastError: string | null = null;
-    let hardFailed = false;
 
-    for (let i = 0; i < ATTEMPT_WAITS_MS.length; i++) {
-      if (i > 0) {
-        if (Date.now() + ATTEMPT_WAITS_MS[i] > pairDeadline) break;
-        await new Promise((r) => setTimeout(r, ATTEMPT_WAITS_MS[i]));
-      }
-      const attempt = i + 1;
-      const r = await invokeOnce(fnName, c.property_id);
-      lastStatus = r.status;
-      lastError = r.error_message;
-      await admin.from("sync_runs").insert({
-        property_id: c.property_id,
-        source: c.source,
-        status: r.status,
-        error_message: r.error_message ? r.error_message.slice(0, 2000) : null,
-        started_at: r.started_at,
-        finished_at: new Date().toISOString(),
-        attempt,
-        run_group_id,
-        trigger_source: "resync_failed",
-        stats: { rows_written: r.rows_written, attempt, run_group_id } as never,
-      });
-      if (r.status === "success") break;
-      // Don't spend the remaining attempts on an error that can't recover.
-      if (isHardFailure(r.error_message)) { hardFailed = true; break; }
-    }
-    await recordHealth(c.property_id, c.source, lastStatus === "success", lastError);
-    if (lastStatus === "success") recovered++;
+    // Exactly one attempt. The next attempt, if needed, is a later cron tick.
+    const r = await invokeOnce(fnName, c.property_id);
+    await admin.from("sync_runs").insert({
+      property_id: c.property_id,
+      source: c.source,
+      status: r.status,
+      error_message: r.error_message ? r.error_message.slice(0, 2000) : null,
+      started_at: r.started_at,
+      finished_at: new Date().toISOString(),
+      attempt: 1,
+      run_group_id,
+      trigger_source: "resync_failed",
+      stats: { rows_written: r.rows_written, attempt: 1, run_group_id } as never,
+    });
+
+    const hardFailed = r.status === "failure" && isHardFailure(r.error_message);
+    await recordHealth(c.property_id, c.source, r.status === "success", r.error_message);
+    if (r.status === "success") recovered++;
     else if (hardFailed) paused++;
     else stillFailing++;
   }
