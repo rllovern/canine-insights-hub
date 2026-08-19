@@ -1608,6 +1608,9 @@ function buildTools(ctx: Ctx) {
           ctx.supabase.from("ghl_messages")
             .select("id", { count: "exact", head: true })
             .eq("property_id", id).eq("direction", "outbound").is("response_source", null),
+          ctx.supabase.from("ghl_lead_facts")
+            .select("id", { count: "exact", head: true })
+            .eq("property_id", id).eq("canonical_stage", "won").is("won_at", null),
         ]);
         const recentFailures = (syncs.data ?? []).filter(s => s.status === "failure").slice(0, 10);
         const stageCount = (stages.data ?? []).length;
@@ -1626,6 +1629,11 @@ function buildTools(ctx: Ctx) {
         if (unconfirmedStages > 0) issues.push({ category: "mapping", severity: "medium", detail: `${unconfirmedStages} unconfirmed pipeline stage mappings`, count: unconfirmedStages });
         if ((dupContacts.count ?? 0) > 0) issues.push({ category: "duplicates", severity: "medium", detail: `${dupContacts.count} contacts in duplicate groups`, count: dupContacts.count ?? 0 });
         if ((unknownMsgs.count ?? 0) > 0) issues.push({ category: "messaging", severity: "low", detail: `${unknownMsgs.count} outbound messages with unknown source (human/automation/ai)`, count: unknownMsgs.count ?? 0 });
+        if ((soldStageNotWon.count ?? 0) > 0) issues.push({
+          category: "sales_recording", severity: "medium",
+          detail: `${soldStageNotWon.count} record(s) sit in a Sold-type stage but were never marked Won in the CRM — they do NOT count as sales`,
+          count: soldStageNotWon.count ?? 0,
+        });
         const highCount = issues.filter(i => i.severity === "high").length;
         const medCount = issues.filter(i => i.severity === "medium").length;
         const confidence: "high" | "medium" | "low" =
@@ -1642,6 +1650,9 @@ function buildTools(ctx: Ctx) {
           unconfirmed_pipeline_mappings: unconfirmedStages,
           duplicate_contacts: dupContacts.count ?? 0,
           unknown_outbound_messages: unknownMsgs.count ?? 0,
+          sold_stage_not_marked_won: soldStageNotWon.count ?? 0,
+          sold_stage_not_marked_won_note:
+            "Records in a Sold-type stage that the CRM never marked Won. They are an operational recording gap, not sales, and are excluded from verified sales and revenue everywhere.",
           lead_perf_quality: qualityRpc.data ?? null,
           issues,
           sources_used: ["property_data_sources", "sync_runs", "ghl_*", "lead_perf_quality"],
