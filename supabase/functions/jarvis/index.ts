@@ -134,6 +134,80 @@ No bullet lists unless they ask for a list.
 REPORTS
 You do not build reports. If someone asks for one, walk them through the numbers conversationally and point them to the Reports page in the app.`;
 
+const SALES_TRUTH_RULES = `
+SALES, WINS AND REVENUE — ONE SOURCE ONLY
+- The only figure you may ever call a sale, a win, a closed deal, or revenue is the "verified_sales" block in a tool result. It mirrors exactly what the dashboard cards show, because it comes from what the CRM itself has marked Won.
+- Pipeline stage counts are NOT sales. A field like "in_sold_type_stage" means people are sitting in a stage the location named something like "Sold" — the CRM has not marked those deals Won. Describe them as pipeline position ("ten people are sitting in a Sold stage"), never as sales, wins, revenue, or "moved into won", and never add them to a sales number.
+- If "in_sold_type_stage" is higher than "verified_sales.count", say so plainly in one short sentence: the stages say Sold but the CRM has not marked them Won, so those sales are not confirmed in the system and the cards will show fewer.
+- If a pipeline block carries needs_mapping: true, treat every stage-based figure as unconfirmed and say so rather than quoting it as fact.
+- If verified_sales.count is 0, say there were no confirmed sales in that window. Never substitute a stage count, an appointment count, or a previous location's number to fill the gap.`;
+
+/**
+ * The lead-performance pipeline RPCs call a stage-derived bucket "won". That is
+ * stage occupancy, not a confirmed sale, and Bob has quoted it as "verified
+ * sales" before. Rename the keys so the word cannot leak into an answer.
+ */
+// deno-lint-ignore no-explicit-any
+function sanitizePipeline(pipeline: any, verifiedCount: number | null) {
+  if (!pipeline || typeof pipeline !== "object") return pipeline;
+  const out: Record<string, unknown> = { ...pipeline };
+  const stages = pipeline.stages && typeof pipeline.stages === "object" ? { ...pipeline.stages } : null;
+  if (stages && "won" in stages) {
+    const inSold = Number(stages.won ?? 0);
+    delete stages.won;
+    stages.in_sold_type_stage = inSold;
+    out.stages = stages;
+    out.stage_occupancy_note =
+      "in_sold_type_stage counts records whose CURRENT pipeline stage is named Sold-something. It is NOT a sale and must never be reported as one — only verified_sales is a sale.";
+    if (verifiedCount !== null && inSold > verifiedCount) {
+      out.unconfirmed_sold_stage_records = inSold - verifiedCount;
+      out.unconfirmed_sold_stage_note =
+        `${inSold - verifiedCount} record(s) sit in a Sold-type stage but the CRM has not marked them Won, so they do not count as sales and will not appear on the sales cards.`;
+    }
+  }
+  const tr = pipeline.transitions && typeof pipeline.transitions === "object" ? { ...pipeline.transitions } : null;
+  if (tr) {
+    if ("lead_to_won" in tr) { tr.lead_to_sold_stage_pct = tr.lead_to_won; delete tr.lead_to_won; }
+    if ("showed_to_won" in tr) { tr.showed_to_sold_stage_pct = tr.showed_to_won; delete tr.showed_to_won; }
+    out.transitions = tr;
+  }
+  return out;
+}
+
+/**
+ * Authoritative sales figure — identical definition to the dashboard cards:
+ * CRM opportunities the CRM itself marked Won, dated inside the window.
+ */
+async function fetchVerifiedSales(
+  // deno-lint-ignore no-explicit-any
+  db: any,
+  propertyId: string,
+  fromISO: string,
+  toISO: string,
+) {
+  const { data, error } = await db
+    .from("ghl_opportunities")
+    .select("monetary_value")
+    .eq("property_id", propertyId)
+    .eq("status", "won")
+    .gte("won_at", fromISO)
+    .lte("won_at", toISO);
+  if (error) {
+    return {
+      count: null, revenue: null, error: error.message,
+      definition: "CRM opportunities with status Won and a Won date inside the window — the same rule the dashboard sales cards use.",
+    };
+  }
+  const rows = (data ?? []) as Array<{ monetary_value: number | null }>;
+  const revenue = rows.reduce((s, r) => s + Number(r.monetary_value ?? 0), 0);
+  return {
+    count: rows.length,
+    revenue,
+    revenue_is_partial: rows.length > 0 && revenue === 0,
+    definition: "CRM opportunities with status Won and a Won date inside the window — the same rule the dashboard sales cards use. THIS is the only sales number you may quote.",
+  };
+}
+
 function svc() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -1372,10 +1446,13 @@ function buildTools(ctx: Ctx) {
         ]);
         const { data: ghlSrc } = await ctx.supabase.from("property_data_sources")
           .select("last_synced_at").eq("property_id", id).eq("source", "ghl").maybeSingle();
+        const verified_sales = await fetchVerifiedSales(ctx.supabase, id, from.toISOString(), to.toISOString());
         return {
           property_id: id,
           days: i.days,
-          speed: speed.data, handling: handling.data, pipeline: pipeline.data,
+          speed: speed.data, handling: handling.data,
+          pipeline: sanitizePipeline(pipeline.data, verified_sales.count),
+          verified_sales,
           agents: agents.data, quality: quality.data,
           sources_used: ["ghl_lead_facts", "ghl_contacts", "ghl_messages", "ghl_appointments"],
           sync_freshness: { ghl: ghlSrc?.last_synced_at ?? null },
@@ -1511,7 +1588,7 @@ function buildTools(ctx: Ctx) {
         const id = resolveProperty(ctx, i.property_id, "get_data_quality_audit");
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
-        const [sources, syncs, qualityRpc, stages, mapping, dupContacts, unknownMsgs] = await Promise.all([
+        const [sources, syncs, qualityRpc, stages, mapping, dupContacts, unknownMsgs, soldStageNotWon] = await Promise.all([
           ctx.supabase.from("property_data_sources")
             .select("source,is_connected,last_synced_at,status,error_message")
             .eq("property_id", id),
@@ -1531,6 +1608,9 @@ function buildTools(ctx: Ctx) {
           ctx.supabase.from("ghl_messages")
             .select("id", { count: "exact", head: true })
             .eq("property_id", id).eq("direction", "outbound").is("response_source", null),
+          ctx.supabase.from("ghl_lead_facts")
+            .select("id", { count: "exact", head: true })
+            .eq("property_id", id).eq("canonical_stage", "won").is("won_at", null),
         ]);
         const recentFailures = (syncs.data ?? []).filter(s => s.status === "failure").slice(0, 10);
         const stageCount = (stages.data ?? []).length;
@@ -1549,6 +1629,11 @@ function buildTools(ctx: Ctx) {
         if (unconfirmedStages > 0) issues.push({ category: "mapping", severity: "medium", detail: `${unconfirmedStages} unconfirmed pipeline stage mappings`, count: unconfirmedStages });
         if ((dupContacts.count ?? 0) > 0) issues.push({ category: "duplicates", severity: "medium", detail: `${dupContacts.count} contacts in duplicate groups`, count: dupContacts.count ?? 0 });
         if ((unknownMsgs.count ?? 0) > 0) issues.push({ category: "messaging", severity: "low", detail: `${unknownMsgs.count} outbound messages with unknown source (human/automation/ai)`, count: unknownMsgs.count ?? 0 });
+        if ((soldStageNotWon.count ?? 0) > 0) issues.push({
+          category: "sales_recording", severity: "medium",
+          detail: `${soldStageNotWon.count} record(s) sit in a Sold-type stage but were never marked Won in the CRM — they do NOT count as sales`,
+          count: soldStageNotWon.count ?? 0,
+        });
         const highCount = issues.filter(i => i.severity === "high").length;
         const medCount = issues.filter(i => i.severity === "medium").length;
         const confidence: "high" | "medium" | "low" =
@@ -1565,6 +1650,9 @@ function buildTools(ctx: Ctx) {
           unconfirmed_pipeline_mappings: unconfirmedStages,
           duplicate_contacts: dupContacts.count ?? 0,
           unknown_outbound_messages: unknownMsgs.count ?? 0,
+          sold_stage_not_marked_won: soldStageNotWon.count ?? 0,
+          sold_stage_not_marked_won_note:
+            "Records in a Sold-type stage that the CRM never marked Won. They are an operational recording gap, not sales, and are excluded from verified sales and revenue everywhere.",
           lead_perf_quality: qualityRpc.data ?? null,
           issues,
           sources_used: ["property_data_sources", "sync_runs", "ghl_*", "lead_perf_quality"],
@@ -1891,18 +1979,22 @@ function buildTools(ctx: Ctx) {
           ctx.userSupabase.rpc("lead_perf_pipeline", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: prevFromStr, _to: prevToStr }),
         ]);
+        const verified_sales = await fetchVerifiedSales(ctx.supabase, id, from.toISOString(), to.toISOString());
         return {
           property_id: id,
           current_range: { from: fromStr, to: toStr },
           previous_range: { from: prevFromStr, to: prevToStr },
           current_summary: summary.data, previous_summary: prev.data,
-          speed: speed.data, handling: handling.data, pipeline: pipeline.data,
+          speed: speed.data, handling: handling.data,
+          pipeline: sanitizePipeline(pipeline.data, verified_sales.count),
+          verified_sales,
           sources_used: ["daily_metrics", "ghl_lead_facts"],
           internal_caveats_examples: [
             "Do not surface raw table names to the client.",
             "Translate 'stale' → 'awaiting follow-up'.",
             "Translate 'never responded' → 'pending first outreach'.",
             "Avoid blame language about agents in the client tone.",
+            "Never call a Sold-type stage count a sale; only verified_sales counts.",
           ],
         };
       }),
@@ -2120,7 +2212,7 @@ serve(async (req) => {
 
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
-      system: SYSTEM_PROMPT + contextHeader + staleNote + fetchNote,
+      system: SYSTEM_PROMPT + SALES_TRUTH_RULES + contextHeader + staleNote + fetchNote,
       messages: modelMessages,
       tools: buildTools(ctx),
       stopWhen: stepCountIs(8),
