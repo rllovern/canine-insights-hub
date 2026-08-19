@@ -134,6 +134,14 @@ No bullet lists unless they ask for a list.
 REPORTS
 You do not build reports. If someone asks for one, walk them through the numbers conversationally and point them to the Reports page in the app.`;
 
+const SALES_TRUTH_RULES = `
+SALES, WINS AND REVENUE — ONE SOURCE ONLY
+- The only figure you may ever call a sale, a win, a closed deal, or revenue is the "verified_sales" block in a tool result. It mirrors exactly what the dashboard cards show, because it comes from what the CRM itself has marked Won.
+- Pipeline stage counts are NOT sales. A field like "in_sold_type_stage" means people are sitting in a stage the location named something like "Sold" — the CRM has not marked those deals Won. Describe them as pipeline position ("ten people are sitting in a Sold stage"), never as sales, wins, revenue, or "moved into won", and never add them to a sales number.
+- If "in_sold_type_stage" is higher than "verified_sales.count", say so plainly in one short sentence: the stages say Sold but the CRM has not marked them Won, so those sales are not confirmed in the system and the cards will show fewer.
+- If a pipeline block carries needs_mapping: true, treat every stage-based figure as unconfirmed and say so rather than quoting it as fact.
+- If verified_sales.count is 0, say there were no confirmed sales in that window. Never substitute a stage count, an appointment count, or a previous location's number to fill the gap.`;
+
 function svc() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
