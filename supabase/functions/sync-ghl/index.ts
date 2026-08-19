@@ -687,7 +687,6 @@ Deno.serve(async (req) => {
               sent_at: mA.dateAdded ?? null,
               body_preview: typeof mA.body === "string" ? (mA.body as string).slice(0, 280) : null,
               meta: normalizedMessageMeta(mA),
-              raw: m,
             });
           }
 

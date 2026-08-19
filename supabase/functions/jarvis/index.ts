@@ -603,7 +603,7 @@ function buildTools(ctx: Ctx) {
             ? ctx.supabase.from("ghl_contacts").select("ghl_contact_id,first_name,last_name,email,phone,source,tags,raw").eq("property_id", id).in("ghl_contact_id", contactIds).limit(5000)
             : Promise.resolve({ data: [], error: null }),
           ctx.supabase.from("ghl_pipeline_stages").select("ghl_stage_id,name").eq("property_id", id).limit(1000),
-          ctx.supabase.from("ghl_messages").select("ghl_user_id,raw").eq("property_id", id).gte("sent_at", fromISO).lte("sent_at", toISO).not("ghl_user_id", "is", null).limit(1000),
+          ctx.supabase.from("ghl_messages").select("ghl_user_id").eq("property_id", id).gte("sent_at", fromISO).lte("sent_at", toISO).not("ghl_user_id", "is", null).limit(1000),
         ]);
         if (contactsRes.error) throw new Error(contactsRes.error.message);
         if (stagesRes.error) throw new Error(stagesRes.error.message);
