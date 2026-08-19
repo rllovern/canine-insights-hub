@@ -142,6 +142,72 @@ SALES, WINS AND REVENUE — ONE SOURCE ONLY
 - If a pipeline block carries needs_mapping: true, treat every stage-based figure as unconfirmed and say so rather than quoting it as fact.
 - If verified_sales.count is 0, say there were no confirmed sales in that window. Never substitute a stage count, an appointment count, or a previous location's number to fill the gap.`;
 
+/**
+ * The lead-performance pipeline RPCs call a stage-derived bucket "won". That is
+ * stage occupancy, not a confirmed sale, and Bob has quoted it as "verified
+ * sales" before. Rename the keys so the word cannot leak into an answer.
+ */
+// deno-lint-ignore no-explicit-any
+function sanitizePipeline(pipeline: any, verifiedCount: number | null) {
+  if (!pipeline || typeof pipeline !== "object") return pipeline;
+  const out: Record<string, unknown> = { ...pipeline };
+  const stages = pipeline.stages && typeof pipeline.stages === "object" ? { ...pipeline.stages } : null;
+  if (stages && "won" in stages) {
+    const inSold = Number(stages.won ?? 0);
+    delete stages.won;
+    stages.in_sold_type_stage = inSold;
+    out.stages = stages;
+    out.stage_occupancy_note =
+      "in_sold_type_stage counts records whose CURRENT pipeline stage is named Sold-something. It is NOT a sale and must never be reported as one — only verified_sales is a sale.";
+    if (verifiedCount !== null && inSold > verifiedCount) {
+      out.unconfirmed_sold_stage_records = inSold - verifiedCount;
+      out.unconfirmed_sold_stage_note =
+        `${inSold - verifiedCount} record(s) sit in a Sold-type stage but the CRM has not marked them Won, so they do not count as sales and will not appear on the sales cards.`;
+    }
+  }
+  const tr = pipeline.transitions && typeof pipeline.transitions === "object" ? { ...pipeline.transitions } : null;
+  if (tr) {
+    if ("lead_to_won" in tr) { tr.lead_to_sold_stage_pct = tr.lead_to_won; delete tr.lead_to_won; }
+    if ("showed_to_won" in tr) { tr.showed_to_sold_stage_pct = tr.showed_to_won; delete tr.showed_to_won; }
+    out.transitions = tr;
+  }
+  return out;
+}
+
+/**
+ * Authoritative sales figure — identical definition to the dashboard cards:
+ * CRM opportunities the CRM itself marked Won, dated inside the window.
+ */
+async function fetchVerifiedSales(
+  // deno-lint-ignore no-explicit-any
+  db: any,
+  propertyId: string,
+  fromISO: string,
+  toISO: string,
+) {
+  const { data, error } = await db
+    .from("ghl_opportunities")
+    .select("monetary_value")
+    .eq("property_id", propertyId)
+    .eq("status", "won")
+    .gte("won_at", fromISO)
+    .lte("won_at", toISO);
+  if (error) {
+    return {
+      count: null, revenue: null, error: error.message,
+      definition: "CRM opportunities with status Won and a Won date inside the window — the same rule the dashboard sales cards use.",
+    };
+  }
+  const rows = (data ?? []) as Array<{ monetary_value: number | null }>;
+  const revenue = rows.reduce((s, r) => s + Number(r.monetary_value ?? 0), 0);
+  return {
+    count: rows.length,
+    revenue,
+    revenue_is_partial: rows.length > 0 && revenue === 0,
+    definition: "CRM opportunities with status Won and a Won date inside the window — the same rule the dashboard sales cards use. THIS is the only sales number you may quote.",
+  };
+}
+
 function svc() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
