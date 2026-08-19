@@ -2128,7 +2128,7 @@ serve(async (req) => {
 
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
-      system: SYSTEM_PROMPT + contextHeader + staleNote + fetchNote,
+      system: SYSTEM_PROMPT + SALES_TRUTH_RULES + contextHeader + staleNote + fetchNote,
       messages: modelMessages,
       tools: buildTools(ctx),
       stopWhen: stepCountIs(8),
