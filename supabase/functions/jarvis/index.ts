@@ -1446,10 +1446,13 @@ function buildTools(ctx: Ctx) {
         ]);
         const { data: ghlSrc } = await ctx.supabase.from("property_data_sources")
           .select("last_synced_at").eq("property_id", id).eq("source", "ghl").maybeSingle();
+        const verified_sales = await fetchVerifiedSales(ctx.supabase, id, from.toISOString(), to.toISOString());
         return {
           property_id: id,
           days: i.days,
-          speed: speed.data, handling: handling.data, pipeline: pipeline.data,
+          speed: speed.data, handling: handling.data,
+          pipeline: sanitizePipeline(pipeline.data, verified_sales.count),
+          verified_sales,
           agents: agents.data, quality: quality.data,
           sources_used: ["ghl_lead_facts", "ghl_contacts", "ghl_messages", "ghl_appointments"],
           sync_freshness: { ghl: ghlSrc?.last_synced_at ?? null },
