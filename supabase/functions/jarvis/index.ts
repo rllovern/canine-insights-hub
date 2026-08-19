@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   convertToModelMessages,
+  generateText,
   streamText,
   stepCountIs,
   tool,
@@ -142,6 +143,13 @@ SALES, WINS AND REVENUE — ONE SOURCE ONLY
 - If a pipeline block carries needs_mapping: true, treat every stage-based figure as unconfirmed and say so rather than quoting it as fact.
 - If verified_sales.count is 0, say there were no confirmed sales in that window. Never substitute a stage count, an appointment count, or a previous location's number to fill the gap.`;
 
+const CARD_VOCABULARY_RULES = `
+WORD-TO-SOURCE BINDING (non-negotiable)
+- "Records" may only come from a summary-context totals.records figure. CRM pipeline counts (crm_leads_entered_pipeline, contacted, engaged, appointment, showed) are NOT records and must never be called records, calls, or leads-from-ads.
+- "Verified sales", "sales", "wins", "revenue" may only come from a verified_sales block. Appointment and showed counts are pipeline positions, never sales.
+- Numbers you saw earlier in this conversation are expired. Any figure you state must come from a tool result you received in THIS turn. If you have not run a tool this turn, run one before you use a number — even for advice, opinion or "should I" questions.
+- Never do arithmetic on remembered numbers to produce a new one. Internal consistency is not evidence.`;
+
 /**
  * The lead-performance pipeline RPCs call a stage-derived bucket "won". That is
  * stage occupancy, not a confirmed sale, and Bob has quoted it as "verified
@@ -152,6 +160,15 @@ function sanitizePipeline(pipeline: any, verifiedCount: number | null) {
   if (!pipeline || typeof pipeline !== "object") return pipeline;
   const out: Record<string, unknown> = { ...pipeline };
   const stages = pipeline.stages && typeof pipeline.stages === "object" ? { ...pipeline.stages } : null;
+  if (stages && "new" in stages) {
+    stages.crm_leads_entered_pipeline = stages.new;
+    delete stages.new;
+    out.stages = stages;
+  }
+  if (stages) {
+    out.stage_position_note =
+      "Every key under stages is a CRM pipeline position (where a contact currently sits), not a dashboard metric. crm_leads_entered_pipeline is NOT the Records card, and appointment/showed are NOT sales.";
+  }
   if (stages && "won" in stages) {
     const inSold = Number(stages.won ?? 0);
     delete stages.won;
@@ -372,9 +389,116 @@ function needsFreshData(text: string) {
   return DATA_QUESTION_RE.test(text ?? "");
 }
 
+/**
+ * Judgement / advice questions carry no metric words ("Should I fire my
+ * agency"), yet answering them requires the account's numbers. Bob used to
+ * answer these from the previous turn's tool payload, relabelling CRM pipeline
+ * counts as records and sales. They now force a lookup like any data question.
+ */
+const ADVICE_QUESTION_RE = new RegExp(
+  [
+    "should i", "should we", "do i need", "do we need", "worth it", "worth the",
+    "fire ", "keep ", "cut ", "cancel", "quit", "stay", "switch", "double down",
+    "recommend", "advice", "advise", "what would you", "what do you think",
+    "is it working", "working\\?", "good idea", "bad idea", "next step",
+  ].join("|"),
+  "i",
+);
+function isAdviceQuestion(text: string) {
+  return ADVICE_QUESTION_RE.test(text ?? "");
+}
+
 /** Any digit that isn't part of a date the context already supplied. */
 function statesNumbers(text: string) {
   return /\d/.test(text ?? "");
+}
+
+/**
+ * Hard tool gate on the UI message stream.
+ *
+ * Buffers the model's output until a tool call actually starts. Once one does,
+ * everything is released and the rest streams through untouched (the normal
+ * path — the only cost is that the one-line acknowledgement appears when the
+ * lookup begins). If the model finishes without running a single tool and the
+ * text contains digits, the buffered answer is discarded: we retry once with a
+ * forced tool call, and if that still yields nothing we emit a plain refusal
+ * instead of invented figures.
+ */
+function gateNumericStream(
+  body: ReadableStream<Uint8Array>,
+  ctx: { turn: { toolRuns: number } },
+  opts: {
+    onReplace: () => Promise<string | null>;
+    fallbackText: string;
+    onVerdict: (replacement: string | null) => void;
+  },
+): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = body.getReader();
+      let held = "";
+      let heldText = "";
+      let released = false;
+      let buf = "";
+      const emit = (obj: unknown) =>
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          if (released) { controller.enqueue(encoder.encode(chunk)); continue; }
+          buf += chunk;
+          const parts = buf.split("\n\n");
+          buf = parts.pop() ?? "";
+          for (const evt of parts) {
+            const line = evt.trim();
+            if (!line) continue;
+            held += `${evt}\n\n`;
+            const payload = line.startsWith("data:") ? line.slice(5).trim() : "";
+            if (!payload || payload === "[DONE]") continue;
+            try {
+              const obj = JSON.parse(payload) as { type?: string; delta?: string };
+              if (typeof obj.type === "string" && obj.type.startsWith("tool")) released = true;
+              if (obj.type === "text-delta" && typeof obj.delta === "string") heldText += obj.delta;
+            } catch { /* not JSON — keep buffering */ }
+          }
+          if (released || ctx.turn.toolRuns > 0) {
+            released = true;
+            controller.enqueue(encoder.encode(held + buf));
+            held = ""; buf = "";
+          }
+        }
+        if (released) { if (held || buf) controller.enqueue(encoder.encode(held + buf)); opts.onVerdict(null); controller.close(); return; }
+
+        const unbacked = ctx.turn.toolRuns === 0 && statesNumbers(heldText);
+        if (!unbacked) {
+          controller.enqueue(encoder.encode(held + buf));
+          opts.onVerdict(null);
+          controller.close();
+          return;
+        }
+        console.error("jarvis gate: blocked numeric answer with no tool run", heldText.slice(0, 200));
+        const replacement = (await opts.onReplace()) ?? opts.fallbackText;
+        emit({ type: "start" });
+        emit({ type: "start-step" });
+        emit({ type: "text-start", id: "gate" });
+        emit({ type: "text-delta", id: "gate", delta: replacement });
+        emit({ type: "text-end", id: "gate" });
+        emit({ type: "finish-step" });
+        emit({ type: "finish" });
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        opts.onVerdict(replacement);
+        controller.close();
+      } catch (e) {
+        console.error("jarvis gate stream error", e);
+        opts.onVerdict(null);
+        try { controller.close(); } catch { /* already closed */ }
+      }
+    },
+  });
 }
 
 function resolveProperty(ctx: Ctx, input?: string | ToolPropertyInput | null, toolName?: string) {
@@ -1961,15 +2085,21 @@ function buildTools(ctx: Ctx) {
       inputSchema: z.object({
         property_id: z.string().uuid().optional(),
         days: z.number().int().min(7).max(90).default(30),
+        from: z.string().optional(),
+        to: z.string().optional(),
       }),
       execute: wrap(ctx, "get_client_summary_context", async (i) => {
         const id = resolveProperty(ctx, i.property_id, "get_client_summary_context");
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
-        const to = new Date();
-        const from = new Date(to.getTime() - i.days * 86400_000);
-        const prevFrom = new Date(from.getTime() - i.days * 86400_000);
-        const fromStr = from.toISOString().slice(0, 10);
-        const toStr = to.toISOString().slice(0, 10);
+        // Default to the window the dashboard selector is showing, so Bob's
+        // figures line up with the cards on screen instead of a rolling 30 days.
+        const toStr = i.to ?? ctx.defaultTo ?? new Date().toISOString().slice(0, 10);
+        const fromStr = i.from ?? ctx.defaultFrom ??
+          new Date(new Date(`${toStr}T00:00:00Z`).getTime() - i.days * 86400_000).toISOString().slice(0, 10);
+        const to = new Date(`${toStr}T23:59:59Z`);
+        const from = new Date(`${fromStr}T00:00:00Z`);
+        const span = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400_000));
+        const prevFrom = new Date(from.getTime() - span * 86400_000);
         const prevFromStr = prevFrom.toISOString().slice(0, 10);
         const prevToStr = from.toISOString().slice(0, 10);
         const [summary, speed, handling, pipeline, prev] = await Promise.all([
@@ -2183,7 +2313,11 @@ serve(async (req) => {
       (priorSessionPropertyId ?? null) !== (propertyId ?? null);
 
     let modelMessages = await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true });
-    if (locationChanged) {
+    // Prior-turn fence (always on): tool results from earlier turns are history,
+    // never a source of a figure in this answer. Bob relabelled a previous
+    // turn's pipeline payload as "203 records / 43 verified sales"; stripping
+    // the payloads makes that impossible. Assistant prose stays for continuity.
+    {
       const lastIdx = modelMessages.length - 1;
       modelMessages = modelMessages
         .map((m, i) => {
@@ -2201,7 +2335,14 @@ serve(async (req) => {
       .filter((p) => p.type === "text")
       .map((p) => (p as { text: string }).text)
       .join(" ");
-    const mustFetch = needsFreshData(lastUserText);
+    // Any prior assistant answer with digits means this follow-up is very likely
+    // about those numbers — which are now expired — so force a fresh lookup.
+    const priorAssistantNumeric = messages.some((m) =>
+      m.role === "assistant" &&
+      (m.parts ?? []).some((p) => p.type === "text" && /\d/.test((p as { text: string }).text ?? ""))
+    );
+    const mustFetch =
+      needsFreshData(lastUserText) || isAdviceQuestion(lastUserText) || priorAssistantNumeric;
 
     const staleNote = locationChanged
       ? `\n\nLOCATION CHANGED THIS TURN: the selector moved to ${allowedProperties[0]?.name ?? "a different location"}. Every number mentioned earlier in this conversation belongs to a different location and is void. Do not reuse, adjust or reason from any of it. Run the lookups again for this location before you say anything numeric.`
@@ -2209,10 +2350,11 @@ serve(async (req) => {
     const fetchNote = mustFetch
       ? `\n\nTHIS TURN REQUIRES A LOOKUP: the question asks about the account's data, so call the tool that answers it before you write your answer. You have no numbers until that tool returns. If it returns nothing or errors, say so plainly instead of producing a figure.`
       : "";
+    const systemPrompt = SYSTEM_PROMPT + SALES_TRUTH_RULES + CARD_VOCABULARY_RULES + contextHeader + staleNote + fetchNote;
 
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
-      system: SYSTEM_PROMPT + SALES_TRUTH_RULES + contextHeader + staleNote + fetchNote,
+      system: systemPrompt,
       messages: modelMessages,
       tools: buildTools(ctx),
       stopWhen: stepCountIs(8),
@@ -2220,16 +2362,53 @@ serve(async (req) => {
         stepNumber === 0 && mustFetch ? { toolChoice: "required" as const } : {},
     });
 
+    // ---- Hard tool gate -------------------------------------------------
+    // A numeric answer with zero tool runs this turn is a fabrication. Hold the
+    // stream until a tool actually runs; if none does and the draft states
+    // figures, retry once with a forced tool call and, failing that, replace the
+    // answer instead of shipping invented numbers.
+    let gateResolve: (v: string | null) => void = () => {};
+    const gateVerdict = new Promise<string | null>((r) => { gateResolve = r; });
+
+    const FALLBACK_TEXT =
+      "Let me pull that up properly — I don't have fresh figures in front of me for this window, and I won't quote numbers I haven't just looked up. Ask me again and I'll fetch them.";
+
+    async function forcedRetry(): Promise<string | null> {
+      try {
+        ctx.turn.toolRuns = 0;
+        const r = await generateText({
+          model: gateway("google/gemini-3-flash-preview"),
+          system: systemPrompt +
+            `\n\nYOU JUST TRIED TO ANSWER WITH NUMBERS YOU DID NOT LOOK UP. Call the tool that answers the question first, then answer using only what it returned.`,
+          messages: modelMessages,
+          tools: buildTools(ctx),
+          stopWhen: stepCountIs(8),
+          prepareStep: ({ stepNumber }) =>
+            stepNumber === 0 ? { toolChoice: "required" as const } : {},
+        });
+        return ctx.turn.toolRuns > 0 && r.text ? r.text : null;
+      } catch (e) {
+        console.error("jarvis forced retry failed", e);
+        return null;
+      }
+    }
+
     const streamResponse = result.toUIMessageStreamResponse({
       originalMessages: messages,
       onFinish: async ({ responseMessage }) => {
         try {
-          const text = responseMessage.parts
+          const drafted = responseMessage.parts
             ?.filter(p => p.type === "text")
             .map(p => (p as { text: string }).text)
             .join("\n");
           const toolRuns = ctx.turn.toolRuns;
-          const unbacked = toolRuns === 0 && statesNumbers(text ?? "");
+          // Wait for the gate's decision so we persist what the user actually saw.
+          const replacement = await Promise.race([
+            gateVerdict,
+            new Promise<string | null>((r) => setTimeout(() => r(null), 90_000)),
+          ]);
+          const text = replacement ?? drafted;
+          const unbacked = ctx.turn.toolRuns === 0 && statesNumbers(text ?? "");
           if (unbacked) {
             console.error("jarvis unbacked numeric answer", {
               sessionId, propertyId, question: lastUserText.slice(0, 200),
@@ -2239,8 +2418,8 @@ serve(async (req) => {
             session_id: sessionId,
             role: "assistant",
             content: text ?? "",
-            parts_json: responseMessage.parts,
-            tool_run_count: toolRuns,
+            parts_json: replacement ? [{ type: "text", text: replacement }] : responseMessage.parts,
+            tool_run_count: replacement ? ctx.turn.toolRuns : toolRuns,
             tool_backed: !unbacked,
           });
         } catch (e) {
@@ -2248,10 +2427,17 @@ serve(async (req) => {
         }
       },
     });
+
+    const gatedBody = gateNumericStream(streamResponse.body!, ctx, {
+      onReplace: forcedRetry,
+      fallbackText: FALLBACK_TEXT,
+      onVerdict: gateResolve,
+    });
+
     const responseHeaders = new Headers(streamResponse.headers);
     for (const [key, value] of Object.entries(corsHeaders)) responseHeaders.set(key, value);
     responseHeaders.set("x-session-id", sessionId!);
-    return new Response(streamResponse.body, {
+    return new Response(gatedBody, {
       status: streamResponse.status,
       statusText: streamResponse.statusText,
       headers: responseHeaders,
