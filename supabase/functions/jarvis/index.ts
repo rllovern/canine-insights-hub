@@ -1588,7 +1588,7 @@ function buildTools(ctx: Ctx) {
         const id = resolveProperty(ctx, i.property_id, "get_data_quality_audit");
         await assertPropertyAccess(ctx.supabase, ctx.userId, id);
         const { from, to } = resolveRange(ctx, i.from, i.to, i.days);
-        const [sources, syncs, qualityRpc, stages, mapping, dupContacts, unknownMsgs] = await Promise.all([
+        const [sources, syncs, qualityRpc, stages, mapping, dupContacts, unknownMsgs, soldStageNotWon] = await Promise.all([
           ctx.supabase.from("property_data_sources")
             .select("source,is_connected,last_synced_at,status,error_message")
             .eq("property_id", id),
