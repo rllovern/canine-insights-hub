@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
 import { useAuth } from "./AuthContext";
 import { usePreviewMode } from "./PreviewModeContext";
+import { withTimeout, TIMED_OUT } from "@/lib/withTimeout";
 
 interface PropertyContextValue {
   properties: Property[];
@@ -50,11 +51,16 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
       // Super Admin previewing → scope to Bob's access grants.
       // Real Location Owner → their own grants.
       const accessUserId = impersonatedUserId ?? user.id;
-      const { data: access } = await supabase
-        .from("viewer_property_access")
-        .select("property_id")
-        .eq("user_id", accessUserId);
-      const ids = (access ?? []).map((a) => a.property_id);
+      const accessRes = await withTimeout(
+        supabase.from("viewer_property_access").select("property_id").eq("user_id", accessUserId),
+      );
+      if (accessRes === TIMED_OUT) {
+        console.error("Load property access timed out");
+        setProperties([]);
+        setLoading(false);
+        return;
+      }
+      const ids = (accessRes.data ?? []).map((a) => a.property_id);
       if (ids.length === 0) {
         setProperties([]);
         setLoading(false);
@@ -63,7 +69,14 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
       query = query.in("id", ids);
     }
 
-    const { data, error } = await query;
+    const res = await withTimeout(query);
+    if (res === TIMED_OUT) {
+      console.error("Load properties timed out");
+      setProperties([]);
+      setLoading(false);
+      return;
+    }
+    const { data, error } = res;
     if (error) {
       console.error("Load properties failed", error);
       setProperties([]);
