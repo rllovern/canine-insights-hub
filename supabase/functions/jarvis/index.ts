@@ -2395,36 +2395,39 @@ serve(async (req) => {
 
     const streamResponse = result.toUIMessageStreamResponse({
       originalMessages: messages,
-      onFinish: async ({ responseMessage }) => {
-        try {
-          const drafted = responseMessage.parts
-            ?.filter(p => p.type === "text")
-            .map(p => (p as { text: string }).text)
-            .join("\n");
-          const toolRuns = ctx.turn.toolRuns;
-          // Wait for the gate's decision so we persist what the user actually saw.
-          const replacement = await Promise.race([
-            gateVerdict,
-            new Promise<string | null>((r) => setTimeout(() => r(null), 90_000)),
-          ]);
-          const text = replacement ?? drafted;
-          const unbacked = ctx.turn.toolRuns === 0 && statesNumbers(text ?? "");
-          if (unbacked) {
-            console.error("jarvis unbacked numeric answer", {
-              sessionId, propertyId, question: lastUserText.slice(0, 200),
+      // IMPORTANT: never await the gate verdict here. The gate only resolves
+      // once the stream it is reading has closed, and this callback delays the
+      // stream from closing — awaiting it deadlocks the response until the
+      // timeout fires, which leaves the UI "thinking" long after Bob answered.
+      onFinish: ({ responseMessage }) => {
+        const drafted = responseMessage.parts
+          ?.filter(p => p.type === "text")
+          .map(p => (p as { text: string }).text)
+          .join("\n");
+        const toolRuns = ctx.turn.toolRuns;
+        const persist = gateVerdict
+          .then(async (replacement) => {
+            const text = replacement ?? drafted;
+            const unbacked = ctx.turn.toolRuns === 0 && statesNumbers(text ?? "");
+            if (unbacked) {
+              console.error("jarvis unbacked numeric answer", {
+                sessionId, propertyId, question: lastUserText.slice(0, 200),
+              });
+            }
+            const { error: insertError } = await supabase.from("ai_agent_messages").insert({
+              session_id: sessionId,
+              role: "assistant",
+              content: text ?? "",
+              parts_json: replacement ? [{ type: "text", text: replacement }] : responseMessage.parts,
+              tool_run_count: replacement ? ctx.turn.toolRuns : toolRuns,
+              tool_backed: !unbacked,
             });
-          }
-          await supabase.from("ai_agent_messages").insert({
-            session_id: sessionId,
-            role: "assistant",
-            content: text ?? "",
-            parts_json: replacement ? [{ type: "text", text: replacement }] : responseMessage.parts,
-            tool_run_count: replacement ? ctx.turn.toolRuns : toolRuns,
-            tool_backed: !unbacked,
-          });
-        } catch (e) {
-          console.error("persist assistant failed", e);
-        }
+            if (insertError) console.error("persist assistant failed", insertError);
+          })
+          .catch((e) => console.error("persist assistant failed", e));
+        // Keep the worker alive for the background write without blocking the stream.
+        (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } })
+          .EdgeRuntime?.waitUntil(persist);
       },
     });
 
