@@ -337,7 +337,31 @@ export function BobChat({ mood = "soft", setMood, onThinkingChange, onClose }: B
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restore]);
 
-  const isLoading = status === "submitted" || status === "streaming";
+  const streamActive = status === "submitted" || status === "streaming";
+
+  // Backstop: if the connection stays open after Bob has clearly finished
+  // answering (no new parts for a few seconds and the last assistant message
+  // already has text), stop showing the thinking state instead of spinning.
+  const [streamSettled, setStreamSettled] = useState(false);
+  const lastMsg = messages[messages.length - 1];
+  const streamSignature = lastMsg
+    ? `${messages.length}:${lastMsg.id}:${JSON.stringify(lastMsg.parts ?? []).length}`
+    : "";
+  useEffect(() => {
+    setStreamSettled(false);
+    if (!streamActive) return;
+    const finishedText =
+      lastMsg?.role === "assistant" &&
+      (lastMsg.parts ?? []).some(
+        (p) => p.type === "text" && !!(p as { text?: string }).text?.trim(),
+      );
+    if (!finishedText) return;
+    const t = window.setTimeout(() => setStreamSettled(true), 6000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamActive, streamSignature]);
+
+  const isLoading = streamActive && !streamSettled;
   const noAccessibleProperties =
     !!accessToken && properties.length === 0;
   const disabled = !accessToken || noAccessibleProperties;
