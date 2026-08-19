@@ -2,27 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import { supabase } from "@/integrations/supabase/client";
 import type { Session, User } from "@supabase/supabase-js";
 import type { AppRole } from "@/lib/types";
-
-/** How long the auth gate waits for the backend before showing an error screen. */
-const AUTH_TIMEOUT_MS = 12_000;
-
-const TIMED_OUT = Symbol("timed-out");
-
-async function withTimeout<T>(p: PromiseLike<T>, ms: number): Promise<T | typeof TIMED_OUT> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      Promise.resolve(p),
-      new Promise<typeof TIMED_OUT>((resolve) => {
-        timer = setTimeout(() => resolve(TIMED_OUT), ms);
-      }),
-    ]);
-  } catch {
-    return TIMED_OUT;
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
+import { withTimeout, TIMED_OUT, BACKEND_TIMEOUT_MS as AUTH_TIMEOUT_MS } from "@/lib/withTimeout";
 
 interface AuthCtx {
   user: User | null;
