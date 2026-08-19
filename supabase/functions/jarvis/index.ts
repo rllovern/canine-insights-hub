@@ -1968,18 +1968,22 @@ function buildTools(ctx: Ctx) {
           ctx.userSupabase.rpc("lead_perf_pipeline", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: prevFromStr, _to: prevToStr }),
         ]);
+        const verified_sales = await fetchVerifiedSales(ctx.supabase, id, from.toISOString(), to.toISOString());
         return {
           property_id: id,
           current_range: { from: fromStr, to: toStr },
           previous_range: { from: prevFromStr, to: prevToStr },
           current_summary: summary.data, previous_summary: prev.data,
-          speed: speed.data, handling: handling.data, pipeline: pipeline.data,
+          speed: speed.data, handling: handling.data,
+          pipeline: sanitizePipeline(pipeline.data, verified_sales.count),
+          verified_sales,
           sources_used: ["daily_metrics", "ghl_lead_facts"],
           internal_caveats_examples: [
             "Do not surface raw table names to the client.",
             "Translate 'stale' → 'awaiting follow-up'.",
             "Translate 'never responded' → 'pending first outreach'.",
             "Avoid blame language about agents in the client tone.",
+            "Never call a Sold-type stage count a sale; only verified_sales counts.",
           ],
         };
       }),
