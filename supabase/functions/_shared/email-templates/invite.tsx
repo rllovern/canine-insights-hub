@@ -2,17 +2,9 @@
 
 import * as React from 'npm:react@18.3.1'
 
-import {
-  Body,
-  Button,
-  Container,
-  Head,
-  Heading,
-  Html,
-  Link,
-  Preview,
-  Text,
-} from 'npm:@react-email/components@0.0.22'
+import { Button, Heading, Text } from 'npm:@react-email/components@0.0.22'
+
+import { Layout, button, h1, text } from './theme.tsx'
 
 interface InviteEmailProps {
   siteName: string
@@ -20,60 +12,25 @@ interface InviteEmailProps {
   confirmationUrl: string
 }
 
-export const InviteEmail = ({
-  siteName,
-  siteUrl,
-  confirmationUrl,
-}: InviteEmailProps) => (
-  <Html lang="en" dir="ltr">
-    <Head />
-    <Preview>You've been invited to join {siteName}</Preview>
-    <Body style={main}>
-      <Container style={container}>
-        <Heading style={h1}>You've been invited</Heading>
-        <Text style={text}>
-          You've been invited to join{' '}
-          <Link href={siteUrl} style={link}>
-            <strong>{siteName}</strong>
-          </Link>
-          . Click the button below to accept the invitation and create your
-          account.
-        </Text>
-        <Button style={button} href={confirmationUrl}>
-          Accept Invitation
-        </Button>
-        <Text style={footer}>
-          If you weren't expecting this invitation, you can safely ignore this
-          email.
-        </Text>
-      </Container>
-    </Body>
-  </Html>
+export const InviteEmail = ({ siteName, confirmationUrl }: InviteEmailProps) => (
+  <Layout preview={`Your ${siteName} account is ready`} siteName={siteName}>
+    <Heading style={h1}>Welcome to {siteName}</Heading>
+    <Text style={text}>
+      An account has been created for you on {siteName}, the Ridgeside K9
+      marketing dashboard — leads, calls, spend, and sales for your location, in
+      one place.
+    </Text>
+    <Text style={text}>
+      Set a password to finish setting up your account:
+    </Text>
+    <Button style={button} href={confirmationUrl}>
+      Set your password
+    </Button>
+    <Text style={{ ...text, margin: '24px 0 0' }}>
+      This link can only be used once. If you weren't expecting it, you can
+      safely ignore this email.
+    </Text>
+  </Layout>
 )
 
 export default InviteEmail
-
-const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
-const container = { padding: '20px 25px' }
-const h1 = {
-  fontSize: '22px',
-  fontWeight: 'bold' as const,
-  color: '#000000',
-  margin: '0 0 20px',
-}
-const text = {
-  fontSize: '14px',
-  color: '#55575d',
-  lineHeight: '1.5',
-  margin: '0 0 25px',
-}
-const link = { color: 'inherit', textDecoration: 'underline' }
-const button = {
-  backgroundColor: '#000000',
-  color: '#ffffff',
-  fontSize: '14px',
-  borderRadius: '8px',
-  padding: '12px 20px',
-  textDecoration: 'none',
-}
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
