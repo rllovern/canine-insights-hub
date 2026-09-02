@@ -160,7 +160,16 @@ Deno.serve(async (req) => {
     }
   }
   const staleFreshness: string[] = [];
-  for (const row of srcRows ?? []) {
+  // Fair rotation: the pair whose last attempt is oldest goes first. Without
+  // this the loop always picks the same first-matching pair, so one
+  // permanently failing pair (e.g. a poison record) monopolises every tick and
+  // genuinely stale pairs elsewhere never get recovered.
+  const ordered = [...(srcRows ?? [])].sort((a, b) => {
+    const at = new Date((a.last_success_at as string | null) ?? (a.last_failure_at as string | null) ?? 0).getTime();
+    const bt = new Date((b.last_success_at as string | null) ?? (b.last_failure_at as string | null) ?? 0).getTime();
+    return at - bt;
+  });
+  for (const row of ordered) {
     const property_id = row.property_id as string;
     const source = row.source as string;
 
@@ -171,11 +180,16 @@ Deno.serve(async (req) => {
     const backoffUntil = row.backoff_until as string | null;
     if (backoffUntil && new Date(backoffUntil).getTime() > Date.now()) continue;
 
+    // Only pair-level runs decide health. Phase-level rows (phase IS NOT NULL)
+    // record the outcome of one step inside a sync; treating a single failed
+    // step as "the whole source failed" made a pair permanently eligible and
+    // meant the backoff never engaged.
     const { data: last } = await admin
       .from("sync_runs")
       .select("status, started_at")
       .eq("property_id", property_id)
       .eq("source", source)
+      .is("phase", null)
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -197,6 +211,7 @@ Deno.serve(async (req) => {
         .select("started_at")
         .eq("property_id", property_id)
         .eq("source", source)
+        .is("phase", null)
         .eq("status", "success")
         .order("started_at", { ascending: false })
         .limit(1)
