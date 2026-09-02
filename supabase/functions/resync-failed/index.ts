@@ -274,7 +274,14 @@ Deno.serve(async (req) => {
       ]);
       if (error) {
         status = "failure";
-        error_message = String(error.message ?? error);
+        // functions.invoke reports every non-2xx as the same opaque message.
+        // The real cause (missing token, 401, config error) lives in the
+        // response body, and the hard-failure classifier needs it to pause
+        // dead pairs instead of retrying them forever.
+        const ctx = (error as { context?: { text?: () => Promise<string> } }).context;
+        let detail = "";
+        try { detail = ctx?.text ? (await ctx.text()).slice(0, 400) : ""; } catch { /* ignore */ }
+        error_message = detail ? `${error.message}: ${detail}` : String(error.message ?? error);
       } else if (data && (data as any).error) {
         status = "failure";
         error_message = String((data as any).error);
