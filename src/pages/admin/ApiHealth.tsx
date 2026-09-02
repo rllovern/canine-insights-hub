@@ -16,6 +16,9 @@ interface HealthRow {
   last_error_message: string | null;
   last_run_status: string | null;
   last_run_at: string | null;
+  pds_status?: string | null;
+  is_paused?: boolean | null;
+  pause_reason?: string | null;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -33,7 +36,7 @@ const SOURCE_TO_FN: Record<string, string> = {
   ghl: "sync-ghl",
 };
 
-type Status = "healthy" | "failing" | "stale" | "not_connected" | "never_run";
+type Status = "healthy" | "failing" | "action_needed" | "stale" | "not_connected" | "never_run";
 
 function relTime(iso: string | null): string {
   if (!iso) return "—";
@@ -49,6 +52,9 @@ function relTime(iso: string | null): string {
 
 function rowStatus(r: HealthRow): Status {
   if (!r.is_connected) return "not_connected";
+  // A paused pair failed on credentials or configuration. Auto-retry has
+  // stopped on purpose, so it must not read as a transient "Failing".
+  if (r.is_paused || r.pds_status === "paused") return "action_needed";
   if (!r.last_run_at) return "never_run";
   // If most-recent run is failure -> failing
   if (r.last_run_status === "failure") return "failing";
@@ -60,7 +66,7 @@ function rowStatus(r: HealthRow): Status {
 }
 
 function aggregateStatus(rows: HealthRow[]): Status {
-  const order: Status[] = ["failing", "stale", "never_run", "healthy", "not_connected"];
+  const order: Status[] = ["action_needed", "failing", "stale", "never_run", "healthy", "not_connected"];
   const present = rows.map(rowStatus);
   if (!present.length) return "not_connected";
   for (const s of order) if (present.includes(s)) return s;
@@ -71,6 +77,7 @@ function StatusPill({ status }: { status: Status }) {
   const map: Record<Status, { label: string; cls: string; Icon: typeof CheckCircle2 }> = {
     healthy: { label: "Healthy", cls: "bg-success/10 text-success ring-success/20", Icon: CheckCircle2 },
     failing: { label: "Failing", cls: "bg-destructive/10 text-destructive ring-destructive/20", Icon: XCircle },
+    action_needed: { label: "Action needed", cls: "bg-destructive/10 text-destructive ring-destructive/20", Icon: AlertCircle },
     stale: { label: "Stale", cls: "bg-amber-500/10 text-amber-600 ring-amber-500/20", Icon: AlertCircle },
     never_run: { label: "Never run", cls: "bg-muted text-muted-foreground ring-border", Icon: MinusCircle },
     not_connected: { label: "Not connected", cls: "bg-muted text-muted-foreground ring-border", Icon: MinusCircle },

@@ -248,17 +248,35 @@ function sanitizeJson<T>(value: T): T {
   return value;
 }
 
+// Postgres rejects an entire batch with "ON CONFLICT DO UPDATE command cannot
+// affect row a second time" when the same conflict key appears twice in one
+// statement. GHL routinely returns the same message on two pages, so the batch
+// is de-duplicated on the conflict key (last write wins) before it is sent.
+function dedupeByConflict(rows: unknown[], onConflict: string): unknown[] {
+  const keys = onConflict.split(",").map((k) => k.trim()).filter(Boolean);
+  if (!keys.length) return rows;
+  const seen = new Map<string, unknown>();
+  for (const r of rows) {
+    const rec = r as Record<string, unknown>;
+    const k = keys.map((c) => String(rec?.[c] ?? "")).join("\u0000");
+    seen.set(k, r);
+  }
+  return Array.from(seen.values());
+}
+
 async function upsertChunked(admin: ReturnType<typeof createClient>, table: string, rows: unknown[], onConflict: string, chunk = 200) {
   if (!rows.length) return 0;
+  const deduped = dedupeByConflict(rows, onConflict);
   let n = 0;
-  for (let i = 0; i < rows.length; i += chunk) {
-    const slice = sanitizeJson(rows.slice(i, i + chunk));
+  for (let i = 0; i < deduped.length; i += chunk) {
+    const slice = sanitizeJson(deduped.slice(i, i + chunk));
     const { error } = await admin.from(table).upsert(slice as never, { onConflict });
     if (error) throw new Error(`upsert ${table}: ${error.message}`);
     n += slice.length;
   }
   return n;
 }
+
 
 // ---------- Main handler --------------------------------------------
 Deno.serve(async (req) => {
@@ -606,6 +624,7 @@ Deno.serve(async (req) => {
         .from("ghl_contacts")
         .select("ghl_contact_id, phone, email, ghl_created_at")
         .eq("property_id", property_id)
+        .is("retired_at", null)
         .gte("ghl_created_at", dateFrom.toISOString())
         .order("ghl_created_at", { ascending: false })
         .limit(2000);
@@ -706,6 +725,7 @@ Deno.serve(async (req) => {
       ? MAX_TARGETED_CONVERSATION_LOOKUPS : 0;
     let targetedConversationLookups = 0;
     let targetedConversationsAdded = 0;
+    let retiredContacts = 0;
     const targetedConvs = new Map<string, Json>();
     for (const cid of contactIds.slice(0, targetedBudget)) {
       if (!haveBudget(20_000)) break;
@@ -717,7 +737,24 @@ Deno.serve(async (req) => {
           if (id) found.set(id, conv);
         }
       };
-      const j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(cid)}&limit=100`, token);
+      // A contact deleted or merged in GHL answers 400 CONTACT_NOT_FOUND
+      // forever. That is a per-record condition, not a source outage: retire
+      // the contact in our mirror and keep the phase running.
+      let j: Json;
+      try {
+        j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(cid)}&limit=100`, token);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/CONVERSATIONS_CONTACT_NOT_FOUND|Contact not found/i.test(msg)) {
+          retiredContacts++;
+          await admin.from("ghl_contacts")
+            .update({ retired_at: new Date().toISOString() } as never)
+            .eq("property_id", property_id)
+            .eq("ghl_contact_id", cid);
+          continue;
+        }
+        throw e;
+      }
       addMatches(((j.conversations as Json[]) ?? []).filter((conv) => String((conv as Json).contactId ?? "") === cid));
       const contactInfo = contactLookup.get(cid);
       const phoneDigits = String(contactInfo?.phone ?? "").replace(/\D/g, "");
@@ -774,6 +811,7 @@ Deno.serve(async (req) => {
     counts.conversation_budget_stop = budgetStop;
     counts.targeted_conversation_lookups = targetedConversationLookups;
     counts.targeted_conversations_added = targetedConversationsAdded;
+    counts.retired_contacts = retiredContacts;
     counts.messages = await upsertChunked(admin, "ghl_messages", msgRows, "property_id,ghl_message_id");
     counts.messages_by_source = classCounts;
     counts.conversation_message_pages = totalMessagePages;
