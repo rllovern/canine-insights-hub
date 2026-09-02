@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
 
   const { data: srcRows, error: srcErr } = await admin
     .from("property_data_sources")
-    .select("property_id, source, status, consecutive_failures, backoff_until")
+    .select("property_id, source, status, consecutive_failures, backoff_until, last_success_at, last_failure_at")
     .in("source", ["google_ads", "ctm", "ga4", "keyword_com", "ghl"])
     // "paused" pairs are deliberately excluded: a hard auth/config failure
     // stops retries until someone re-connects the source.
