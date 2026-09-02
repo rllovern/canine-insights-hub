@@ -13,12 +13,17 @@ interface HealthRow {
   last_error_message: string | null;
   last_run_status: string | null;
   last_run_at: string | null;
+  pds_status?: string | null;
+  is_paused?: boolean | null;
+  pause_reason?: string | null;
 }
 
-type Status = "healthy" | "failing" | "retrying" | "stale" | "never_run" | "not_connected";
+type Status = "healthy" | "failing" | "action_needed" | "retrying" | "stale" | "never_run" | "not_connected";
 
 function rowStatus(r: HealthRow): Status {
   if (!r.is_connected) return "not_connected";
+  // Paused = credentials/config problem; auto-retry has stopped by design.
+  if (r.is_paused || r.pds_status === "paused") return "action_needed";
   if (!r.last_success_at) return "failing";
   if (r.last_run_status === "failure" && (!r.last_failure_at || new Date(r.last_failure_at) > new Date(r.last_success_at))) {
     // Within the auto-recovery window (~15m) show "Retrying" instead of a hard fail.
@@ -36,7 +41,7 @@ function rowStatus(r: HealthRow): Status {
 function aggregate(rows: HealthRow[]): Status {
   const connected = rows.filter((r) => r.is_connected);
   const present = (connected.length ? connected : rows).map(rowStatus);
-  const order: Status[] = ["failing", "retrying", "stale", "healthy", "never_run", "not_connected"];
+  const order: Status[] = ["action_needed", "failing", "retrying", "stale", "healthy", "never_run", "not_connected"];
   if (!present.length) return "not_connected";
   for (const s of order) if (present.includes(s)) return s;
   return "not_connected";
@@ -46,6 +51,7 @@ const STATUS_STYLE: Record<Status, { label: string; dot: string; text: string }>
   healthy:       { label: "Live",    dot: "bg-success",            text: "text-success" },
   retrying:      { label: "Retrying", dot: "bg-amber-500 animate-pulse", text: "text-amber-600" },
   stale:         { label: "Stale",   dot: "bg-amber-500",          text: "text-amber-600" },
+  action_needed: { label: "Fix",     dot: "bg-destructive",        text: "text-destructive" },
   failing:       { label: "Blocked", dot: "bg-destructive",        text: "text-destructive" },
   never_run:     { label: "Off",     dot: "bg-muted-foreground/40", text: "text-muted-foreground" },
   not_connected: { label: "Off",     dot: "bg-muted-foreground/40", text: "text-muted-foreground" },
