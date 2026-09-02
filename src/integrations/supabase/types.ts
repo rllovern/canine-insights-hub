@@ -600,6 +600,7 @@ export type Database = {
           pipeline_stage: string | null
           property_id: string
           raw: Json
+          retired_at: string | null
           source: string | null
           speed_to_lead_seconds: number | null
           tags: string[] | null
@@ -626,6 +627,7 @@ export type Database = {
           pipeline_stage?: string | null
           property_id: string
           raw?: Json
+          retired_at?: string | null
           source?: string | null
           speed_to_lead_seconds?: number | null
           tags?: string[] | null
@@ -652,6 +654,7 @@ export type Database = {
           pipeline_stage?: string | null
           property_id?: string
           raw?: Json
+          retired_at?: string | null
           source?: string | null
           speed_to_lead_seconds?: number | null
           tags?: string[] | null

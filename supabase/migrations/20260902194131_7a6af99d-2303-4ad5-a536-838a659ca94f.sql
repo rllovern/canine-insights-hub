@@ -1,0 +1,2 @@
+ALTER TABLE public.ghl_contacts ADD COLUMN IF NOT EXISTS retired_at timestamp with time zone;
+CREATE INDEX IF NOT EXISTS ghl_contacts_retired_at_idx ON public.ghl_contacts (property_id) WHERE retired_at IS NULL;
