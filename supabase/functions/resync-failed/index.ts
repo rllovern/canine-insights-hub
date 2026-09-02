@@ -54,6 +54,8 @@ const HARD_FAILURE_PATTERNS: RegExp[] = [
   /permission denied/i,
   /insufficient (scope|permission)/i,
   /missing (refresh_token|credential|secret)/i,
+  /missing ghl (location_id|token)/i,
+  /no (private integration )?token/i,
   /developer token|customer not found|CUSTOMER_NOT_FOUND/i,
   /not configured|no connection|missing config/i,
 ];
