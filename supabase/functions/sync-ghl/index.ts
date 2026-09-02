@@ -248,17 +248,35 @@ function sanitizeJson<T>(value: T): T {
   return value;
 }
 
+// Postgres rejects an entire batch with "ON CONFLICT DO UPDATE command cannot
+// affect row a second time" when the same conflict key appears twice in one
+// statement. GHL routinely returns the same message on two pages, so the batch
+// is de-duplicated on the conflict key (last write wins) before it is sent.
+function dedupeByConflict(rows: unknown[], onConflict: string): unknown[] {
+  const keys = onConflict.split(",").map((k) => k.trim()).filter(Boolean);
+  if (!keys.length) return rows;
+  const seen = new Map<string, unknown>();
+  for (const r of rows) {
+    const rec = r as Record<string, unknown>;
+    const k = keys.map((c) => String(rec?.[c] ?? "")).join("\u0000");
+    seen.set(k, r);
+  }
+  return Array.from(seen.values());
+}
+
 async function upsertChunked(admin: ReturnType<typeof createClient>, table: string, rows: unknown[], onConflict: string, chunk = 200) {
   if (!rows.length) return 0;
+  const deduped = dedupeByConflict(rows, onConflict);
   let n = 0;
-  for (let i = 0; i < rows.length; i += chunk) {
-    const slice = sanitizeJson(rows.slice(i, i + chunk));
+  for (let i = 0; i < deduped.length; i += chunk) {
+    const slice = sanitizeJson(deduped.slice(i, i + chunk));
     const { error } = await admin.from(table).upsert(slice as never, { onConflict });
     if (error) throw new Error(`upsert ${table}: ${error.message}`);
     n += slice.length;
   }
   return n;
 }
+
 
 // ---------- Main handler --------------------------------------------
 Deno.serve(async (req) => {
