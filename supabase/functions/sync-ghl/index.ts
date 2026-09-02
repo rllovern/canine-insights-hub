@@ -624,6 +624,7 @@ Deno.serve(async (req) => {
         .from("ghl_contacts")
         .select("ghl_contact_id, phone, email, ghl_created_at")
         .eq("property_id", property_id)
+        .is("retired_at", null)
         .gte("ghl_created_at", dateFrom.toISOString())
         .order("ghl_created_at", { ascending: false })
         .limit(2000);
