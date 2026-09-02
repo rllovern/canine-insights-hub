@@ -811,6 +811,7 @@ Deno.serve(async (req) => {
     counts.conversation_budget_stop = budgetStop;
     counts.targeted_conversation_lookups = targetedConversationLookups;
     counts.targeted_conversations_added = targetedConversationsAdded;
+    counts.retired_contacts = retiredContacts;
     counts.messages = await upsertChunked(admin, "ghl_messages", msgRows, "property_id,ghl_message_id");
     counts.messages_by_source = classCounts;
     counts.conversation_message_pages = totalMessagePages;
