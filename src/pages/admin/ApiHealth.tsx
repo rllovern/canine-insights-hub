@@ -16,6 +16,9 @@ interface HealthRow {
   last_error_message: string | null;
   last_run_status: string | null;
   last_run_at: string | null;
+  pds_status?: string | null;
+  is_paused?: boolean | null;
+  pause_reason?: string | null;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
