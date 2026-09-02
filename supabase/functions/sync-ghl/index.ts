@@ -725,6 +725,7 @@ Deno.serve(async (req) => {
       ? MAX_TARGETED_CONVERSATION_LOOKUPS : 0;
     let targetedConversationLookups = 0;
     let targetedConversationsAdded = 0;
+    let retiredContacts = 0;
     const targetedConvs = new Map<string, Json>();
     for (const cid of contactIds.slice(0, targetedBudget)) {
       if (!haveBudget(20_000)) break;
@@ -736,7 +737,24 @@ Deno.serve(async (req) => {
           if (id) found.set(id, conv);
         }
       };
-      const j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(cid)}&limit=100`, token);
+      // A contact deleted or merged in GHL answers 400 CONTACT_NOT_FOUND
+      // forever. That is a per-record condition, not a source outage: retire
+      // the contact in our mirror and keep the phase running.
+      let j: Json;
+      try {
+        j = await ghlFetch("GET", `/conversations/search?locationId=${locationId}&contactId=${encodeURIComponent(cid)}&limit=100`, token);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/CONVERSATIONS_CONTACT_NOT_FOUND|Contact not found/i.test(msg)) {
+          retiredContacts++;
+          await admin.from("ghl_contacts")
+            .update({ retired_at: new Date().toISOString() } as never)
+            .eq("property_id", property_id)
+            .eq("ghl_contact_id", cid);
+          continue;
+        }
+        throw e;
+      }
       addMatches(((j.conversations as Json[]) ?? []).filter((conv) => String((conv as Json).contactId ?? "") === cid));
       const contactInfo = contactLookup.get(cid);
       const phoneDigits = String(contactInfo?.phone ?? "").replace(/\D/g, "");
