@@ -15,6 +15,7 @@ import {
   COMMAND_ITEM,
   DELIVER_ITEMS,
   MONITOR_ITEMS,
+  ONBOARDING_ITEM,
   SALES_ITEM,
   applyNavOrder,
   filterVisibleItems,
