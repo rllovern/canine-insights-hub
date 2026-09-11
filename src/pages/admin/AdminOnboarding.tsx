@@ -239,6 +239,17 @@ export default function AdminOnboarding() {
                       <Button variant="outline" size="sm" disabled={!sub} onClick={() => setOpenId(inv.id)}>
                         View
                       </Button>
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          aria-label="Delete onboarding record"
+                          onClick={() => setDeleteTarget(inv)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
