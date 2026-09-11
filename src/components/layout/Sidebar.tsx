@@ -3,6 +3,7 @@ import { Settings, LogOut, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { ScopeSelector } from "./ScopeSelector";
@@ -23,9 +24,13 @@ import {
 export function Sidebar() {
   const { signOut, user } = useAuth();
   const { effectiveRole, isStaff, isSuperAdmin, isLocationOwner } = usePreviewMode();
+  const { activeProperty } = useScope();
   const nav = useNavigate();
   const loc = useLocation();
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
+  const externalReportHref = activeProperty?.public_report_token
+    ? `${window.location.origin}/report/${activeProperty.public_report_token}`
+    : null;
   // Owner and Location Owner get a stripped-down nav: Command + Budget Pacing only.
   const isMinimal = isLocationOwner || effectiveRole === "owner";
   // Admin group visible only to internal staff (Super Admin + Admin).
@@ -187,10 +192,12 @@ export function Sidebar() {
       </>
     );
     if (it.external) {
+      if (it.key === "external-report" && !externalReportHref) return null;
+      const href = it.key === "external-report" ? externalReportHref! : it.to;
       return (
         <a
           key={it.key}
-          href={it.to}
+          href={href}
           target="_blank"
           rel="noopener"
           className={linkClass}
