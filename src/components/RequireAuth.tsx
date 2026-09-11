@@ -24,10 +24,10 @@ export function RequireAuth({ children, requireSuperAdmin, requireStaff, require
     backendUnavailable,
     retryBackend,
   } = useAuth();
-  const { isSuperAdmin, isStaff } = usePreviewMode();
+  const { isSuperAdmin, isStaff, effectiveRole } = usePreviewMode();
   const location = useLocation();
 
-  const gated = requireSuperAdmin || requireStaff;
+  const gated = requireSuperAdmin || requireStaff || requireStaffOrOwner;
   if (backendUnavailable) {
     return <BackendUnavailable onRetry={retryBackend} />;
   }
