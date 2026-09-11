@@ -19,6 +19,8 @@ import Assistant from "./pages/Assistant";
 import BudgetPacing from "./pages/BudgetPacing";
 import AdminProperties from "./pages/admin/AdminProperties";
 import AdminUsers from "./pages/admin/AdminUsers";
+import AdminOnboarding from "./pages/admin/AdminOnboarding";
+import Onboarding from "./pages/Onboarding";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminClientReports from "./pages/admin/AdminClientReports";
 import AdminPipelineMapping from "./pages/admin/AdminPipelineMapping";
@@ -58,6 +60,7 @@ const App = () => (
                     element={<RequireAuth><ChangePassword /></RequireAuth>}
                   />
                   <Route path="/report/:token" element={<PublicReport />} />
+                  <Route path="/onboarding/:token" element={<Onboarding />} />
                   <Route
                     path="/admin/client-reports"
                     element={<RequireAuth requireStaff><AdminClientReports /></RequireAuth>}
@@ -97,6 +100,10 @@ const App = () => (
                     <Route
                       path="/admin/users"
                       element={<RequireAuth requireSuperAdmin><AdminUsers /></RequireAuth>}
+                    />
+                    <Route
+                      path="/admin/onboarding"
+                      element={<RequireAuth requireStaff><AdminOnboarding /></RequireAuth>}
                     />
                     <Route
                       path="/admin/settings"
