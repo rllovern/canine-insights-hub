@@ -103,7 +103,7 @@ const App = () => (
                     />
                     <Route
                       path="/admin/onboarding"
-                      element={<RequireAuth requireStaff><AdminOnboarding /></RequireAuth>}
+                      element={<RequireAuth requireStaffOrOwner><AdminOnboarding /></RequireAuth>}
                     />
                     <Route
                       path="/admin/settings"
