@@ -66,6 +66,10 @@ export default function AdminOnboarding() {
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState({ property_id: "", location_label: "", contact_name: "", contact_email: "", monthly_budget: "", territory: "" });
   const [creating, setCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Invite | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const { realRole } = usePreviewMode();
+  const canDelete = realRole === "super_admin";
 
   const load = async () => {
     setLoading(true);
