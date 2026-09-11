@@ -10,9 +10,11 @@ interface RequireAuthProps {
   requireSuperAdmin?: boolean;
   /** Require Super Admin or Admin (real role). Used for admin pages. */
   requireStaff?: boolean;
+  /** Require Super Admin, Admin or Owner. */
+  requireStaffOrOwner?: boolean;
 }
 
-export function RequireAuth({ children, requireSuperAdmin, requireStaff }: RequireAuthProps) {
+export function RequireAuth({ children, requireSuperAdmin, requireStaff, requireStaffOrOwner }: RequireAuthProps) {
   const {
     user,
     loading,
@@ -22,10 +24,10 @@ export function RequireAuth({ children, requireSuperAdmin, requireStaff }: Requi
     backendUnavailable,
     retryBackend,
   } = useAuth();
-  const { isSuperAdmin, isStaff } = usePreviewMode();
+  const { isSuperAdmin, isStaff, effectiveRole } = usePreviewMode();
   const location = useLocation();
 
-  const gated = requireSuperAdmin || requireStaff;
+  const gated = requireSuperAdmin || requireStaff || requireStaffOrOwner;
   if (backendUnavailable) {
     return <BackendUnavailable onRetry={retryBackend} />;
   }
@@ -42,5 +44,8 @@ export function RequireAuth({ children, requireSuperAdmin, requireStaff }: Requi
   }
   if (requireSuperAdmin && !isSuperAdmin) return <Navigate to="/command" replace />;
   if (requireStaff && !isStaff) return <Navigate to="/command" replace />;
+  if (requireStaffOrOwner && !isStaff && effectiveRole !== "owner") {
+    return <Navigate to="/command" replace />;
+  }
   return <>{children}</>;
 }

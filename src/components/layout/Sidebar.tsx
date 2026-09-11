@@ -13,6 +13,7 @@ import {
   COMMAND_ITEM,
   DELIVER_ITEMS,
   MONITOR_ITEMS,
+  ONBOARDING_ITEM,
   SALES_ITEM,
   applyNavOrder,
   filterVisibleItems,
@@ -234,6 +235,7 @@ export function Sidebar() {
         {renderItem(COMMAND_ITEM)}
         {isMinimal && renderItem(BUDGET_ITEM)}
         <div data-tour="nav-sales">{renderItem(SALES_ITEM)}</div>
+        {effectiveRole === "owner" && renderItem(ONBOARDING_ITEM)}
 
         {showRichNav && monitorItems.length > 0 && (
           <>
