@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Download, FileJson, FileSpreadsheet, FileText, Loader2, Plus, RefreshCw, ShieldCheck } from "lucide-react";
+import { Copy, Download, FileJson, FileSpreadsheet, FileText, Loader2, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
