@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Download, FileJson, FileSpreadsheet, FileText, Loader2, Plus, RefreshCw, ShieldCheck } from "lucide-react";
+import { Copy, Download, FileJson, FileSpreadsheet, FileText, Loader2, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -55,6 +66,10 @@ export default function AdminOnboarding() {
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState({ property_id: "", location_label: "", contact_name: "", contact_email: "", monthly_budget: "", territory: "" });
   const [creating, setCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Invite | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const { realRole } = usePreviewMode();
+  const canDelete = realRole === "super_admin";
 
   const load = async () => {
     setLoading(true);
@@ -108,6 +123,21 @@ export default function AdminOnboarding() {
     await load();
     await navigator.clipboard.writeText(linkFor(token)).catch(() => null);
     toast({ title: "Invite created", description: "The private link is on your clipboard." });
+  };
+
+  const deleteInvite = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const { error } = await supabase.from("onboarding_invites").delete().eq("id", deleteTarget.id);
+    setDeleting(false);
+    if (error) {
+      toast({ title: "Could not delete", description: error.message, variant: "destructive" });
+      return;
+    }
+    if (openId === deleteTarget.id) setOpenId(null);
+    setDeleteTarget(null);
+    toast({ title: "Onboarding record deleted" });
+    void load();
   };
 
   const approve = async (submission: Submission) => {
@@ -209,6 +239,17 @@ export default function AdminOnboarding() {
                       <Button variant="outline" size="sm" disabled={!sub} onClick={() => setOpenId(inv.id)}>
                         View
                       </Button>
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          aria-label="Delete onboarding record"
+                          onClick={() => setDeleteTarget(inv)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -323,6 +364,28 @@ export default function AdminOnboarding() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this onboarding record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the invite for {deleteTarget?.location_label} along with every answer,
+              uploaded file and review note. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={(e) => { e.preventDefault(); void deleteInvite(); }}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
