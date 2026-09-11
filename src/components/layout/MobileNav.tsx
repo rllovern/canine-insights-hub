@@ -116,6 +116,7 @@ export function MobileNav() {
           {renderItem(COMMAND_ITEM)}
           {isMinimal && renderItem(BUDGET_ITEM)}
           {renderItem(SALES_ITEM)}
+          {effectiveRole === "owner" && renderItem(ONBOARDING_ITEM)}
 
           {showRichNav && monitorItems.length > 0 && (
             <>
