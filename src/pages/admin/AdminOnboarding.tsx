@@ -121,6 +121,21 @@ export default function AdminOnboarding() {
     toast({ title: "Invite created", description: "The private link is on your clipboard." });
   };
 
+  const deleteInvite = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const { error } = await supabase.from("onboarding_invites").delete().eq("id", deleteTarget.id);
+    setDeleting(false);
+    if (error) {
+      toast({ title: "Could not delete", description: error.message, variant: "destructive" });
+      return;
+    }
+    if (openId === deleteTarget.id) setOpenId(null);
+    setDeleteTarget(null);
+    toast({ title: "Onboarding record deleted" });
+    void load();
+  };
+
   const approve = async (submission: Submission) => {
     const { data: userRes } = await supabase.auth.getUser();
     const { error } = await supabase
