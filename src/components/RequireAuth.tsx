@@ -10,9 +10,11 @@ interface RequireAuthProps {
   requireSuperAdmin?: boolean;
   /** Require Super Admin or Admin (real role). Used for admin pages. */
   requireStaff?: boolean;
+  /** Require Super Admin, Admin or Owner. */
+  requireStaffOrOwner?: boolean;
 }
 
-export function RequireAuth({ children, requireSuperAdmin, requireStaff }: RequireAuthProps) {
+export function RequireAuth({ children, requireSuperAdmin, requireStaff, requireStaffOrOwner }: RequireAuthProps) {
   const {
     user,
     loading,
