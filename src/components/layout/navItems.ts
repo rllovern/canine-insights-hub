@@ -31,7 +31,7 @@ export const DELIVER_ITEMS: NavItem[] = [
 export const ADMIN_ITEMS: NavItem[] = [
   { key: "clients", to: "/admin/properties", label: "Clients", icon: Users, staffOnly: true },
   { key: "users", to: "/admin/users", label: "Users", icon: Users, superAdminOnly: true },
-  { key: "onboarding", to: "/admin/onboarding", label: "Onboarding", icon: ClipboardList, staffOnly: true },
+  { ...ONBOARDING_ITEM, staffOnly: true },
   { key: "pipeline-mapping", to: "/admin/pipeline-mapping", label: "Pipeline Mapping", icon: GitBranch, superAdminOnly: true },
   { key: "sla-settings", to: "/admin/sla-settings", label: "SLA Settings", icon: Timer, superAdminOnly: true },
   { key: "data-sources", to: "/admin/data-sources", label: "Data Sources", icon: Database, superAdminOnly: true },
