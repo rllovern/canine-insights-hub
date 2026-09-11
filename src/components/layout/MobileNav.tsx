@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { ScopeSelector } from "./ScopeSelector";
@@ -27,8 +28,12 @@ export function MobileNav() {
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
   const { signOut, user } = useAuth();
   const { effectiveRole, isStaff, isSuperAdmin, isLocationOwner } = usePreviewMode();
+  const { activeProperty } = useScope();
   const loc = useLocation();
   const nav = useNavigate();
+  const externalReportHref = activeProperty?.public_report_token
+    ? `${window.location.origin}/report/${activeProperty.public_report_token}`
+    : null;
 
   // Safety: clear any stray modal pointer-events lock left behind on close.
   useEffect(() => {
@@ -74,8 +79,10 @@ export function MobileNav() {
       </>
     );
     if (it.external) {
+      if (it.key === "external-report" && !externalReportHref) return null;
+      const href = it.key === "external-report" ? externalReportHref! : it.to;
       return (
-        <a key={it.key} href={it.to} target="_blank" rel="noopener" className={cls} onClick={() => setOpen(false)}>
+        <a key={it.key} href={href} target="_blank" rel="noopener" className={cls} onClick={() => setOpen(false)}>
           {inner}
         </a>
       );
