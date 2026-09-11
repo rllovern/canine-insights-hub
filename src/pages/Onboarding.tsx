@@ -205,7 +205,7 @@ export default function Onboarding() {
               </p>
               <h1 className="text-2xl font-semibold tracking-tight">{section.title}</h1>
               {section.blurb && <p className="mt-2 text-sm text-muted-foreground">{section.blurb}</p>}
-              {!section.required && (
+              {section.key === "trainers" && (
                 <p className="mt-2 rounded-md bg-muted p-2 text-xs text-muted-foreground">
                   This section is optional — you can submit without it and send the details later.
                 </p>

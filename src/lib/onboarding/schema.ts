@@ -69,7 +69,7 @@ export const SECTIONS: SectionDef[] = [
     key: "start",
     title: "Start here",
     blurb:
-      "This replaces the old business information spreadsheet. It takes about 35 minutes and saves as you go — you can close this page and come back to the same link at any time.",
+      "This replaces the old business information spreadsheet. Most people finish in about 45 minutes, and it saves as you go — you can close this page and come back to the same link at any time.",
     estMinutes: 2,
     required: false,
     fields: [
