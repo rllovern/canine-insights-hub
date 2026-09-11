@@ -68,8 +68,8 @@ export default function AdminOnboarding() {
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Invite | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const { realRole } = usePreviewMode();
-  const canDelete = realRole === "super_admin";
+  const { effectiveRole } = usePreviewMode();
+  const canDelete = effectiveRole === "super_admin";
 
   const load = async () => {
     setLoading(true);
