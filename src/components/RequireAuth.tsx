@@ -44,5 +44,8 @@ export function RequireAuth({ children, requireSuperAdmin, requireStaff, require
   }
   if (requireSuperAdmin && !isSuperAdmin) return <Navigate to="/command" replace />;
   if (requireStaff && !isStaff) return <Navigate to="/command" replace />;
+  if (requireStaffOrOwner && !isStaff && effectiveRole !== "owner") {
+    return <Navigate to="/command" replace />;
+  }
   return <>{children}</>;
 }
