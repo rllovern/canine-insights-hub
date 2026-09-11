@@ -1578,6 +1578,257 @@ export type Database = {
           },
         ]
       }
+      onboarding_field_applications: {
+        Row: {
+          applied_at: string
+          applied_by: string | null
+          field_key: string
+          id: string
+          submission_id: string
+          target_column: string | null
+          target_table: string
+          value_json: Json | null
+        }
+        Insert: {
+          applied_at?: string
+          applied_by?: string | null
+          field_key: string
+          id?: string
+          submission_id: string
+          target_column?: string | null
+          target_table: string
+          value_json?: Json | null
+        }
+        Update: {
+          applied_at?: string
+          applied_by?: string | null
+          field_key?: string
+          id?: string
+          submission_id?: string
+          target_column?: string | null
+          target_table?: string
+          value_json?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_field_applications_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "onboarding_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      onboarding_files: {
+        Row: {
+          created_at: string
+          file_name: string | null
+          height: number | null
+          id: string
+          kind: string
+          mime_type: string | null
+          ref_key: string | null
+          size_bytes: number | null
+          storage_path: string
+          submission_id: string
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          file_name?: string | null
+          height?: number | null
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          ref_key?: string | null
+          size_bytes?: number | null
+          storage_path: string
+          submission_id: string
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          file_name?: string | null
+          height?: number | null
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          ref_key?: string | null
+          size_bytes?: number | null
+          storage_path?: string
+          submission_id?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_files_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "onboarding_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      onboarding_flags: {
+        Row: {
+          created_at: string
+          detail: string | null
+          field_key: string | null
+          flag_type: string
+          id: string
+          resolved_at: string | null
+          severity: string
+          submission_id: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: string | null
+          field_key?: string | null
+          flag_type: string
+          id?: string
+          resolved_at?: string | null
+          severity?: string
+          submission_id: string
+        }
+        Update: {
+          created_at?: string
+          detail?: string | null
+          field_key?: string | null
+          flag_type?: string
+          id?: string
+          resolved_at?: string | null
+          severity?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_flags_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "onboarding_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      onboarding_invites: {
+        Row: {
+          contact_email: string
+          contact_name: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          last_sent_at: string | null
+          location_label: string
+          prefill: Json
+          property_id: string | null
+          revoked_at: string | null
+          status: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          contact_email: string
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          last_sent_at?: string | null
+          location_label: string
+          prefill?: Json
+          property_id?: string | null
+          revoked_at?: string | null
+          status?: string
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          contact_email?: string
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          last_sent_at?: string | null
+          location_label?: string
+          prefill?: Json
+          property_id?: string | null
+          revoked_at?: string | null
+          status?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_invites_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      onboarding_submissions: {
+        Row: {
+          answers: Json
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          current_section: number
+          id: string
+          invite_id: string
+          property_id: string | null
+          section_state: Json
+          status: string
+          submitted_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          answers?: Json
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          current_section?: number
+          id?: string
+          invite_id: string
+          property_id?: string | null
+          section_state?: Json
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          answers?: Json
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          current_section?: number
+          id?: string
+          invite_id?: string
+          property_id?: string | null
+          section_state?: Json
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_submissions_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: true
+            referencedRelation: "onboarding_invites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_submissions_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       properties: {
         Row: {
           brand_color: string | null
