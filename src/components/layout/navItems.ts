@@ -15,6 +15,7 @@ export type NavItem = {
 export const COMMAND_ITEM: NavItem = { key: "command", to: "/command", label: "Command", icon: LayoutDashboard };
 export const BUDGET_ITEM: NavItem = { key: "budget", to: "/budget", label: "Budget Pacing", icon: Wallet };
 export const SALES_ITEM: NavItem = { key: "sales", to: "/sales", label: "Sale Records", icon: Receipt };
+export const ONBOARDING_ITEM: NavItem = { key: "onboarding", to: "/admin/onboarding", label: "Onboarding", icon: ClipboardList };
 
 export const MONITOR_ITEMS: NavItem[] = [
   { key: "dashboard", to: "/dashboard", label: "PPC Overview", icon: BarChart3 },
