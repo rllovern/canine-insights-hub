@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Property } from "@/lib/types";
 import { useScope } from "@/contexts/ScopeContext";
 import { TokenReport } from "@/components/reports/TokenReport";
+import { ExternalReportLocationNav } from "@/components/reports/ExternalReportLocationNav";
 
 export default function PublicReport() {
   const { token } = useParams<{ token: string }>();
@@ -14,7 +15,13 @@ export default function PublicReport() {
 
   useEffect(() => {
     if (!token) return;
+
+    let cancelled = false;
+    setProperty(null);
+    setError(null);
+
     supabase.rpc("get_property_by_report_token", { _token: token }).then(({ data, error }) => {
+      if (cancelled) return;
       if (error || !data || data.length === 0) {
         setError("This report link is invalid or has expired.");
       } else {
@@ -23,6 +30,10 @@ export default function PublicReport() {
         setScope({ mode: "property", propertyId: p.id });
       }
     });
+
+    return () => {
+      cancelled = true;
+    };
     // Intentionally only re-run when the token changes. setActiveProperty
     // identity is stable, and we don't want auth/role re-renders to refetch
     // the property and cascade resets into the dashboard state.
@@ -32,5 +43,10 @@ export default function PublicReport() {
   if (error) return <div className="min-h-screen grid place-items-center text-muted-foreground">{error}</div>;
   if (!property || !token) return <div className="min-h-screen grid place-items-center"><Loader2 className="animate-spin" /></div>;
 
-  return <TokenReport token={token} property={property} />;
+  return (
+    <>
+      <ExternalReportLocationNav currentPropertyId={property.id} />
+      <TokenReport key={token} token={token} property={property} />
+    </>
+  );
 }
