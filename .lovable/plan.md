@@ -6,16 +6,17 @@ A standalone internal tool, fully separate from Bob. This phase creates storage,
 
 **1. Storage (new tables, all prefixed `agent_`)**
 
-Exactly the eleven tables from the spec: `agent_account_policies`, `agent_kill_switch` (seeded with the single unfrozen row), `agent_task_batches`, `agent_tasks`, `agent_executions`, `agent_rollbacks`, `agent_audit_log`, `agent_sessions`, `agent_messages`, `agent_llm_calls` — plus the listed indexes and check constraints, verbatim.
+The ten tables from the spec, verbatim: `agent_account_policies`, `agent_kill_switch` (seeded with the single unfrozen row), `agent_task_batches`, `agent_tasks`, `agent_executions`, `agent_rollbacks`, `agent_audit_log`, `agent_sessions`, `agent_messages`, `agent_llm_calls` — plus the listed indexes and check constraints.
 
-Access: every table gets row level security on with one policy, full access only for super admins (`is_super_admin(auth.uid())`), plus the grants the data layer needs. No staff or viewer access anywhere.
+Access: every table gets row level security on with one policy, full access only for super admins (`is_super_admin(auth.uid())`), plus the grants the data layer needs (without grants the data layer returns permission errors even when the policy passes). No staff or viewer access anywhere.
 
 `agent_audit_log` is append-only: insert and read only; update and delete are revoked from every application role including the service role.
 
 **2. Credentials**
 
-- `GOOGLE_ADS_DEVELOPER_TOKEN_LEVEL` — added to the secret store; you supply the value (`basic` or `standard`).
-- `ads_agent_refresh_token` — stored in the vault beside `cron_secret_v2`, with a new `get_ads_agent_refresh_token()` reader function granted to the service role only, mirroring `get_cron_secret_v2()` exactly.
+- `GOOGLE_ADS_DEVELOPER_TOKEN_LEVEL` — added to the secret store; you supply the value (`basic` or `standard`). Nothing reads it in this phase.
+- `ads_agent_refresh_token` — a new `get_ads_agent_refresh_token()` reader function granted to the service role only, mirroring `get_cron_secret_v2()` exactly. **Open decision:** writing the value into the vault means putting the token into a SQL statement in this chat, so by default you save it through the secure secret form and the reader falls back to that value. Say the word if you want vault-only instead.
+- The existing `GOOGLE_ADS_DEVELOPER_TOKEN` is reused for the `developer-token` header; no new token secret.
 
 This is a separate Google sign-in from the existing manager-account token. No agent code reads the existing one.
 
