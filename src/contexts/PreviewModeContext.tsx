@@ -84,9 +84,9 @@ export function PreviewModeProvider({ children }: { children: ReactNode }) {
     setPreviewRole(previewingLocationOwner ? "super_admin" : "location_owner");
   };
 
-  // Use Bob's account as the demo Location Owner so property scoping works.
-  // Admin/Owner previews still show every property, so no impersonation needed.
-  const impersonatedUserId = previewingLocationOwner ? BOB_USER_ID : null;
+  // No account impersonation. The demo viewer account was deleted; previews
+  // change the role only, and property scoping falls back to the real user.
+  const impersonatedUserId: string | null = null;
 
   return (
     <PreviewModeContext.Provider
