@@ -6,16 +6,17 @@ A standalone internal tool, fully separate from Bob. This phase creates storage,
 
 **1. Storage (new tables, all prefixed `agent_`)**
 
-Exactly the eleven tables from the spec: `agent_account_policies`, `agent_kill_switch` (seeded with the single unfrozen row), `agent_task_batches`, `agent_tasks`, `agent_executions`, `agent_rollbacks`, `agent_audit_log`, `agent_sessions`, `agent_messages`, `agent_llm_calls` — plus the listed indexes and check constraints, verbatim.
+The ten tables from the spec, verbatim: `agent_account_policies`, `agent_kill_switch` (seeded with the single unfrozen row), `agent_task_batches`, `agent_tasks`, `agent_executions`, `agent_rollbacks`, `agent_audit_log`, `agent_sessions`, `agent_messages`, `agent_llm_calls` — plus the listed indexes and check constraints.
 
-Access: every table gets row level security on with one policy, full access only for super admins (`is_super_admin(auth.uid())`), plus the grants the data layer needs. No staff or viewer access anywhere.
+Access: every table gets row level security on with one policy, full access only for super admins (`is_super_admin(auth.uid())`), plus the grants the data layer needs (without grants the data layer returns permission errors even when the policy passes). No staff or viewer access anywhere.
 
 `agent_audit_log` is append-only: insert and read only; update and delete are revoked from every application role including the service role.
 
 **2. Credentials**
 
-- `GOOGLE_ADS_DEVELOPER_TOKEN_LEVEL` — added to the secret store; you supply the value (`basic` or `standard`).
-- `ads_agent_refresh_token` — stored in the vault beside `cron_secret_v2`, with a new `get_ads_agent_refresh_token()` reader function granted to the service role only, mirroring `get_cron_secret_v2()` exactly.
+- `GOOGLE_ADS_DEVELOPER_TOKEN_LEVEL` — added to the secret store; you supply the value (`basic` or `standard`). Nothing reads it in this phase.
+- `ads_agent_refresh_token` — a new `get_ads_agent_refresh_token()` reader function granted to the service role only, mirroring `get_cron_secret_v2()` exactly. **Open decision:** writing the value into the vault means putting the token into a SQL statement in this chat, so by default you save it through the secure secret form and the reader falls back to that value. Say the word if you want vault-only instead.
+- The existing `GOOGLE_ADS_DEVELOPER_TOKEN` is reused for the `developer-token` header; no new token secret.
 
 This is a separate Google sign-in from the existing manager-account token. No agent code reads the existing one.
 
@@ -49,7 +50,9 @@ AI chat, proposal generation, task queue UI, approvals, mutation execution, roll
 ## Notes and one flag
 
 - `seed-bob` created the demo account "Bob (demo viewer)", which still exists as a user with viewer access to every location. Deleting the function does not remove that account or its access — say the word if you also want the account removed, otherwise it stays as is.
-- `properties` currently holds 7 rows while 10 Google Ads connections exist, so `agent_account_policies` rows can only be created for locations that have a property record. Populating that table is your step after this phase, per your instructions.
+- Correction to my earlier audit: there are **10 locations, all active**, with exactly one Google Ads connection each (9 distinct customer ids; NoVA and Winchester share 9627559898). The earlier "7 locations" figure was wrong.
+- `campaign_label_filter` is already set to `NoVA` and `Winchester` on the two rows for 9627559898; the other eight are null. Your post-build step 2 may already be done.
+- `agent_account_policies` starts empty, so the first health run legitimately returns no properties; the page says that rather than looking broken.
 - The completed read-only audit I was writing is superseded by this file; I can re-issue it separately on request.
 
 ## Technical details
