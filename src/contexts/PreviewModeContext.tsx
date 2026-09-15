@@ -1,7 +1,6 @@
 import { createContext, useContext, useMemo, useState, ReactNode } from "react";
 import { AppRole } from "@/lib/types";
 import { useAuth } from "./AuthContext";
-import { BOB_USER_ID } from "@/lib/owners";
 
 const PREVIEW_STORAGE_KEY = "preview.role";
 const VALID_PREVIEW_ROLES: AppRole[] = ["super_admin", "admin", "owner", "location_owner"];
@@ -21,7 +20,7 @@ interface PreviewModeContextValue {
   previewingLocationOwner: boolean;
   /** @deprecated legacy toggle — now flips between super_admin and location_owner. */
   togglePreviewLocationOwner: () => void;
-  /** Bob's auth.users id when a Super Admin is previewing, otherwise null. Used to scope property lists. */
+  /** Always null. No account is impersonated — role previews no longer borrow a demo user. */
   impersonatedUserId: string | null;
   /** True if the signed-in account is a Super Admin. */
   isSuperAdmin: boolean;
