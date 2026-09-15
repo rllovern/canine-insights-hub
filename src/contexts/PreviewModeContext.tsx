@@ -1,7 +1,6 @@
 import { createContext, useContext, useMemo, useState, ReactNode } from "react";
 import { AppRole } from "@/lib/types";
 import { useAuth } from "./AuthContext";
-import { BOB_USER_ID } from "@/lib/owners";
 
 const PREVIEW_STORAGE_KEY = "preview.role";
 const VALID_PREVIEW_ROLES: AppRole[] = ["super_admin", "admin", "owner", "location_owner"];
@@ -21,7 +20,7 @@ interface PreviewModeContextValue {
   previewingLocationOwner: boolean;
   /** @deprecated legacy toggle — now flips between super_admin and location_owner. */
   togglePreviewLocationOwner: () => void;
-  /** Bob's auth.users id when a Super Admin is previewing, otherwise null. Used to scope property lists. */
+  /** Always null. No account is impersonated — role previews no longer borrow a demo user. */
   impersonatedUserId: string | null;
   /** True if the signed-in account is a Super Admin. */
   isSuperAdmin: boolean;
@@ -85,9 +84,9 @@ export function PreviewModeProvider({ children }: { children: ReactNode }) {
     setPreviewRole(previewingLocationOwner ? "super_admin" : "location_owner");
   };
 
-  // Use Bob's account as the demo Location Owner so property scoping works.
-  // Admin/Owner previews still show every property, so no impersonation needed.
-  const impersonatedUserId = previewingLocationOwner ? BOB_USER_ID : null;
+  // No account impersonation. The demo viewer account was deleted; previews
+  // change the role only, and property scoping falls back to the real user.
+  const impersonatedUserId: string | null = null;
 
   return (
     <PreviewModeContext.Provider

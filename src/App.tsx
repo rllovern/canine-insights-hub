@@ -27,6 +27,7 @@ import AdminPipelineMapping from "./pages/admin/AdminPipelineMapping";
 import AdminSlaSettings from "./pages/admin/AdminSlaSettings";
 import AdminDataSources from "./pages/admin/AdminDataSources";
 import BobLogs from "./pages/admin/BobLogs";
+import AdsAgent from "./pages/admin/AdsAgent";
 import LeadPerformance from "./pages/LeadPerformance";
 import SaleRecords from "./pages/SaleRecords";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -112,6 +113,10 @@ const App = () => (
                     <Route
                       path="/admin/bob-logs"
                       element={<RequireAuth requireSuperAdmin><BobLogs /></RequireAuth>}
+                    />
+                    <Route
+                      path="/admin/ads-agent"
+                      element={<RequireAuth requireSuperAdmin><AdsAgent /></RequireAuth>}
                     />
                   </Route>
 
