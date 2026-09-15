@@ -5,7 +5,3 @@ project_id = "yptgdovnvmpgwcvfdnrq"
     verify_jwt = false
   [functions.auth-email-hook]
     verify_jwt = false
-  [functions.seed-bob]
-    verify_jwt = false
-  [functions.sync-sheet-sales]
-    verify_jwt = false
