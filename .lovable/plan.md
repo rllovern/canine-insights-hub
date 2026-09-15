@@ -50,7 +50,9 @@ AI chat, proposal generation, task queue UI, approvals, mutation execution, roll
 ## Notes and one flag
 
 - `seed-bob` created the demo account "Bob (demo viewer)", which still exists as a user with viewer access to every location. Deleting the function does not remove that account or its access — say the word if you also want the account removed, otherwise it stays as is.
-- `properties` currently holds 7 rows while 10 Google Ads connections exist, so `agent_account_policies` rows can only be created for locations that have a property record. Populating that table is your step after this phase, per your instructions.
+- Correction to my earlier audit: there are **10 locations, all active**, with exactly one Google Ads connection each (9 distinct customer ids; NoVA and Winchester share 9627559898). The earlier "7 locations" figure was wrong.
+- `campaign_label_filter` is already set to `NoVA` and `Winchester` on the two rows for 9627559898; the other eight are null. Your post-build step 2 may already be done.
+- `agent_account_policies` starts empty, so the first health run legitimately returns no properties; the page says that rather than looking broken.
 - The completed read-only audit I was writing is superseded by this file; I can re-issue it separately on request.
 
 ## Technical details
