@@ -1,64 +1,102 @@
-# Ads Agent — Phase 0 foundation
+# Ads Agent — Phase 0 (build), with pre-build check results
 
-A standalone internal tool, fully separate from Bob. This phase creates storage, security, one read-only health check, and a single admin page. No AI calls, no Google Ads write operations.
+## Part 1 — Timezone check (report only, no fix)
 
-## What gets built
+All 10 locations are set to `America/New_York`, including the four you named as not Eastern:
 
-**1. Storage (new tables, all prefixed `agent_`)**
+```text
+Ridgeside K9 Ashtabula        America/New_York  active
+Ridgeside K9 Central IL       America/New_York  active
+Ridgeside K9 DFW              America/New_York  active
+Ridgeside K9 MoCo             America/New_York  active
+Ridgeside K9 NorCal           America/New_York  active
+Ridgeside K9 Ohio             America/New_York  active
+RidgesideK9 Colorado Springs  America/New_York  active
+RidgesideK9 NoVA              America/New_York  active
+RidgesideK9 Winchester        America/New_York  active
+RK9 Summerville - SC          America/New_York  active
+```
 
-The ten tables from the spec, verbatim: `agent_account_policies`, `agent_kill_switch` (seeded with the single unfrozen row), `agent_task_batches`, `agent_tasks`, `agent_executions`, `agent_rollbacks`, `agent_audit_log`, `agent_sessions`, `agent_messages`, `agent_llm_calls` — plus the listed indexes and check constraints.
+NorCal (Pacific), Colorado Springs (Mountain), Central IL (Central) and DFW (Central) are all wrong. Not fixed in this task. Note that `agent_account_policies.timezone` also defaults to `America/New_York`, so blackout windows will inherit the same error unless set per row.
 
-Access: every table gets row level security on with one policy, full access only for super admins (`is_super_admin(auth.uid())`), plus the grants the data layer needs (without grants the data layer returns permission errors even when the policy passes). No staff or viewer access anywhere.
+## Part 2 — Re-verified: no mutate operations anywhere
 
-`agent_audit_log` is append-only: insert and read only; update and delete are revoked from every application role including the service role.
+Searched `src` and `supabase/functions` for: `:mutate`, `mutateOperations`, `googleAds:mutate`, `campaignBudgets:mutate`, `adGroupCriteria:mutate`, the bare word `mutate` (case-insensitive), and every literal `googleads.googleapis.com` URL.
 
-**2. Credentials**
+- `:mutate` — none
+- `mutateOperations` — none
+- `mutate` in any casing — none
+- Every Google Ads URL in the repo (4 total, all `searchStream`):
+  - `supabase/functions/google-ads-change-history/index.ts:111`
+  - `supabase/functions/list-google-ads-labels/index.ts:72`
+  - `supabase/functions/list-mcc-customers/index.ts:113`
+  - `supabase/functions/sync-google-ads/index.ts:146`
 
-- `GOOGLE_ADS_DEVELOPER_TOKEN_LEVEL` — added to the secret store; you supply the value (`basic` or `standard`). Nothing reads it in this phase.
-- `ads_agent_refresh_token` — a new `get_ads_agent_refresh_token()` reader function granted to the service role only, mirroring `get_cron_secret_v2()` exactly. **Open decision:** writing the value into the vault means putting the token into a SQL statement in this chat, so by default you save it through the secure secret form and the reader falls back to that value. Say the word if you want vault-only instead.
-- The existing `GOOGLE_ADS_DEVELOPER_TOKEN` is reused for the `developer-token` header; no new token secret.
+No POST to `googleads.googleapis.com` on a path other than `searchStream`. The claim holds, now query-backed.
 
-This is a separate Google sign-in from the existing manager-account token. No agent code reads the existing one.
+## Part 3 item 6 — Winchester residue row count
 
-**3. Health check function: `ads-agent-health`**
+The delete you specified affects **6 rows**, total cost $0. Deleted as part of this build.
 
-Read-only. Steps, in order:
+---
 
-1. Resolve the caller from the request, look up `is_super_admin`; anything else — including an admin-role user — gets a 403.
-2. Read the agent refresh token from the vault, exchange it for an access token at Google's token endpoint.
-3. For each `agent_account_policies` row with `agent_enabled = true`, run the single campaign query against Google Ads v23 `searchStream` with the developer token and manager account `2189989288`.
-4. For each property, read freshness from `property_data_sources.last_success_at` for `google_ads`, `ctm`, `ghl` only. A null timestamp reports "no data", which is kept distinct from "zero campaigns".
-5. Return, per property: customer id, campaign count, campaign ids and names, the resolved allowlist, campaigns outside the allowlist, and the three timestamps with ages in hours.
-6. Write one `agent_audit_log` row per call: actor `user:<uuid>`, event `health_check`.
+# What gets built
 
-**4. Admin page**
+**1. Migration — 10 `agent_` tables, DDL verbatim from your spec**
 
-New route `/admin/ads-agent` inside the app shell, super admin only, and a matching entry in the admin nav group flagged super-admin only. The page is one panel: a button that runs the health check and a table of properties showing campaign counts, allowlist status, and freshness age in hours. Built from the existing shadcn components and page patterns already used on the other admin pages. No drawer, no Bob surface, no new design system.
+`agent_account_policies`, `agent_kill_switch` (seeded `(1, false)`), `agent_task_batches`, `agent_tasks`, `agent_executions`, `agent_rollbacks`, `agent_audit_log`, `agent_sessions`, `agent_messages`, `agent_llm_calls`, plus every index and check constraint listed.
+
+Per table, in order: create → grants → enable row level security → policy.
+
+Nine tables (all but `agent_audit_log`):
+- `GRANT SELECT, INSERT, UPDATE, DELETE ... TO authenticated`
+- `GRANT ALL ... TO service_role`
+- no `anon` grant
+- one policy `"super admin all"` `FOR ALL TO authenticated USING (is_super_admin(auth.uid())) WITH CHECK (is_super_admin(auth.uid()))`
+
+`agent_audit_log`:
+- `GRANT SELECT, INSERT` to `authenticated` and `service_role`
+- `GRANT USAGE, SELECT ON SEQUENCE agent_audit_log_id_seq` to both
+- `REVOKE UPDATE, DELETE` from `authenticated`, `anon`, `service_role`, `PUBLIC`
+- two policies: `"super admin read"` `FOR SELECT`, `"super admin insert"` `FOR INSERT` (your accepted split)
+- trigger `agent_audit_log_immutable`: `BEFORE UPDATE OR DELETE FOR EACH ROW`, raises an exception — binds the owner, which the revokes do not
+
+**2. Secrets**
+
+- `ADS_AGENT_REFRESH_TOKEN` — secret store only, one source, read only by `ads-agent-health`. No vault row, no reader function, no fallback.
+- `GOOGLE_ADS_DEVELOPER_TOKEN_LEVEL` — secret store, you supply `basic` or `standard`; nothing reads it this phase.
+- Existing `GOOGLE_ADS_DEVELOPER_TOKEN` reused for the header.
+
+Both are requested through the secure secret form during the build.
+
+**3. Edge function `ads-agent-health`** (read-only)
+
+`verify_jwt` stays at its default (no `config.toml` entry) **and** the function resolves the JWT user and calls the `is_super_admin` RPC first; anything else, admin role included, gets 403.
+
+Then: exchange `ADS_AGENT_REFRESH_TOKEN` at `https://oauth2.googleapis.com/token`; for each `agent_account_policies` row with `agent_enabled = true`, POST the campaign GAQL to `v23 .../googleAds:searchStream` with `developer-token` and `login-customer-id: 2189989288`; read freshness from `property_data_sources.last_success_at` for `google_ads`, `ctm`, `ghl` only (null = "no data", distinct from zero results); return per property the customer id, campaign count, campaign ids and names, resolved allowlist, out-of-allowlist campaigns, and the three timestamps with ages in hours; insert one `agent_audit_log` row, actor `user:<uuid>`, event `health_check`.
+
+Three standing rules written into the file as comments:
+- Campaign identity is `campaign.id` from a live API call scoped to a `customer_id`. Never resolve a campaign by name; never join warehouse tables on campaign name across properties. `daily_metrics`, `campaign_budgets` and `campaign_labels` are keyed on (property_id, campaign name) — safe within a property, wrong across them.
+- Once this function holds the service key, it must never accept a `property_id`, `customer_id` or `campaign_id` from the request body without re-validating it against `agent_account_policies` for the authenticated caller. RLS protects nothing past that point.
+- No mutate operation ever, in any phase of this tool.
+
+**4. Route `/admin/ads-agent`**
+
+Registered inside the `AppShell` route in `src/App.tsx` behind `RequireAuth requireSuperAdmin`, plus an `ADMIN_ITEMS` entry with `superAdminOnly: true`. One page: a button that invokes the health function and a table of properties with campaign counts, allowlist status and freshness ages in hours. Existing shadcn components and page patterns only. Empty state for the (expected) case of zero enabled policies, and an error state.
 
 **5. Cleanup**
 
-- Delete the `jarvis-auth-debug` function.
-- Delete the `seed-bob` function.
-- Remove the `sync-sheet-sales` entry from the functions config (that directory does not exist).
+- Delete edge function `jarvis-auth-debug`.
+- Delete edge function `seed-bob`.
+- Remove the `functions.sync-sheet-sales` entry from `supabase/config.toml`.
+- Delete the Bob demo auth user `76ee5d03-...` (`bob@demo.rsk9insights.com`), its 1 `user_roles` row and its 5 `viewer_property_access` rows.
+- Remove `BOB_USER_ID` and `BOB_EMAIL` from `src/lib/owners.ts` and the Bob impersonation path from `PreviewModeContext` (`impersonatedUserId` becomes null; the `location_owner` preview stays, just without impersonating a deleted user). Any consumer of the removed constants is updated in the same change.
+- Run the Winchester delete (6 rows).
 
-Nothing else in `jarvis` or `ai-assistant` is touched.
+**6. Documentation**
 
-## Explicitly not in this phase
+Restore the audit to `docs/SYSTEM_AUDIT.md`, full text, with the Part B corrections applied inline and each marked as a correction showing the original claim next to the corrected one — including the newly verified "no mutate operations" evidence above. Durable records go in `docs/` from here on; `.lovable/plan.md` is working state.
 
-AI chat, proposal generation, task queue UI, approvals, mutation execution, rollback, scheduled scanning, cron jobs. Also: no `:mutate` call anywhere, not even disabled.
+## Out of scope
 
-## Notes and one flag
-
-- `seed-bob` created the demo account "Bob (demo viewer)", which still exists as a user with viewer access to every location. Deleting the function does not remove that account or its access — say the word if you also want the account removed, otherwise it stays as is.
-- Correction to my earlier audit: there are **10 locations, all active**, with exactly one Google Ads connection each (9 distinct customer ids; NoVA and Winchester share 9627559898). The earlier "7 locations" figure was wrong.
-- `campaign_label_filter` is already set to `NoVA` and `Winchester` on the two rows for 9627559898; the other eight are null. Your post-build step 2 may already be done.
-- `agent_account_policies` starts empty, so the first health run legitimately returns no properties; the page says that rather than looking broken.
-- The completed read-only audit I was writing is superseded by this file; I can re-issue it separately on request.
-
-## Technical details
-
-- Migration order per table: create, grant, enable row level security, create policy. `agent_audit_log` additionally revokes update/delete after grants.
-- Function path `supabase/functions/ads-agent-health/index.ts`; caller verification uses `getClaims` on the bearer token then the `is_super_admin` RPC, matching `admin-users`.
-- Google Ads constants match the existing sync functions: API v23, REST via `fetch`, `developer-token` and `login-customer-id: 2189989288` headers, token exchange at `https://oauth2.googleapis.com/token`.
-- Route registration: `<Route path="/admin/ads-agent" element={<RequireAuth requireSuperAdmin><AdsAgent /></RequireAuth>} />` inside the `AppShell` route in `src/App.tsx`, plus an `ADMIN_ITEMS` entry with `superAdminOnly: true` in `src/components/layout/navItems.ts`.
-- Page fetches via `supabase.functions.invoke("ads-agent-health")` with react-query or local state consistent with `AdminDataSources.tsx`.
+AI chat, proposals, task queue UI, approvals, mutation execution, rollback, scheduled scanning, cron jobs. No `:mutate` anywhere, not even disabled.
