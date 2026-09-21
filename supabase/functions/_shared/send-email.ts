@@ -35,6 +35,9 @@ export async function sendPlainEmail(
   const html =
     `<pre style="font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;margin:0">${escapeHtml(text)}</pre>`;
 
+  // App emails must carry an idempotency key with purpose=transactional.
+  const key = idempotencyKey ?? crypto.randomUUID();
+
   try {
     const res = await sendLovableEmail(
       {
@@ -45,9 +48,9 @@ export async function sendPlainEmail(
         text,
         html,
         purpose: "transactional",
-        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+        idempotency_key: key,
       },
-      { apiKey, ...(idempotencyKey ? { idempotencyKey } : {}) },
+      { apiKey, idempotencyKey: key },
     );
     return { sent: !!res.success, to, message_id: res.message_id };
   } catch (e) {
