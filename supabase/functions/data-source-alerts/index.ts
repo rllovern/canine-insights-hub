@@ -36,8 +36,8 @@ Deno.serve(async (req) => {
   let ok = !!token && (token === SERVICE_KEY || token === CRON_SECRET || (!!vaultCronSecret && token === vaultCronSecret));
   // A signed-in super admin may also run it on demand (admin page, manual test).
   if (!ok && token) {
-    const { data: claims } = await admin.auth.getClaims(token);
-    const uid = claims?.claims?.sub as string | undefined;
+    const { data: userRes } = await admin.auth.getUser(token);
+    const uid = userRes?.user?.id;
     if (uid) {
       const { data: isSa } = await admin.rpc("is_super_admin", { _user_id: uid });
       ok = isSa === true;
