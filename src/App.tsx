@@ -35,6 +35,9 @@ import { PreviewModeProvider } from "./contexts/PreviewModeContext";
 import { PropertyProvider } from "./contexts/PropertyContext";
 import { DateRangeProvider } from "./contexts/DateRangeContext";
 import { ScopeProvider } from "./contexts/ScopeContext";
+import { NoticeProvider } from "./contexts/NoticeContext";
+import { MaintenanceGate } from "./components/notices/MaintenanceGate";
+import AdminAnnouncements from "./pages/admin/AdminAnnouncements";
 import { AppShell } from "./components/layout/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
 import { ViewerBlock } from "./components/ViewerBlock";
@@ -52,6 +55,7 @@ const App = () => (
             <DateRangeProvider>
               <PropertyProvider>
                 <ScopeProvider>
+                <NoticeProvider>
                 <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />
@@ -60,7 +64,8 @@ const App = () => (
                     path="/change-password"
                     element={<RequireAuth><ChangePassword /></RequireAuth>}
                   />
-                  <Route path="/report/:token" element={<PublicReport />} />
+                  <Route path="/report/:token" element={<MaintenanceGate><PublicReport /></MaintenanceGate>} />
+                  {/* Onboarding is deliberately never blocked by maintenance mode. */}
                   <Route path="/onboarding/:token" element={<Onboarding />} />
                   <Route
                     path="/admin/client-reports"
@@ -118,10 +123,15 @@ const App = () => (
                       path="/admin/ads-agent"
                       element={<RequireAuth requireSuperAdmin><AdsAgent /></RequireAuth>}
                     />
+                    <Route
+                      path="/admin/announcements"
+                      element={<RequireAuth requireSuperAdmin><AdminAnnouncements /></RequireAuth>}
+                    />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                </NoticeProvider>
                 </ScopeProvider>
               </PropertyProvider>
             </DateRangeProvider>

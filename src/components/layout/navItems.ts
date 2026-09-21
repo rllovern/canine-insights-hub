@@ -1,4 +1,4 @@
-import { BarChart3, PhoneCall, Settings, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, LayoutDashboard, Database, Receipt, MessageSquare, ClipboardList, ExternalLink, Bot } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, LayoutDashboard, Database, Receipt, MessageSquare, ClipboardList, ExternalLink, Bot, Megaphone } from "lucide-react";
 
 export type NavItem = {
   key: string;
@@ -39,6 +39,7 @@ export const ADMIN_ITEMS: NavItem[] = [
   { key: "data-sources", to: "/admin/data-sources", label: "Data Sources", icon: Database, superAdminOnly: true },
   { key: "bob-logs", to: "/admin/bob-logs", label: "Bob Logs", icon: MessageSquare, superAdminOnly: true },
   { key: "ads-agent", to: "/admin/ads-agent", label: "Ads Agent", icon: Bot, superAdminOnly: true },
+  { key: "announcements", to: "/admin/announcements", label: "Announcements", icon: Megaphone, superAdminOnly: true },
   { key: "settings", to: "/admin/settings", label: "Settings", icon: Settings, superAdminOnly: true },
 ];
 

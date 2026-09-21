@@ -347,6 +347,32 @@ export type Database = {
         }
         Relationships: []
       }
+      announcement_dismissals: {
+        Row: {
+          announcement_id: string
+          dismissed_at: string
+          user_id: string
+        }
+        Insert: {
+          announcement_id: string
+          dismissed_at?: string
+          user_id: string
+        }
+        Update: {
+          announcement_id?: string
+          dismissed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_dismissals_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "site_announcements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budget_accounts: {
         Row: {
           campaign_label: string | null
@@ -590,6 +616,8 @@ export type Database = {
       }
       data_source_incidents: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
           affected_property_ids: string[]
           error_class: string
           first_error: string | null
@@ -598,12 +626,15 @@ export type Database = {
           mute_reason: string | null
           muted: boolean
           opened_at: string
+          owner_notice: string
           reminder_count: number
           resolved_at: string | null
           runbook_id: string | null
           source: string
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           affected_property_ids?: string[]
           error_class: string
           first_error?: string | null
@@ -612,12 +643,15 @@ export type Database = {
           mute_reason?: string | null
           muted?: boolean
           opened_at?: string
+          owner_notice?: string
           reminder_count?: number
           resolved_at?: string | null
           runbook_id?: string | null
           source: string
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           affected_property_ids?: string[]
           error_class?: string
           first_error?: string | null
@@ -626,6 +660,7 @@ export type Database = {
           mute_reason?: string | null
           muted?: boolean
           opened_at?: string
+          owner_notice?: string
           reminder_count?: number
           resolved_at?: string | null
           runbook_id?: string | null
@@ -1516,6 +1551,30 @@ export type Database = {
           },
         ]
       }
+      incident_notice_settings: {
+        Row: {
+          auto_notice_after_hours: number
+          id: number
+          notice_body: string
+          notice_title: string
+          updated_at: string
+        }
+        Insert: {
+          auto_notice_after_hours?: number
+          id?: number
+          notice_body?: string
+          notice_title?: string
+          updated_at?: string
+        }
+        Update: {
+          auto_notice_after_hours?: number
+          id?: number
+          notice_body?: string
+          notice_title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       keyword_rankings: {
         Row: {
           captured_at: string
@@ -1630,6 +1689,42 @@ export type Database = {
           label?: string
           reason_label?: string
           tag_normalized?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      maintenance_mode: {
+        Row: {
+          active: boolean
+          expected_back_at: string | null
+          id: number
+          message: string
+          scheduled_end: string | null
+          scheduled_start: string | null
+          started_at: string | null
+          started_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          expected_back_at?: string | null
+          id?: number
+          message?: string
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          started_at?: string | null
+          started_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          expected_back_at?: string | null
+          id?: number
+          message?: string
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          started_at?: string | null
+          started_by?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -2478,6 +2573,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      site_announcements: {
+        Row: {
+          active: boolean
+          audience: string
+          audience_property_ids: string[] | null
+          audience_roles: Database["public"]["Enums"]["app_role"][] | null
+          body: string
+          created_at: string
+          created_by: string | null
+          ends_at: string | null
+          frequency: string
+          id: string
+          severity: string
+          starts_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          audience?: string
+          audience_property_ids?: string[] | null
+          audience_roles?: Database["public"]["Enums"]["app_role"][] | null
+          body: string
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          frequency?: string
+          id?: string
+          severity?: string
+          starts_at?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          audience?: string
+          audience_property_ids?: string[] | null
+          audience_roles?: Database["public"]["Enums"]["app_role"][] | null
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          frequency?: string
+          id?: string
+          severity?: string
+          starts_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       sync_runs: {
         Row: {
