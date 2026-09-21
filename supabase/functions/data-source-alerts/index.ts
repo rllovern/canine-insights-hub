@@ -2,6 +2,7 @@
 //
 // Step 0 scaffold: email send path only. The evaluator lands after the test
 // email is confirmed.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { sendPlainEmail } from "../_shared/send-email.ts";
 
 const corsHeaders = {
@@ -19,14 +20,25 @@ const json = (body: unknown, status = 200) =>
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
-  const provided = req.headers.get("x-cron-secret") ?? "";
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+  const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+
+  // Same cron authentication as the other scheduled jobs.
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+  let vaultCronSecret = "";
+  try {
+    const { data: v } = await admin.rpc("get_cron_secret_v2");
+    vaultCronSecret = typeof v === "string" ? v : "";
+  } catch (_e) { /* optional */ }
+  const ok = token && (token === SERVICE_KEY || token === CRON_SECRET || (!!vaultCronSecret && token === vaultCronSecret));
+  if (!ok) return json({ error: "Unauthorized" }, 401);
+
   let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { /* empty body ok */ }
 
-  if (!cronSecret || provided !== cronSecret) {
-    return json({ error: "Unauthorized" }, 401);
-  }
 
   if (body.action === "test_email") {
     const to = String(body.to ?? "");
