@@ -329,6 +329,24 @@ export type Database = {
         }
         Relationships: []
       }
+      alert_state: {
+        Row: {
+          key: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: []
+      }
       budget_accounts: {
         Row: {
           campaign_label: string | null
