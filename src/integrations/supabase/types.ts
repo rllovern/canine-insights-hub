@@ -275,6 +275,78 @@ export type Database = {
           },
         ]
       }
+      alert_recipients: {
+        Row: {
+          active: boolean
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      alert_runbook: {
+        Row: {
+          created_at: string
+          error_class: string
+          fix_steps: string
+          id: string
+          match_pattern: string | null
+          self_heals: boolean
+          source: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          error_class: string
+          fix_steps: string
+          id?: string
+          match_pattern?: string | null
+          self_heals?: boolean
+          source: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          error_class?: string
+          fix_steps?: string
+          id?: string
+          match_pattern?: string | null
+          self_heals?: boolean
+          source?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      alert_state: {
+        Row: {
+          key: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: []
+      }
       budget_accounts: {
         Row: {
           campaign_label: string | null
@@ -512,6 +584,59 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_source_incidents: {
+        Row: {
+          affected_property_ids: string[]
+          error_class: string
+          first_error: string | null
+          id: string
+          last_notified_at: string | null
+          mute_reason: string | null
+          muted: boolean
+          opened_at: string
+          reminder_count: number
+          resolved_at: string | null
+          runbook_id: string | null
+          source: string
+        }
+        Insert: {
+          affected_property_ids?: string[]
+          error_class: string
+          first_error?: string | null
+          id?: string
+          last_notified_at?: string | null
+          mute_reason?: string | null
+          muted?: boolean
+          opened_at?: string
+          reminder_count?: number
+          resolved_at?: string | null
+          runbook_id?: string | null
+          source: string
+        }
+        Update: {
+          affected_property_ids?: string[]
+          error_class?: string
+          first_error?: string | null
+          id?: string
+          last_notified_at?: string | null
+          mute_reason?: string | null
+          muted?: boolean
+          opened_at?: string
+          reminder_count?: number
+          resolved_at?: string | null
+          runbook_id?: string | null
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_source_incidents_runbook_id_fkey"
+            columns: ["runbook_id"]
+            isOneToOne: false
+            referencedRelation: "alert_runbook"
             referencedColumns: ["id"]
           },
         ]
@@ -1958,6 +2083,8 @@ export type Database = {
       }
       property_data_sources: {
         Row: {
+          alerts_mute_reason: string | null
+          alerts_muted: boolean
           backoff_until: string | null
           campaign_label_filter: string | null
           config: Json | null
@@ -1979,6 +2106,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          alerts_mute_reason?: string | null
+          alerts_muted?: boolean
           backoff_until?: string | null
           campaign_label_filter?: string | null
           config?: Json | null
@@ -2000,6 +2129,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          alerts_mute_reason?: string | null
+          alerts_muted?: boolean
           backoff_until?: string | null
           campaign_label_filter?: string | null
           config?: Json | null

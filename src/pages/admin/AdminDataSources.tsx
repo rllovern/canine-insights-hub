@@ -3,6 +3,7 @@ import { Loader2, RefreshCw, CheckCircle2, XCircle, AlertCircle, MinusCircle, Pa
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { GhlBackfillPanel } from "@/components/data/GhlBackfillPanel";
+import { OpenIncidentsPanel } from "@/components/data/OpenIncidentsPanel";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -177,6 +178,8 @@ export default function AdminDataSources() {
           or the per-property button to refresh just one.
         </p>
       </div>
+
+      <OpenIncidentsPanel />
 
       <GhlBackfillPanel />
 
