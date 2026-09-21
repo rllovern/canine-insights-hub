@@ -117,12 +117,28 @@ interface NoticeContextValue {
   reload: () => Promise<void>;
 }
 
-const Ctx = createContext<NoticeContextValue | undefined>(undefined);
+/**
+ * Safe fallback so a consumer rendered outside the provider (or during a hot
+ * reload that swaps the context identity) degrades to "no notices" instead of
+ * blanking the app.
+ */
+const FALLBACK: NoticeContextValue = {
+  loading: true,
+  maintenance: null,
+  maintenanceOn: false,
+  blockedByMaintenance: false,
+  delayNotices: [],
+  settings: DEFAULT_NOTICE_SETTINGS,
+  currentAnnouncement: null,
+  dismissAnnouncement: async () => {},
+  modalsAllowed: false,
+  reload: async () => {},
+};
+
+const Ctx = createContext<NoticeContextValue>(FALLBACK);
 
 export function useNotices() {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("useNotices must be used within NoticeProvider");
-  return ctx;
+  return useContext(Ctx);
 }
 
 const sessionKey = (id: string) => `announcementSeen:${id}`;
