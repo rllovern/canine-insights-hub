@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 import { usePreviewMode } from "./PreviewModeContext";
+import { useNotices } from "./NoticeContext";
 import { TOUR_KEY, stepsForRole, type TourStep } from "@/lib/tour/steps";
 
 type TourContextValue = {
@@ -34,6 +35,7 @@ export function useTour() {
 export function TourProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { realRole, effectiveRole } = usePreviewMode();
+  const { modalsAllowed } = useNotices();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -111,6 +113,8 @@ export function TourProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (autoChecked.current) return;
     if (!user?.id || !realRole) return;
+    // Display order gate: maintenance and announcements come first.
+    if (!modalsAllowed) return;
     if (BLOCKED_AUTOSTART_ROUTES.some((r) => location.pathname.startsWith(r))) return;
     if (total === 0) return;
     autoChecked.current = true;
@@ -131,7 +135,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, realRole, location.pathname, total]);
+  }, [user?.id, realRole, location.pathname, total, modalsAllowed]);
 
   // New sign-in (different user) — allow the auto-start check to run again.
   useEffect(() => {

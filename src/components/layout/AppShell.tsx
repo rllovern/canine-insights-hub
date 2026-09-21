@@ -10,30 +10,41 @@ import { BobIntroProvider } from "@/contexts/BobIntroContext";
 import { BobIntroDialog } from "@/components/bob/BobIntroDialog";
 import { TourProvider } from "@/contexts/TourContext";
 import { TourOverlay } from "@/components/tour/TourOverlay";
+import { MaintenanceGate } from "@/components/notices/MaintenanceGate";
+import { MaintenanceAdminBanner } from "@/components/notices/MaintenanceAdminBanner";
+import { DataDelayBanner } from "@/components/notices/DataDelayBanner";
+import { AnnouncementDialog } from "@/components/notices/AnnouncementDialog";
 
 export function AppShell() {
   return (
-    <DashboardProvider>
-      <TourProvider>
-      <BobProvider>
-      <BobIntroProvider>
-      <div className="h-screen flex bg-background overflow-hidden">
-        <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
-          <TopBar />
-          <main id="dashboard-canvas" data-tour="page-root" className="flex-1 min-w-0 px-4 pt-4 pb-24 sm:px-6 sm:py-6 space-y-6 animate-fade-in">
-            <Outlet />
-          </main>
+    // Display order: maintenance page, then the delay banner, then announcements,
+    // then the tour, then the Bob intro (the last two gate on `modalsAllowed`).
+    <MaintenanceGate>
+      <DashboardProvider>
+        <TourProvider>
+        <BobProvider>
+        <BobIntroProvider>
+        <div className="h-screen flex bg-background overflow-hidden">
+          <Sidebar />
+          <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+            <TopBar />
+            <main id="dashboard-canvas" data-tour="page-root" className="flex-1 min-w-0 px-4 pt-4 pb-24 sm:px-6 sm:py-6 space-y-6 animate-fade-in">
+              <MaintenanceAdminBanner />
+              <DataDelayBanner />
+              <Outlet />
+            </main>
+          </div>
+          <BobCommandBar />
+          <BobLauncher />
+          <BobDrawer />
+          <BobIntroDialog />
+          <AnnouncementDialog />
         </div>
-        <BobCommandBar />
-        <BobLauncher />
-        <BobDrawer />
-        <BobIntroDialog />
-      </div>
-      <TourOverlay />
-      </BobIntroProvider>
-      </BobProvider>
-      </TourProvider>
-    </DashboardProvider>
+        <TourOverlay />
+        </BobIntroProvider>
+        </BobProvider>
+        </TourProvider>
+      </DashboardProvider>
+    </MaintenanceGate>
   );
 }

@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 import { useTour } from "./TourContext";
+import { useNotices } from "./NoticeContext";
 import { TOUR_KEY } from "@/lib/tour/steps";
 
 export const BOB_INTRO_KEY = "bob-intro-v1";
@@ -68,6 +69,7 @@ export function useBobIntro() {
 export function BobIntroProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { running } = useTour();
+  const { modalsAllowed } = useNotices();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const checked = useRef(false);
@@ -83,6 +85,8 @@ export function BobIntroProvider({ children }: { children: ReactNode }) {
     if (checked.current) return;
     if (!user?.id) return;
     if (running) return;
+    // Display order gate: maintenance and announcements come first.
+    if (!modalsAllowed) return;
     if (dismissedThisSession.current) return;
     if (BLOCKED_ROUTES.some((r) => location.pathname.startsWith(r))) return;
     checked.current = true;
@@ -132,7 +136,7 @@ export function BobIntroProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, running, location.pathname]);
+  }, [user?.id, running, location.pathname, modalsAllowed]);
 
   const show = useCallback(() => setOpen(true), []);
 

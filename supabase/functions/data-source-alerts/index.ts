@@ -22,6 +22,14 @@ const json = (body: unknown, status = 200) =>
   });
 
 const APP_URL = "https://rsk9insights.com";
+
+// Both links land on the incidents panel and require a sign-in; there are no
+// unauthenticated one-click actions in these emails.
+const INCIDENT_ACTION_LINKS = [
+  "",
+  `Acknowledge this incident: ${APP_URL}/admin/data-sources`,
+  `Control what owners see: ${APP_URL}/admin/data-sources`,
+];
 const STALE_HOURS: Record<string, number> = { google_ads: 6, ctm: 6, ghl: 8 };
 const DEFAULT_STALE_HOURS = 12;
 const SOURCE_LABELS: Record<string, string> = {
@@ -255,6 +263,7 @@ Deno.serve(async (req) => {
           truncate(g.error),
           "",
           `${APP_URL}/admin/data-sources`,
+          ...INCIDENT_ACTION_LINKS,
         ].join("\n"),
       );
       actions.push(`opened ${key} (${n})`);
@@ -292,6 +301,7 @@ Deno.serve(async (req) => {
           truncate(g.error ?? (existing.first_error as string | null)),
           "",
           `${APP_URL}/admin/data-sources`,
+          ...INCIDENT_ACTION_LINKS,
         ].join("\n"),
       );
       await admin.from("data_source_incidents")
