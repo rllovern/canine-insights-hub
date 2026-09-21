@@ -33,7 +33,16 @@ Deno.serve(async (req) => {
     const { data: v } = await admin.rpc("get_cron_secret_v2");
     vaultCronSecret = typeof v === "string" ? v : "";
   } catch (_e) { /* optional */ }
-  const ok = token && (token === SERVICE_KEY || token === CRON_SECRET || (!!vaultCronSecret && token === vaultCronSecret));
+  let ok = !!token && (token === SERVICE_KEY || token === CRON_SECRET || (!!vaultCronSecret && token === vaultCronSecret));
+  // A signed-in super admin may also run it on demand (admin page, manual test).
+  if (!ok && token) {
+    const { data: claims } = await admin.auth.getClaims(token);
+    const uid = claims?.claims?.sub as string | undefined;
+    if (uid) {
+      const { data: isSa } = await admin.rpc("is_super_admin", { _user_id: uid });
+      ok = isSa === true;
+    }
+  }
   if (!ok) return json({ error: "Unauthorized" }, 401);
 
   let body: Record<string, unknown> = {};
