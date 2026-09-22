@@ -74,7 +74,12 @@ export function pacingVerdict(
   }
 
   const actualPct = spend / budget;
-  const targetPct = daysInMonth > 0 ? Math.min(1, daysElapsed / daysInMonth) : 1;
+  const targetPct =
+    targetFractionOverride != null && isFinite(targetFractionOverride)
+      ? Math.max(0, Math.min(1, targetFractionOverride))
+      : daysInMonth > 0
+        ? Math.min(1, daysElapsed / daysInMonth)
+        : 1;
   const gapPoints = (actualPct - targetPct) * 100;
   const abs = Math.abs(gapPoints);
   const ahead = gapPoints > 0;
