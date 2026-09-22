@@ -150,3 +150,40 @@ export function isExcludedCampaign(name: string | null | undefined): boolean {
   if (!name) return false;
   return EXCLUDED_CAMPAIGN_RE.test(name.trim());
 }
+
+/**
+ * Spend is stored per (property, campaign NAME). Google Ads campaign names are
+ * not stable — a rename starts a brand-new history line and leaves the old one
+ * behind, so the same spend gets counted twice. A campaign name that carries
+ * spend but no longer appears in the live campaign snapshot for that property
+ * is the signature of exactly that. Campaign identity is campaign.id; names
+ * must never be treated as identity across properties.
+ */
+export type OrphanCampaign = { propertyId: string; campaign: string; cost: number };
+
+export function findOrphanCampaigns(
+  metrics: Array<{ property_id: string; campaign: string | null; cost: number | null }>,
+  budgets: Array<{ property_id: string; campaign: string }>,
+): OrphanCampaign[] {
+  const known = new Map<string, Set<string>>();
+  for (const b of budgets) {
+    let set = known.get(b.property_id);
+    if (!set) { set = new Set(); known.set(b.property_id, set); }
+    set.add(b.campaign);
+  }
+  const totals = new Map<string, OrphanCampaign>();
+  for (const m of metrics) {
+    const name = (m.campaign ?? "").trim();
+    const cost = Number(m.cost || 0);
+    if (!name || cost <= 0) continue;
+    if (isExcludedCampaign(name)) continue;
+    const set = known.get(m.property_id);
+    // No snapshot for this property yet — can't tell, so don't warn.
+    if (!set || set.size === 0 || set.has(name)) continue;
+    const key = `${m.property_id}::${name}`;
+    const prev = totals.get(key);
+    if (prev) prev.cost += cost;
+    else totals.set(key, { propertyId: m.property_id, campaign: name, cost });
+  }
+  return Array.from(totals.values()).sort((a, b) => b.cost - a.cost);
+}
