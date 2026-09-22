@@ -448,9 +448,17 @@ export default function BudgetPacing() {
                       display={fmtUSD(Number(c.row.monthly_budget))}
                       onSave={(v) => {
                         const n = Number(v);
-                        if (!isNaN(n) && n !== Number(c.row.monthly_budget)) updateRow(c.row.id, { monthly_budget: n });
+                        if (!isNaN(n) && n !== Number(c.row.monthly_budget)) setPending({ row: c.row, newBudget: n });
                       }}
                     />
+                    {c.profile.changedMidMonth && (
+                      <div
+                        className="mt-1 inline-block cursor-help rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300"
+                        title={c.budgetTooltip}
+                      >
+                        Changed mid-month · {fmtUSD(c.profile.monthlyEquivalent)} prorated
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.spends)}</TableCell>
                   <TableCell className="text-right tabular-nums">
