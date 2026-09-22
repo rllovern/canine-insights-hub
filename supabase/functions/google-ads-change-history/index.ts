@@ -172,6 +172,9 @@ Deno.serve(async (req) => {
         resource_name: e.changeResourceName,
         operation: e.resourceChangeOperation,
         changed_fields: e.changedFields,
+        // Budget edits carry the before/after daily amount in micros.
+        old_budget_micros: e.oldResource?.campaignBudget?.amountMicros,
+        new_budget_micros: e.newResource?.campaignBudget?.amountMicros,
         campaign_id: campaignId,
         campaign_name: campaignId ? campaignNames.get(campaignId) : undefined,
         ad_group_id: adGroupId,
