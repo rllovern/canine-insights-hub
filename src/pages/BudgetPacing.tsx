@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import { pacingVerdict, runRateVerdict, isExcludedCampaign } from "@/lib/budgetPacing";
+import { pacingVerdict, runRateVerdict, isExcludedCampaign, findOrphanCampaigns } from "@/lib/budgetPacing";
 
 type BudgetRow = {
   id: string;
@@ -240,6 +240,17 @@ export default function BudgetPacing() {
     });
   }, [rows, metrics, budgets, labelIndex, range]);
 
+  // Campaign names that still carry spend in this period but are gone from the
+  // live campaign snapshot — the signature of a rename double-counting spend.
+  const orphans = useMemo(() => {
+    const fromISO = toISO(range.from);
+    const toIso = toISO(range.to);
+    return findOrphanCampaigns(
+      metrics.filter((m) => m.date >= fromISO && m.date <= toIso),
+      budgets,
+    );
+  }, [metrics, budgets, range]);
+
   const updateRow = async (id: string, patch: Partial<BudgetRow>) => {
     if (!isSuperAdmin) return;
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } as BudgetRow : r)));
@@ -302,6 +313,20 @@ export default function BudgetPacing() {
           )}
         </div>
       </div>
+
+      {orphans.length > 0 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+          <div className="font-medium text-amber-700 dark:text-amber-300">Possible renamed campaigns counted twice</div>
+          <ul className="mt-1 space-y-0.5 text-muted-foreground">
+            {orphans.map((o) => (
+              <li key={`${o.propertyId}-${o.campaign}`}>
+                {propMap.get(o.propertyId)?.name ?? "Unknown location"} — “{o.campaign}” has {fmtUSD(o.cost)} of spend
+                this period but no longer exists in Google Ads.
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="rounded-lg border bg-card overflow-x-auto">
         <Table>

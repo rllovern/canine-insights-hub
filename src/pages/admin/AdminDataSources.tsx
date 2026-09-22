@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { GhlBackfillPanel } from "@/components/data/GhlBackfillPanel";
 import { OpenIncidentsPanel } from "@/components/data/OpenIncidentsPanel";
+import { StaleCampaignPanel } from "@/components/data/StaleCampaignPanel";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -180,6 +181,9 @@ export default function AdminDataSources() {
       </div>
 
       <OpenIncidentsPanel />
+
+      <StaleCampaignPanel />
+
 
       <GhlBackfillPanel />
 
