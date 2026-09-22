@@ -56,6 +56,12 @@ export function pacingVerdict(
   budget: number | null | undefined,
   daysElapsed: number,
   daysInMonth: number,
+  /**
+   * Fraction of the month's budget that should be spent by now. Defaults to
+   * elapsed days / days in month. A mid-month budget change makes the expected
+   * curve uneven, so the caller passes the prorated fraction instead.
+   */
+  targetFractionOverride?: number | null,
 ): PacingVerdict {
   if (!budget || !isFinite(budget) || budget <= 0) {
     return {
