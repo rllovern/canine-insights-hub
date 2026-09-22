@@ -508,7 +508,71 @@ export default function BudgetPacing() {
           </TableBody>
         </Table>
       </div>
+
+      {pending && (
+        <BudgetChangeDialog
+          propertyName={propMap.get(pending.row.property_id)?.name ?? "this location"}
+          previousBudget={Number(pending.row.monthly_budget)}
+          newBudget={pending.newBudget}
+          onCancel={() => setPending(null)}
+          onConfirm={(date, note) => commitBudgetChange(pending.row, pending.newBudget, date, note)}
+        />
+      )}
     </div>
+  );
+}
+
+function BudgetChangeDialog({
+  propertyName, previousBudget, newBudget, onCancel, onConfirm,
+}: {
+  propertyName: string;
+  previousBudget: number;
+  newBudget: number;
+  onCancel: () => void;
+  onConfirm: (effectiveDate: string, note: string) => void;
+}) {
+  const today = toISO(new Date());
+  const [date, setDate] = useState(today);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const midMonth = Number(date.slice(8, 10)) > 1;
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Budget change for {propertyName}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            {fmtUSD(previousBudget)} → <span className="font-medium text-foreground">{fmtUSD(newBudget)}</span> per month.
+          </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="eff-date">Effective date</Label>
+            <Input id="eff-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="eff-note">Note (optional)</Label>
+            <Input id="eff-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why the budget changed" />
+          </div>
+          {midMonth && (
+            <p className="rounded-md bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
+              Mid-month change — pacing for this month will be measured against the blended budget, so the row
+              won't read as over or under spent because of the change itself.
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
+          <Button
+            onClick={() => { setSaving(true); onConfirm(date, note); }}
+            disabled={saving || !date}
+          >
+            Save change
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
