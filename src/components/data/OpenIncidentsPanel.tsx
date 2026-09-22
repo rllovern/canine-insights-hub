@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, BellOff, Bell, Check, Loader2, Megaphone } from "lucide-react";
+import { AlertTriangle, BellOff, Bell, Check, Loader2, Megaphone, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import {
