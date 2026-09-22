@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, BellOff, Bell, Check, Loader2, Megaphone } from "lucide-react";
+import { AlertTriangle, BellOff, Bell, Check, Loader2, Megaphone, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import {
@@ -40,6 +40,18 @@ const SOURCE_LABELS: Record<string, string> = {
   ghl: "Go High Level",
 };
 
+const CLEARED_KEY = "incidentPanelCleared";
+
+function readCleared(): string[] {
+  try {
+    const raw = localStorage.getItem(CLEARED_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 export function OpenIncidentsPanel() {
   const { isSuperAdmin } = usePreviewMode();
   const navigate = useNavigate();
@@ -52,6 +64,16 @@ export function OpenIncidentsPanel() {
   const [reasonFor, setReasonFor] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cleared, setCleared] = useState<string[]>(() => readCleared());
+  const [showCleared, setShowCleared] = useState(false);
+
+  const clearedSet = useMemo(() => new Set(cleared), [cleared]);
+  const setClearedIds = (next: string[]) => {
+    setCleared(next);
+    try { localStorage.setItem(CLEARED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+  const clearCard = (id: string) => setClearedIds([...new Set([...cleared, id])]);
+  const restoreAll = () => setClearedIds([]);
 
   const load = useCallback(async () => {
     const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
@@ -110,20 +132,39 @@ export function OpenIncidentsPanel() {
     });
   };
 
+  const visibleIncidents = showCleared ? incidents : incidents.filter((i) => !clearedSet.has(i.id));
+  const visibleResolved = showCleared ? resolved : resolved.filter((i) => !clearedSet.has(`resolved:${i.id}`));
+  const hiddenCount =
+    incidents.filter((i) => clearedSet.has(i.id)).length +
+    resolved.filter((i) => clearedSet.has(`resolved:${i.id}`)).length;
+
   return (
     <div className="rounded-xl border border-border bg-card p-3">
       <div className="flex items-center gap-2 text-[13px] font-semibold">
         <AlertTriangle className="h-4 w-4 text-amber-600" />
         Open incidents
         {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            className="ml-auto text-[11px] font-normal text-muted-foreground underline underline-offset-2"
+            onClick={() => (showCleared ? restoreAll() : setShowCleared(true))}
+          >
+            {showCleared ? `Keep ${hiddenCount} visible` : `Show ${hiddenCount} cleared`}
+          </button>
+        )}
       </div>
 
-      {!loading && incidents.length === 0 && (
-        <p className="text-[11px] text-muted-foreground mt-1">No open incidents — every monitored source is reporting in.</p>
+      {!loading && visibleIncidents.length === 0 && (
+        <p className="text-[11px] text-muted-foreground mt-1">
+          {incidents.length === 0
+            ? "No open incidents — every monitored source is reporting in."
+            : "All open incidents cleared from view."}
+        </p>
       )}
 
       <div className="mt-2 space-y-3">
-        {incidents.map((inc) => {
+        {visibleIncidents.map((inc) => {
           const rb = inc.runbook_id ? runbook[inc.runbook_id] : undefined;
           const locationNames = inc.affected_property_ids.map((p) => names[p] ?? p);
           const preview = renderNotice(settings, inc.source, locationNames, inc.opened_at);
@@ -143,6 +184,16 @@ export function OpenIncidentsPanel() {
                 </div>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => toggleMute(inc)}>
                   {inc.muted ? <><Bell className="h-3.5 w-3.5 mr-1.5" /> Unmute</> : <><BellOff className="h-3.5 w-3.5 mr-1.5" /> Mute</>}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  title="I've seen this — clear it from the list"
+                  aria-label="Clear this incident from the list"
+                  onClick={() => clearCard(inc.id)}
+                >
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
 
@@ -208,11 +259,11 @@ export function OpenIncidentsPanel() {
         })}
       </div>
 
-      {resolved.length > 0 && (
+      {visibleResolved.length > 0 && (
         <div className="mt-4 border-t border-border pt-3">
           <div className="text-[12px] font-semibold">Recently resolved</div>
           <div className="mt-2 space-y-2">
-            {resolved.map((inc) => (
+            {visibleResolved.map((inc) => (
               <div key={inc.id} className="flex items-center gap-2">
                 <div className="flex-1 min-w-0 text-[11px] text-muted-foreground">
                   {SOURCE_LABELS[inc.source] ?? inc.source} · {inc.affected_property_ids.length} location
@@ -220,6 +271,16 @@ export function OpenIncidentsPanel() {
                 </div>
                 <Button size="sm" variant="ghost" onClick={() => draftAnnouncement(inc)}>
                   <Megaphone className="h-3.5 w-3.5 mr-1.5" /> Draft announcement
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  title="I've seen this — clear it from the list"
+                  aria-label="Clear this resolved incident from the list"
+                  onClick={() => clearCard(`resolved:${inc.id}`)}
+                >
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             ))}

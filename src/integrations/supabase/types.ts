@@ -414,6 +414,47 @@ export type Database = {
           },
         ]
       }
+      budget_change_log: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effective_date: string
+          id: string
+          monthly_budget: number
+          note: string | null
+          previous_budget: number | null
+          property_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effective_date: string
+          id?: string
+          monthly_budget: number
+          note?: string | null
+          previous_budget?: number | null
+          property_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effective_date?: string
+          id?: string
+          monthly_budget?: number
+          note?: string | null
+          previous_budget?: number | null
+          property_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_change_log_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_budgets: {
         Row: {
           campaign: string
