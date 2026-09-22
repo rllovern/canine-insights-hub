@@ -240,6 +240,17 @@ export default function BudgetPacing() {
     });
   }, [rows, metrics, budgets, labelIndex, range]);
 
+  // Campaign names that still carry spend in this period but are gone from the
+  // live campaign snapshot — the signature of a rename double-counting spend.
+  const orphans = useMemo(() => {
+    const fromISO = toISO(range.from);
+    const toIso = toISO(range.to);
+    return findOrphanCampaigns(
+      metrics.filter((m) => m.date >= fromISO && m.date <= toIso),
+      budgets,
+    );
+  }, [metrics, budgets, range]);
+
   const updateRow = async (id: string, patch: Partial<BudgetRow>) => {
     if (!isSuperAdmin) return;
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } as BudgetRow : r)));
