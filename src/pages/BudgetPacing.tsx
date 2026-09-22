@@ -76,6 +76,8 @@ export default function BudgetPacing() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [changes, setChanges] = useState<BudgetChange[]>([]);
+  const [pending, setPending] = useState<{ row: BudgetRow; newBudget: number } | null>(null);
 
   const range = useMemo(() => monthRange(month), [month]);
 
