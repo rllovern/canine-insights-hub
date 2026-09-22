@@ -300,6 +300,29 @@ export default function BudgetPacing() {
     if (error) toast({ title: "Save failed", description: error.message, variant: "destructive" });
   };
 
+  // Budget edits go through the change prompt so the effective date is recorded
+  // and pacing can prorate the month instead of reading wildly off-pace.
+  const commitBudgetChange = async (row: BudgetRow, newBudget: number, effectiveDate: string, note: string) => {
+    if (!isSuperAdmin) return;
+    const previous = Number(row.monthly_budget);
+    const { error } = await supabase.from("budget_accounts").update({ monthly_budget: newBudget }).eq("id", row.id);
+    if (error) return toast({ title: "Save failed", description: error.message, variant: "destructive" });
+    const { data: auth } = await supabase.auth.getUser();
+    const { error: logErr } = await supabase.from("budget_change_log").insert({
+      property_id: row.property_id,
+      effective_date: effectiveDate,
+      monthly_budget: newBudget,
+      previous_budget: previous,
+      note: note.trim() || null,
+      created_by: auth?.user?.id ?? null,
+    });
+    if (logErr) toast({ title: "Budget saved, history not recorded", description: logErr.message, variant: "destructive" });
+    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, monthly_budget: newBudget } : r)));
+    setPending(null);
+    await loadChanges();
+    toast({ title: "Budget updated", description: `Effective ${effectiveDate}.` });
+  };
+
   const deleteRow = async (id: string) => {
     if (!isSuperAdmin) return;
     if (!confirm("Delete this budget row?")) return;
