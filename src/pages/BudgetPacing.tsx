@@ -167,6 +167,24 @@ export default function BudgetPacing() {
     })();
   }, [scopedPropertyIds]);
 
+  const loadChanges = async () => {
+    if (scopedPropertyIds !== null && scopedPropertyIds.length === 0) {
+      setChanges([]);
+      return;
+    }
+    const monthEnd = new Date(range.from.getFullYear(), range.from.getMonth() + 1, 0);
+    let query = supabase
+      .from("budget_change_log")
+      .select("property_id, effective_date, monthly_budget, previous_budget, note")
+      .gte("effective_date", toISO(range.from))
+      .lte("effective_date", toISO(monthEnd));
+    if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
+    const { data } = await query;
+    setChanges((data ?? []) as BudgetChange[]);
+  };
+
+  useEffect(() => { loadChanges(); }, [month, scopedPropertyIds]);
+
   // property_id -> lower(label_name) -> Set<campaign>
   const labelIndex = useMemo(() => {
     const m = new Map<string, Map<string, Set<string>>>();
