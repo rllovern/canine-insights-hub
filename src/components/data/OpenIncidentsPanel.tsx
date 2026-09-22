@@ -40,6 +40,18 @@ const SOURCE_LABELS: Record<string, string> = {
   ghl: "Go High Level",
 };
 
+const CLEARED_KEY = "incidentPanelCleared";
+
+function readCleared(): string[] {
+  try {
+    const raw = localStorage.getItem(CLEARED_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 export function OpenIncidentsPanel() {
   const { isSuperAdmin } = usePreviewMode();
   const navigate = useNavigate();
