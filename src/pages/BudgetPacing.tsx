@@ -314,6 +314,20 @@ export default function BudgetPacing() {
         </div>
       </div>
 
+      {orphans.length > 0 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+          <div className="font-medium text-amber-700 dark:text-amber-300">Possible renamed campaigns counted twice</div>
+          <ul className="mt-1 space-y-0.5 text-muted-foreground">
+            {orphans.map((o) => (
+              <li key={`${o.propertyId}-${o.campaign}`}>
+                {propMap.get(o.propertyId)?.name ?? "Unknown location"} — “{o.campaign}” has {fmtUSD(o.cost)} of spend
+                this period but no longer exists in Google Ads.
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="rounded-lg border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
