@@ -185,6 +185,16 @@ export function OpenIncidentsPanel() {
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => toggleMute(inc)}>
                   {inc.muted ? <><Bell className="h-3.5 w-3.5 mr-1.5" /> Unmute</> : <><BellOff className="h-3.5 w-3.5 mr-1.5" /> Mute</>}
                 </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  title="I've seen this — clear it from the list"
+                  aria-label="Clear this incident from the list"
+                  onClick={() => clearCard(inc.id)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
 
               {reasonFor === inc.id && !inc.muted && (
