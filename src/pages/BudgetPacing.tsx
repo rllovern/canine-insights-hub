@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import { pacingVerdict, runRateVerdict, isExcludedCampaign } from "@/lib/budgetPacing";
+import { pacingVerdict, runRateVerdict, isExcludedCampaign, findOrphanCampaigns } from "@/lib/budgetPacing";
 
 type BudgetRow = {
   id: string;
