@@ -64,6 +64,16 @@ export function OpenIncidentsPanel() {
   const [reasonFor, setReasonFor] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cleared, setCleared] = useState<string[]>(() => readCleared());
+  const [showCleared, setShowCleared] = useState(false);
+
+  const clearedSet = useMemo(() => new Set(cleared), [cleared]);
+  const setClearedIds = (next: string[]) => {
+    setCleared(next);
+    try { localStorage.setItem(CLEARED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+  const clearCard = (id: string) => setClearedIds([...new Set([...cleared, id])]);
+  const restoreAll = () => setClearedIds([]);
 
   const load = useCallback(async () => {
     const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
