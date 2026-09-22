@@ -259,11 +259,11 @@ export function OpenIncidentsPanel() {
         })}
       </div>
 
-      {resolved.length > 0 && (
+      {visibleResolved.length > 0 && (
         <div className="mt-4 border-t border-border pt-3">
           <div className="text-[12px] font-semibold">Recently resolved</div>
           <div className="mt-2 space-y-2">
-            {resolved.map((inc) => (
+            {visibleResolved.map((inc) => (
               <div key={inc.id} className="flex items-center gap-2">
                 <div className="flex-1 min-w-0 text-[11px] text-muted-foreground">
                   {SOURCE_LABELS[inc.source] ?? inc.source} · {inc.affected_property_ids.length} location
@@ -271,6 +271,16 @@ export function OpenIncidentsPanel() {
                 </div>
                 <Button size="sm" variant="ghost" onClick={() => draftAnnouncement(inc)}>
                   <Megaphone className="h-3.5 w-3.5 mr-1.5" /> Draft announcement
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  title="I've seen this — clear it from the list"
+                  aria-label="Clear this resolved incident from the list"
+                  onClick={() => clearCard(`resolved:${inc.id}`)}
+                >
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             ))}
