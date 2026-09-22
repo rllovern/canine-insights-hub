@@ -12,10 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import {
-  pacingVerdict, runRateVerdict, isExcludedCampaign, findOrphanCampaigns,
-  buildBudgetProfile, type BudgetChange,
-} from "@/lib/budgetPacing";
+import { pacingVerdict, runRateVerdict, isExcludedCampaign, findOrphanCampaigns } from "@/lib/budgetPacing";
 
 type BudgetRow = {
   id: string;
@@ -76,8 +73,6 @@ export default function BudgetPacing() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [changes, setChanges] = useState<BudgetChange[]>([]);
-  const [pending, setPending] = useState<{ row: BudgetRow; newBudget: number } | null>(null);
 
   const range = useMemo(() => monthRange(month), [month]);
 
@@ -167,24 +162,6 @@ export default function BudgetPacing() {
     })();
   }, [scopedPropertyIds]);
 
-  const loadChanges = async () => {
-    if (scopedPropertyIds !== null && scopedPropertyIds.length === 0) {
-      setChanges([]);
-      return;
-    }
-    const monthEnd = new Date(range.from.getFullYear(), range.from.getMonth() + 1, 0);
-    let query = supabase
-      .from("budget_change_log")
-      .select("property_id, effective_date, monthly_budget, previous_budget, note")
-      .gte("effective_date", toISO(range.from))
-      .lte("effective_date", toISO(monthEnd));
-    if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
-    const { data } = await query;
-    setChanges((data ?? []) as BudgetChange[]);
-  };
-
-  useEffect(() => { loadChanges(); }, [month, scopedPropertyIds]);
-
   // property_id -> lower(label_name) -> Set<campaign>
   const labelIndex = useMemo(() => {
     const m = new Map<string, Map<string, Set<string>>>();
@@ -251,36 +228,17 @@ export default function BudgetPacing() {
             .join("\n")}\n\nLocal Services / auto-generated campaigns are excluded.`
         : "No enabled PPC campaigns match this budget row. Local Services / auto-generated campaigns are excluded.";
 
-      // A budget change part way through the month makes the full-month figure
-      // the wrong yardstick — prorate it day by day instead.
-      const profile = buildBudgetProfile(
-        Number(r.monthly_budget),
-        changes.filter((c) => c.property_id === r.property_id),
-        range.totalDays,
-        range.daysElapsed,
-      );
-      const effBudget = profile.monthlyEquivalent;
-
-      const pctSpend = effBudget > 0 ? spends / effBudget : null;
-      const targetDaily = range.daysRemaining > 0 ? Math.max(0, effBudget - spends) / range.daysRemaining : null;
+      const pctSpend = r.monthly_budget > 0 ? spends / r.monthly_budget : null;
+      const targetDaily = range.daysRemaining > 0 ? Math.max(0, r.monthly_budget - spends) / range.daysRemaining : null;
       const projection = range.isCurrent ? spends + avgLast5 * range.daysRemaining : spends;
-      const projRunRate = effBudget > 0 ? projection / effBudget : null;
+      const projRunRate = r.monthly_budget > 0 ? projection / r.monthly_budget : null;
 
-      const pace = pacingVerdict(spends, effBudget, range.daysElapsed, range.totalDays, profile.expectedFraction);
-      const runRate = runRateVerdict(projection, effBudget);
+      const pace = pacingVerdict(spends, Number(r.monthly_budget), range.daysElapsed, range.totalDays);
+      const runRate = runRateVerdict(projection, Number(r.monthly_budget));
 
-      const budgetTooltip = profile.changedMidMonth
-        ? `Budget changed mid-month:\n${profile.changes
-            .map((c) => `• ${c.effective_date} → ${fmtUSD(Number(c.monthly_budget))}${c.note ? ` (${c.note})` : ""}`)
-            .join("\n")}\n\nPacing uses the prorated month: ${fmtUSD(effBudget)} blended, ${fmtUSD(profile.expectedToDate)} expected by day ${range.daysElapsed}.`
-        : undefined;
-
-      return {
-        row: r, spends, pctSpend, yesterday, activeBudget, activeBudgetTooltip,
-        targetDaily, projection, projRunRate, pace, runRate, profile, budgetTooltip,
-      };
+      return { row: r, spends, pctSpend, yesterday, activeBudget, activeBudgetTooltip, targetDaily, projection, projRunRate, pace, runRate };
     });
-  }, [rows, metrics, budgets, labelIndex, range, changes]);
+  }, [rows, metrics, budgets, labelIndex, range]);
 
   // Campaign names that still carry spend in this period but are gone from the
   // live campaign snapshot — the signature of a rename double-counting spend.
@@ -298,29 +256,6 @@ export default function BudgetPacing() {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } as BudgetRow : r)));
     const { error } = await supabase.from("budget_accounts").update(patch).eq("id", id);
     if (error) toast({ title: "Save failed", description: error.message, variant: "destructive" });
-  };
-
-  // Budget edits go through the change prompt so the effective date is recorded
-  // and pacing can prorate the month instead of reading wildly off-pace.
-  const commitBudgetChange = async (row: BudgetRow, newBudget: number, effectiveDate: string, note: string) => {
-    if (!isSuperAdmin) return;
-    const previous = Number(row.monthly_budget);
-    const { error } = await supabase.from("budget_accounts").update({ monthly_budget: newBudget }).eq("id", row.id);
-    if (error) return toast({ title: "Save failed", description: error.message, variant: "destructive" });
-    const { data: auth } = await supabase.auth.getUser();
-    const { error: logErr } = await supabase.from("budget_change_log").insert({
-      property_id: row.property_id,
-      effective_date: effectiveDate,
-      monthly_budget: newBudget,
-      previous_budget: previous,
-      note: note.trim() || null,
-      created_by: auth?.user?.id ?? null,
-    });
-    if (logErr) toast({ title: "Budget saved, history not recorded", description: logErr.message, variant: "destructive" });
-    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, monthly_budget: newBudget } : r)));
-    setPending(null);
-    await loadChanges();
-    toast({ title: "Budget updated", description: `Effective ${effectiveDate}.` });
   };
 
   const deleteRow = async (id: string) => {
@@ -448,17 +383,9 @@ export default function BudgetPacing() {
                       display={fmtUSD(Number(c.row.monthly_budget))}
                       onSave={(v) => {
                         const n = Number(v);
-                        if (!isNaN(n) && n !== Number(c.row.monthly_budget)) setPending({ row: c.row, newBudget: n });
+                        if (!isNaN(n) && n !== Number(c.row.monthly_budget)) updateRow(c.row.id, { monthly_budget: n });
                       }}
                     />
-                    {c.profile.changedMidMonth && (
-                      <div
-                        className="mt-1 inline-block cursor-help rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300"
-                        title={c.budgetTooltip}
-                      >
-                        Changed mid-month · {fmtUSD(c.profile.monthlyEquivalent)} prorated
-                      </div>
-                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmtUSD(c.spends)}</TableCell>
                   <TableCell className="text-right tabular-nums">
@@ -508,71 +435,7 @@ export default function BudgetPacing() {
           </TableBody>
         </Table>
       </div>
-
-      {pending && (
-        <BudgetChangeDialog
-          propertyName={propMap.get(pending.row.property_id)?.name ?? "this location"}
-          previousBudget={Number(pending.row.monthly_budget)}
-          newBudget={pending.newBudget}
-          onCancel={() => setPending(null)}
-          onConfirm={(date, note) => commitBudgetChange(pending.row, pending.newBudget, date, note)}
-        />
-      )}
     </div>
-  );
-}
-
-function BudgetChangeDialog({
-  propertyName, previousBudget, newBudget, onCancel, onConfirm,
-}: {
-  propertyName: string;
-  previousBudget: number;
-  newBudget: number;
-  onCancel: () => void;
-  onConfirm: (effectiveDate: string, note: string) => void;
-}) {
-  const today = toISO(new Date());
-  const [date, setDate] = useState(today);
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-  const midMonth = Number(date.slice(8, 10)) > 1;
-
-  return (
-    <Dialog open onOpenChange={(o) => { if (!o) onCancel(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Budget change for {propertyName}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 text-sm">
-          <p className="text-muted-foreground">
-            {fmtUSD(previousBudget)} → <span className="font-medium text-foreground">{fmtUSD(newBudget)}</span> per month.
-          </p>
-          <div className="space-y-1.5">
-            <Label htmlFor="eff-date">Effective date</Label>
-            <Input id="eff-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="eff-note">Note (optional)</Label>
-            <Input id="eff-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why the budget changed" />
-          </div>
-          {midMonth && (
-            <p className="rounded-md bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
-              Mid-month change — pacing for this month will be measured against the blended budget, so the row
-              won't read as over or under spent because of the change itself.
-            </p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
-          <Button
-            onClick={() => { setSaving(true); onConfirm(date, note); }}
-            disabled={saving || !date}
-          >
-            Save change
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

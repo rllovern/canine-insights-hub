@@ -56,12 +56,6 @@ export function pacingVerdict(
   budget: number | null | undefined,
   daysElapsed: number,
   daysInMonth: number,
-  /**
-   * Fraction of the month's budget that should be spent by now. Defaults to
-   * elapsed days / days in month. A mid-month budget change makes the expected
-   * curve uneven, so the caller passes the prorated fraction instead.
-   */
-  targetFractionOverride?: number | null,
 ): PacingVerdict {
   if (!budget || !isFinite(budget) || budget <= 0) {
     return {
@@ -74,12 +68,7 @@ export function pacingVerdict(
   }
 
   const actualPct = spend / budget;
-  const targetPct =
-    targetFractionOverride != null && isFinite(targetFractionOverride)
-      ? Math.max(0, Math.min(1, targetFractionOverride))
-      : daysInMonth > 0
-        ? Math.min(1, daysElapsed / daysInMonth)
-        : 1;
+  const targetPct = daysInMonth > 0 ? Math.min(1, daysElapsed / daysInMonth) : 1;
   const gapPoints = (actualPct - targetPct) * 100;
   const abs = Math.abs(gapPoints);
   const ahead = gapPoints > 0;
@@ -197,82 +186,4 @@ export function findOrphanCampaigns(
     else totals.set(key, { propertyId: m.property_id, campaign: name, cost });
   }
   return Array.from(totals.values()).sort((a, b) => b.cost - a.cost);
-}
-
-/**
- * Mid-month budget changes.
- *
- * The monthly budget on a row is a single number, but it can change part way
- * through the month. Judging month-to-date spend against the new full-month
- * figure makes a location that halved its budget on the 10th look wildly over
- * (or under) budget. Instead we prorate: each day of the month is worth
- * (budget in effect that day / days in month), and both the month's budget and
- * the expected-by-now figure are the sums of those daily amounts.
- */
-export type BudgetChange = {
-  property_id: string;
-  effective_date: string; // YYYY-MM-DD
-  monthly_budget: number;
-  previous_budget: number | null;
-  note: string | null;
-};
-
-export type BudgetProfile = {
-  /** Blended budget for the whole month. */
-  monthlyEquivalent: number;
-  /** Prorated amount that should have been spent by the elapsed day. */
-  expectedToDate: number;
-  /** expectedToDate / monthlyEquivalent, for the pacing bands. */
-  expectedFraction: number | null;
-  /** True when a change took effect after the 1st of the month. */
-  changedMidMonth: boolean;
-  changes: BudgetChange[];
-};
-
-export function buildBudgetProfile(
-  currentBudget: number,
-  changesInMonth: BudgetChange[],
-  totalDays: number,
-  daysElapsed: number,
-): BudgetProfile {
-  const changes = [...changesInMonth]
-    .filter((c) => Number(c.effective_date.slice(8, 10)) > 1)
-    .sort((a, b) => a.effective_date.localeCompare(b.effective_date));
-
-  if (changes.length === 0 || totalDays <= 0) {
-    const monthlyEquivalent = Number(currentBudget) || 0;
-    const expectedFraction = totalDays > 0 ? Math.min(1, daysElapsed / totalDays) : 1;
-    return {
-      monthlyEquivalent,
-      expectedToDate: monthlyEquivalent * expectedFraction,
-      expectedFraction: monthlyEquivalent > 0 ? expectedFraction : null,
-      changedMidMonth: false,
-      changes: [],
-    };
-  }
-
-  // Budget in force before the first change of the month: what the first change
-  // recorded as the previous value, falling back to today's figure.
-  const startBudget = Number(changes[0].previous_budget ?? currentBudget) || 0;
-
-  let monthlyEquivalent = 0;
-  let expectedToDate = 0;
-  for (let day = 1; day <= totalDays; day++) {
-    let inForce = startBudget;
-    for (const c of changes) {
-      if (Number(c.effective_date.slice(8, 10)) <= day) inForce = Number(c.monthly_budget) || 0;
-      else break;
-    }
-    const daily = inForce / totalDays;
-    monthlyEquivalent += daily;
-    if (day <= daysElapsed) expectedToDate += daily;
-  }
-
-  return {
-    monthlyEquivalent,
-    expectedToDate,
-    expectedFraction: monthlyEquivalent > 0 ? expectedToDate / monthlyEquivalent : null,
-    changedMidMonth: true,
-    changes,
-  };
 }
