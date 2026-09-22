@@ -132,20 +132,39 @@ export function OpenIncidentsPanel() {
     });
   };
 
+  const visibleIncidents = showCleared ? incidents : incidents.filter((i) => !clearedSet.has(i.id));
+  const visibleResolved = showCleared ? resolved : resolved.filter((i) => !clearedSet.has(`resolved:${i.id}`));
+  const hiddenCount =
+    incidents.filter((i) => clearedSet.has(i.id)).length +
+    resolved.filter((i) => clearedSet.has(`resolved:${i.id}`)).length;
+
   return (
     <div className="rounded-xl border border-border bg-card p-3">
       <div className="flex items-center gap-2 text-[13px] font-semibold">
         <AlertTriangle className="h-4 w-4 text-amber-600" />
         Open incidents
         {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            className="ml-auto text-[11px] font-normal text-muted-foreground underline underline-offset-2"
+            onClick={() => (showCleared ? restoreAll() : setShowCleared(true))}
+          >
+            {showCleared ? `Keep ${hiddenCount} visible` : `Show ${hiddenCount} cleared`}
+          </button>
+        )}
       </div>
 
-      {!loading && incidents.length === 0 && (
-        <p className="text-[11px] text-muted-foreground mt-1">No open incidents — every monitored source is reporting in.</p>
+      {!loading && visibleIncidents.length === 0 && (
+        <p className="text-[11px] text-muted-foreground mt-1">
+          {incidents.length === 0
+            ? "No open incidents — every monitored source is reporting in."
+            : "All open incidents cleared from view."}
+        </p>
       )}
 
       <div className="mt-2 space-y-3">
-        {incidents.map((inc) => {
+        {visibleIncidents.map((inc) => {
           const rb = inc.runbook_id ? runbook[inc.runbook_id] : undefined;
           const locationNames = inc.affected_property_ids.map((p) => names[p] ?? p);
           const preview = renderNotice(settings, inc.source, locationNames, inc.opened_at);
