@@ -228,17 +228,36 @@ export default function BudgetPacing() {
             .join("\n")}\n\nLocal Services / auto-generated campaigns are excluded.`
         : "No enabled PPC campaigns match this budget row. Local Services / auto-generated campaigns are excluded.";
 
-      const pctSpend = r.monthly_budget > 0 ? spends / r.monthly_budget : null;
-      const targetDaily = range.daysRemaining > 0 ? Math.max(0, r.monthly_budget - spends) / range.daysRemaining : null;
+      // A budget change part way through the month makes the full-month figure
+      // the wrong yardstick — prorate it day by day instead.
+      const profile = buildBudgetProfile(
+        Number(r.monthly_budget),
+        changes.filter((c) => c.property_id === r.property_id),
+        range.totalDays,
+        range.daysElapsed,
+      );
+      const effBudget = profile.monthlyEquivalent;
+
+      const pctSpend = effBudget > 0 ? spends / effBudget : null;
+      const targetDaily = range.daysRemaining > 0 ? Math.max(0, effBudget - spends) / range.daysRemaining : null;
       const projection = range.isCurrent ? spends + avgLast5 * range.daysRemaining : spends;
-      const projRunRate = r.monthly_budget > 0 ? projection / r.monthly_budget : null;
+      const projRunRate = effBudget > 0 ? projection / effBudget : null;
 
-      const pace = pacingVerdict(spends, Number(r.monthly_budget), range.daysElapsed, range.totalDays);
-      const runRate = runRateVerdict(projection, Number(r.monthly_budget));
+      const pace = pacingVerdict(spends, effBudget, range.daysElapsed, range.totalDays, profile.expectedFraction);
+      const runRate = runRateVerdict(projection, effBudget);
 
-      return { row: r, spends, pctSpend, yesterday, activeBudget, activeBudgetTooltip, targetDaily, projection, projRunRate, pace, runRate };
+      const budgetTooltip = profile.changedMidMonth
+        ? `Budget changed mid-month:\n${profile.changes
+            .map((c) => `• ${c.effective_date} → ${fmtUSD(Number(c.monthly_budget))}${c.note ? ` (${c.note})` : ""}`)
+            .join("\n")}\n\nPacing uses the prorated month: ${fmtUSD(effBudget)} blended, ${fmtUSD(profile.expectedToDate)} expected by day ${range.daysElapsed}.`
+        : undefined;
+
+      return {
+        row: r, spends, pctSpend, yesterday, activeBudget, activeBudgetTooltip,
+        targetDaily, projection, projRunRate, pace, runRate, profile, budgetTooltip,
+      };
     });
-  }, [rows, metrics, budgets, labelIndex, range]);
+  }, [rows, metrics, budgets, labelIndex, range, changes]);
 
   // Campaign names that still carry spend in this period but are gone from the
   // live campaign snapshot — the signature of a rename double-counting spend.
