@@ -17,12 +17,13 @@ export function ScopeSelector({
 } = {}) {
   const { mode, propertyId, setScope, label } = useScope();
   const { properties } = useProperties();
-  const { isAllPropertiesReader, isLocationOwner } = usePreviewMode();
+  const { isAllPropertiesReader, isLocationOwner, isPreviewing } = usePreviewMode();
   const [open, setOpen] = useState(false);
 
   const agencyLabel = isAllPropertiesReader ? "All locations" : "All my properties";
+  const hideAgency = isLocationOwner && isPreviewing;
 
-  if (isLocationOwner) {
+  if (isLocationOwner && !isPreviewing) {
     return (
       <div className="w-full rounded-md bg-white/[0.05] px-3 py-2 text-left text-xs font-medium text-white/85">
         <span className="flex min-w-0 items-center gap-2">
@@ -61,17 +62,21 @@ export function ScopeSelector({
           <CommandInput placeholder="Search location…" className="h-9" />
           <CommandList className="max-h-[60vh]">
             <CommandEmpty>No matches.</CommandEmpty>
-            <CommandGroup heading="Scope">
-              <CommandItem
-                value="__agency__"
-                onSelect={() => { setScope({ mode: "agency" }); setOpen(false); onScopeChange?.(); }}
-              >
-                <Globe2 className="size-3.5 mr-2 text-primary" />
-                <span>{agencyLabel}</span>
-                <Check className={cn("ml-auto size-3.5", mode === "agency" ? "opacity-100" : "opacity-0")} />
-              </CommandItem>
-            </CommandGroup>
-            <CommandSeparator />
+            {!hideAgency && (
+              <>
+                <CommandGroup heading="Scope">
+                  <CommandItem
+                    value="__agency__"
+                    onSelect={() => { setScope({ mode: "agency" }); setOpen(false); onScopeChange?.(); }}
+                  >
+                    <Globe2 className="size-3.5 mr-2 text-primary" />
+                    <span>{agencyLabel}</span>
+                    <Check className={cn("ml-auto size-3.5", mode === "agency" ? "opacity-100" : "opacity-0")} />
+                  </CommandItem>
+                </CommandGroup>
+                <CommandSeparator />
+              </>
+            )}
             <CommandGroup heading="Locations">
               {properties.map((p) => (
                 <CommandItem
