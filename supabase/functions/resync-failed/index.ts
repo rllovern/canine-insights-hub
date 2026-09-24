@@ -202,8 +202,22 @@ Deno.serve(async (req) => {
     //     mid-flight or a previous resync tick is stuck.
     //  c) last successful run is older than 5h — the pair was silently
     //     skipped by the 4h scheduled loop and would otherwise never self-heal.
+    // GHL writes failed runs with a non-null phase, so also look for a failure
+    // at any phase that is newer than the last pair-level row. Backoff above
+    // still limits how often a persistently failing pair is retried.
+    const { data: lastFail } = await admin
+      .from("sync_runs")
+      .select("started_at")
+      .eq("property_id", property_id)
+      .eq("source", source)
+      .eq("status", "failure")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const freshFailure = !!lastFail && (!last || lastFail.started_at > last.started_at);
+
     let eligible = false;
-    if (last && last.status === "failure") {
+    if ((last && last.status === "failure") || freshFailure) {
       eligible = true;
     } else if (last && last.status === "running" && last.started_at < fiveMinAgo) {
       eligible = true;
