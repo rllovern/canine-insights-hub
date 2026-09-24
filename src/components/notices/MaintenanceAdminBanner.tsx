@@ -12,7 +12,8 @@ export function MaintenanceAdminBanner() {
   const { effectiveRole, realRole } = usePreviewMode();
   const [busy, setBusy] = useState(false);
 
-  const isStaffViewer = effectiveRole === "super_admin" || effectiveRole === "admin";
+  const isStaffViewer =
+    effectiveRole === "super_admin" || effectiveRole === "admin" || realRole === "super_admin";
   if (!maintenanceOn || !isStaffViewer) return null;
 
   const turnOff = async () => {

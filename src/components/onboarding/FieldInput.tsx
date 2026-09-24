@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -72,7 +73,13 @@ function GeoList({ value, onChange }: { value: unknown; onChange: (v: unknown) =
 }
 
 function RankList({ options, value, onChange }: { options: string[]; value: unknown; onChange: (v: unknown) => void }) {
-  const order: string[] = Array.isArray(value) && (value as string[]).length === options.length ? (value as string[]) : options;
+  const valid = Array.isArray(value) && (value as string[]).length === options.length;
+  const order: string[] = valid ? (value as string[]) : options;
+  // The list looks ranked from the start, so record that default order as the answer.
+  useEffect(() => {
+    if (!valid && options.length > 0) onChange([...options]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valid, options.join("|")]);
   const move = (i: number, dir: -1 | 1) => {
     const next = [...order];
     const j = i + dir;

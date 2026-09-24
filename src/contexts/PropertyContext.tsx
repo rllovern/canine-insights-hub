@@ -26,7 +26,7 @@ const PropertyContext = createContext<PropertyContextValue | undefined>(undefine
 
 export function PropertyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const { effectiveRole, impersonatedUserId } = usePreviewMode();
+  const { effectiveRole, impersonatedUserId, isPreviewing } = usePreviewMode();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeProperty, setActivePropertyState] = useState<Property | null>(null);
@@ -46,8 +46,10 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     let query = supabase.from("properties").select("*").order("name");
 
-    // Location Owner (real or previewed) — filter client-side to assigned set.
-    if (effectiveRole === "location_owner") {
+    // Location Owner — filter client-side to assigned set. A Super Admin
+    // previewing the role has no grants of their own, so they keep every
+    // location and pick one with the location switcher.
+    if (effectiveRole === "location_owner" && !isPreviewing) {
       // Super Admin previewing → scope to Bob's access grants.
       // Real Location Owner → their own grants.
       const accessUserId = impersonatedUserId ?? user.id;
@@ -88,7 +90,7 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
       setActivePropertyState(found);
     }
     setLoading(false);
-  }, [user, effectiveRole, impersonatedUserId]);
+  }, [user, effectiveRole, impersonatedUserId, isPreviewing]);
 
   useEffect(() => {
     load();

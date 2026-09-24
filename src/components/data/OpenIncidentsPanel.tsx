@@ -72,7 +72,10 @@ export function OpenIncidentsPanel() {
     setCleared(next);
     try { localStorage.setItem(CLEARED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   };
-  const clearCard = (id: string) => setClearedIds([...new Set([...cleared, id])]);
+  const clearCard = (id: string) => {
+    setClearedIds([...new Set([...cleared, id])]);
+    setShowCleared(false);
+  };
   const restoreAll = () => setClearedIds([]);
 
   const load = useCallback(async () => {
@@ -148,7 +151,10 @@ export function OpenIncidentsPanel() {
           <button
             type="button"
             className="ml-auto text-[11px] font-normal text-muted-foreground underline underline-offset-2"
-            onClick={() => (showCleared ? restoreAll() : setShowCleared(true))}
+            onClick={() => {
+              if (showCleared) restoreAll();
+              setShowCleared(!showCleared);
+            }}
           >
             {showCleared ? `Keep ${hiddenCount} visible` : `Show ${hiddenCount} cleared`}
           </button>

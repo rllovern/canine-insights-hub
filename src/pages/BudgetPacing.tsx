@@ -23,7 +23,7 @@ type BudgetRow = {
   sort_order: number;
 };
 
-type MetricRow = { date: string; campaign: string; cost: number; property_id: string };
+type MetricRow = { date: string; campaign: string; cost: number; property_id: string; ad_source: string | null };
 type BudgetSnap = { property_id: string; campaign: string; daily_budget: number; status: string };
 type LabelRow = { property_id: string; campaign: string; label_name: string };
 
@@ -127,7 +127,7 @@ export default function BudgetPacing() {
       const toIso = toISO(range.to);
       let query = supabase
         .from("daily_metrics")
-        .select("property_id, date, campaign, cost")
+        .select("property_id, date, campaign, cost, ad_source")
         .gte("date", fromISO)
         .lte("date", toIso);
       if (scopedPropertyIds !== null) query = query.in("property_id", scopedPropertyIds);
@@ -246,7 +246,8 @@ export default function BudgetPacing() {
     const fromISO = toISO(range.from);
     const toIso = toISO(range.to);
     return findOrphanCampaigns(
-      metrics.filter((m) => m.date >= fromISO && m.date <= toIso),
+      // Only Google Ads spend can be compared with the Google campaign list.
+      metrics.filter((m) => m.ad_source === "Google PPC" && m.date >= fromISO && m.date <= toIso),
       budgets,
     );
   }, [metrics, budgets, range]);
