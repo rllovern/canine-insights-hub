@@ -33,7 +33,7 @@ function readStored(): Stored | null {
 
 export function ScopeProvider({ children }: { children: ReactNode }) {
   const { properties, loading, publicProperty } = useProperties();
-  const { effectiveRole, isAllPropertiesReader, isLocationOwner } = usePreviewMode();
+  const { effectiveRole, isAllPropertiesReader, isLocationOwner, isPreviewing } = usePreviewMode();
   const [mode, setMode] = useState<ScopeMode>("agency");
   const [propertyId, setPropertyId] = useState<string | null>(null);
 
@@ -48,9 +48,15 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
     if (loading) return;
     // Location Owner: force property scope to their (single) assigned property.
     if (isLocationOwner) {
-      const first = properties[0] ?? null;
+      if (properties.length === 0) return;
+      let pick = properties[0];
+      if (isPreviewing) {
+        const stored = readStored();
+        const found = stored?.propertyId ? properties.find((p) => p.id === stored.propertyId) : undefined;
+        if (found) pick = found;
+      }
       setMode("property");
-      setPropertyId(first?.id ?? null);
+      setPropertyId(pick.id);
       return;
     }
     const stored = readStored();
@@ -66,7 +72,7 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
     }
     // Defaults: agency view for everyone else.
     setMode("agency"); setPropertyId(null);
-  }, [loading, properties, isLocationOwner, publicProperty]);
+  }, [loading, properties, isLocationOwner, isPreviewing, publicProperty]);
 
   const setScope = useCallback((next: { mode: ScopeMode; propertyId?: string | null }) => {
     const nextMode = next.mode;
