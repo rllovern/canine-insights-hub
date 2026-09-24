@@ -109,6 +109,8 @@ interface NoticeContextValue {
   /** This viewer must be shown the full-screen maintenance page. */
   blockedByMaintenance: boolean;
   delayNotices: DelayNotice[];
+  /** Text for an incident-driven lockout (owner_notice = maintenance). */
+  lockoutNotice: { title: string; body: string } | null;
   settings: NoticeSettings;
   currentAnnouncement: Announcement | null;
   dismissAnnouncement: (a: Announcement) => Promise<void>;
@@ -128,6 +130,7 @@ const FALLBACK: NoticeContextValue = {
   maintenanceOn: false,
   blockedByMaintenance: false,
   delayNotices: [],
+  lockoutNotice: null,
   settings: DEFAULT_NOTICE_SETTINGS,
   currentAnnouncement: null,
   dismissAnnouncement: async () => {},
@@ -214,6 +217,14 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     );
   }, [isStaffViewer, myIncidents, myPropertyIds.length]);
 
+  const lockoutNotice = useMemo(() => {
+    if (!incidentLockout) return null;
+    const hit = myIncidents.find(
+      (x) => x.incident.owner_notice === "maintenance" && x.mine.length === myPropertyIds.length,
+    );
+    return hit ? renderNotice(settings, hit.incident.source, hit.mine.map(nameOf), hit.incident.opened_at) : null;
+  }, [incidentLockout, myIncidents, myPropertyIds.length, settings, nameOf]);
+
   const delayNotices = useMemo<DelayNotice[]>(() => {
     if (isStaffViewer) return [];
     const out: DelayNotice[] = [];
@@ -276,6 +287,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
       maintenanceOn,
       blockedByMaintenance,
       delayNotices,
+      lockoutNotice,
       settings,
       currentAnnouncement,
       dismissAnnouncement,
@@ -284,7 +296,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
       modalsAllowed: !loading && !blockedByMaintenance && !currentAnnouncement,
       reload: load,
     }),
-    [loading, maintenance, maintenanceOn, blockedByMaintenance, delayNotices, settings, currentAnnouncement, dismissAnnouncement, load],
+    [loading, maintenance, maintenanceOn, blockedByMaintenance, delayNotices, lockoutNotice, settings, currentAnnouncement, dismissAnnouncement, load],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
