@@ -1,0 +1,1 @@
+- Monthly client reports are built by the `monthly-report-data` edge function (super-admin JWT or a property's public_report_token) and rendered client-side as fixed Letter `.rd-page` blocks exported page-by-page to PDF; why: one document serves both the admin tab and the shareable client link.
