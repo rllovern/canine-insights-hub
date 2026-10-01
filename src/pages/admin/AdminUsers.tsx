@@ -261,6 +261,15 @@ export default function AdminUsers() {
     load();
   };
 
+  const lastSignInFor = (userId: string) =>
+    authUsers.find((u) => u.id === userId)?.last_sign_in_at ?? null;
+
+  const formatLastSignIn = (iso: string | null) => {
+    if (!iso) return "Never signed in";
+    const d = new Date(iso);
+    return `Last sign-in: ${d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  };
+
   const renderIdentity = (userId: string) => {
     const email = emailFor(userId);
     const name = displayNameFor(userId);
@@ -273,6 +282,11 @@ export default function AdminUsers() {
           <div className="truncate text-[11px] text-muted-foreground">{email}</div>
         )}
         <div className="truncate font-mono text-[10px] text-muted-foreground">{userId}</div>
+        {isSuperAdmin && (
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {formatLastSignIn(lastSignInFor(userId))}
+          </div>
+        )}
         {mustChangeFor(userId) && (
           <Badge variant="secondary" className="mt-1 text-[10px]">Pending password setup</Badge>
         )}
