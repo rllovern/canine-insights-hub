@@ -221,3 +221,37 @@ All colors MUST be HSL.
   from { opacity: 0; transform: translateX(10px); }
   to { opacity: 1; transform: none; }
 }
+
+/* Monthly client report document — always light, print-sized (Letter @ 96dpi). */
+.report-doc {
+  --rd-ink: 222 60% 14%;
+  --rd-navy: 222 60% 20%;
+  --rd-red: 354 70% 45%;
+  --rd-muted: 220 12% 46%;
+  --rd-line: 220 16% 88%;
+  --rd-soft: 36 30% 96%;
+  --rd-paper: 0 0% 100%;
+  --rd-good: 152 55% 34%;
+  --rd-warn: 38 90% 45%;
+  color: hsl(var(--rd-ink));
+}
+.report-doc .rd-page { width: 816px; height: 1056px; background: hsl(var(--rd-paper)); position: relative; overflow: hidden; padding: 56px 56px 72px; box-shadow: 0 2px 18px hsl(222 60% 14% / 0.12); }
+.report-doc .rd-cover { background: hsl(var(--rd-navy)); color: hsl(var(--rd-paper)); }
+.report-doc .rd-h { font-size: 26px; font-weight: 700; color: hsl(var(--rd-navy)); letter-spacing: -0.01em; }
+.report-doc .rd-kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: hsl(var(--rd-red)); }
+.report-doc .rd-muted { color: hsl(var(--rd-muted)); }
+.report-doc .rd-card { border: 1px solid hsl(var(--rd-line)); border-radius: 10px; background: hsl(var(--rd-paper)); }
+.report-doc .rd-soft { background: hsl(var(--rd-soft)); }
+.report-doc .rd-up { color: hsl(var(--rd-good)); }
+.report-doc .rd-down { color: hsl(var(--rd-red)); }
+.report-doc table.rd-t { width: 100%; border-collapse: collapse; font-size: 11px; }
+.report-doc table.rd-t th { text-align: left; font-weight: 700; color: hsl(var(--rd-paper)); background: hsl(var(--rd-navy)); padding: 7px 8px; }
+.report-doc table.rd-t td { padding: 6px 8px; border-bottom: 1px solid hsl(var(--rd-line)); vertical-align: top; }
+.report-doc table.rd-t tr:nth-child(even) td { background: hsl(var(--rd-soft)); }
+.report-doc .rd-num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.report-doc .rd-foot { position: absolute; left: 56px; right: 56px; bottom: 28px; display: flex; justify-content: space-between; font-size: 10px; color: hsl(var(--rd-muted)); border-top: 1px solid hsl(var(--rd-line)); padding-top: 8px; }
+.report-doc .rd-qs { display: inline-block; min-width: 26px; text-align: center; border-radius: 6px; padding: 2px 6px; font-weight: 700; color: hsl(var(--rd-paper)); }
+.report-doc .rd-qs-hi { background: hsl(var(--rd-good)); }
+.report-doc .rd-qs-mid { background: hsl(var(--rd-warn)); }
+.report-doc .rd-qs-lo { background: hsl(var(--rd-red)); }
+.report-doc .rd-qs-na { background: hsl(var(--rd-muted)); }
