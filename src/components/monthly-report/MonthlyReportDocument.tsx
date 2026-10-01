@@ -57,7 +57,7 @@ function summary(d: MonthlyReportData): string[] {
     out.push(`Average Quality Score across top keywords is ${avg.toFixed(1)}/10; ${hi} of ${q.length} rated keywords score 8 or higher.`);
   }
   const best = d.current.campaigns[0];
-  if (best) out.push(`"${best.name}" drove the most clicks (${int(best.clicks)}) at ${usd(cpc(best))} per click.`);
+  if (best) out.push(`"${best.name.replace(/:SystemGenerated:.*/, "")}" drove the most clicks (${int(best.clicks)}) at ${usd(cpc(best))} per click.`);
   return out;
 }
 
@@ -157,13 +157,13 @@ export const MonthlyReportDocument = forwardRef<HTMLDivElement, { data: MonthlyR
       <Page n={4} {...pp}>
         <div className="rd-kicker">Campaigns</div>
         <h2 className="rd-h mb-5">Top Campaigns</h2>
-        <table className="rd-t">
+        <table className="rd-t" style={{ fontSize: 10 }}>
           <thead><tr><th>Campaign</th><th>Type</th><th className="rd-num">Clicks</th><th className="rd-num">Impr.</th><th className="rd-num">CTR</th><th className="rd-num">Avg CPC</th><th className="rd-num">Conv.</th><th className="rd-num">Search IS</th><th className="rd-num">Spend</th></tr></thead>
           <tbody>
             {d.current.campaigns.filter((x) => x.impressions > 0).slice(0, 18).map((x) => {
               const prev = d.previous.campaigns.find((y) => y.name === x.name);
               return (
-                <tr key={x.name}><td className="font-semibold">{x.name}{prev && <div className="text-[9px] font-normal"><Delta cur={x.clicks} prev={prev.clicks} /> clicks MoM</div>}</td><td>{CHANNEL[x.channel] ?? x.channel}</td><td className="rd-num">{int(x.clicks)}</td><td className="rd-num">{int(x.impressions)}</td><td className="rd-num">{pct(ctr(x))}</td><td className="rd-num">{usd(cpc(x))}</td><td className="rd-num">{x.conversions.toFixed(0)}</td><td className="rd-num">{pct(x.impressionShare)}</td><td className="rd-num">{usd(x.cost)}</td></tr>
+                <tr key={x.name}><td className="font-semibold" style={{ maxWidth: 210, wordBreak: "break-word" }}>{x.name.replace(/:SystemGenerated:.*/, "")}{prev && <div className="text-[9px] font-normal"><Delta cur={x.clicks} prev={prev.clicks} /> clicks MoM</div>}</td><td>{CHANNEL[x.channel] ?? x.channel}</td><td className="rd-num">{int(x.clicks)}</td><td className="rd-num">{int(x.impressions)}</td><td className="rd-num">{pct(ctr(x))}</td><td className="rd-num">{usd(cpc(x))}</td><td className="rd-num">{x.conversions.toFixed(0)}</td><td className="rd-num">{pct(x.impressionShare)}</td><td className="rd-num">{usd(x.cost)}</td></tr>
               );
             })}
           </tbody>
