@@ -41,26 +41,6 @@ function QS({ v }: { v: number | null }) {
   return <span className={`rd-qs ${cls}`}>{v ?? "–"}</span>;
 }
 
-function summary(d: MonthlyReportData): string[] {
-  const c = d.current.total, p = d.previous.total;
-  const ch = (a: number, b: number) => (b ? ((a - b) / b) * 100 : null);
-  const out: string[] = [];
-  const cl = ch(c.clicks, p.clicks);
-  if (cl != null) out.push(`Clicks ${cl >= 0 ? "increased" : "decreased"} ${Math.abs(cl).toFixed(1)}% month over month (${int(p.clicks)} → ${int(c.clicks)}).`);
-  const cv = ch(c.conversions, p.conversions);
-  if (cv != null) out.push(`Conversions ${cv >= 0 ? "rose" : "fell"} ${Math.abs(cv).toFixed(1)}% to ${c.conversions.toFixed(0)}, with cost per conversion at ${usd(cpa(c))}.`);
-  out.push(`Click-through rate was ${pct(ctr(c))} versus ${pct(ctr(p))} last month — a direct signal of ad relevance and search intent match.`);
-  const q = d.keywords.filter((k) => k.qualityScore != null);
-  if (q.length) {
-    const avg = q.reduce((s, k) => s + (k.qualityScore ?? 0), 0) / q.length;
-    const hi = q.filter((k) => (k.qualityScore ?? 0) >= 8).length;
-    out.push(`Average Quality Score across top keywords is ${avg.toFixed(1)}/10; ${hi} of ${q.length} rated keywords score 8 or higher.`);
-  }
-  const best = d.current.campaigns[0];
-  if (best) out.push(`"${best.name.replace(/:SystemGenerated:.*/, "")}" drove the most clicks (${int(best.clicks)}) at ${usd(cpc(best))} per click.`);
-  return out;
-}
-
 export const MonthlyReportDocument = forwardRef<HTMLDivElement, { data: MonthlyReportData }>(function MonthlyReportDocument({ data: d }, ref) {
   const name = d.property.name;
   const period = `${format(parseISO(d.range.from), "MMM d")} – ${format(parseISO(d.range.to), "MMM d, yyyy")}`;
@@ -105,12 +85,6 @@ export const MonthlyReportDocument = forwardRef<HTMLDivElement, { data: MonthlyR
               <div className="mt-1 flex justify-between text-[10px]"><span className="rd-muted">Prev {pv}</span><Delta cur={a} prev={b} invert={inv} /></div>
             </div>
           ))}
-        </div>
-        <div className="rd-card rd-soft mt-6 p-5">
-          <div className="mb-2 text-sm font-bold">Key Takeaways</div>
-          <ul className="list-disc space-y-2 pl-5 text-[13px] leading-relaxed">
-            {summary(d).map((s) => <li key={s}>{s}</li>)}
-          </ul>
         </div>
         <h3 className="mb-2 mt-6 text-base font-bold">Performance by Network</h3>
         <table className="rd-t">
