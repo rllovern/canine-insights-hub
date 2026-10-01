@@ -38,6 +38,8 @@ import { ScopeProvider } from "./contexts/ScopeContext";
 import { NoticeProvider } from "./contexts/NoticeContext";
 import { MaintenanceGate } from "./components/notices/MaintenanceGate";
 import AdminAnnouncements from "./pages/admin/AdminAnnouncements";
+import GenerateReport from "./pages/admin/GenerateReport";
+import PublicMonthlyReport from "./pages/PublicMonthlyReport";
 import { AppShell } from "./components/layout/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
 import { ViewerBlock } from "./components/ViewerBlock";
@@ -64,6 +66,7 @@ const App = () => (
                     path="/change-password"
                     element={<RequireAuth><ChangePassword /></RequireAuth>}
                   />
+                  <Route path="/report/:token/monthly" element={<MaintenanceGate><PublicMonthlyReport /></MaintenanceGate>} />
                   <Route path="/report/:token" element={<MaintenanceGate><PublicReport /></MaintenanceGate>} />
                   {/* Onboarding is deliberately never blocked by maintenance mode. */}
                   <Route path="/onboarding/:token" element={<Onboarding />} />
@@ -122,6 +125,10 @@ const App = () => (
                     <Route
                       path="/admin/ads-agent"
                       element={<RequireAuth requireSuperAdmin><AdsAgent /></RequireAuth>}
+                    />
+                    <Route
+                      path="/admin/generate-report"
+                      element={<RequireAuth requireSuperAdmin><GenerateReport /></RequireAuth>}
                     />
                     <Route
                       path="/admin/announcements"

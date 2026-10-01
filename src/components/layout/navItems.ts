@@ -1,4 +1,4 @@
-import { BarChart3, PhoneCall, Settings, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, LayoutDashboard, Database, Receipt, MessageSquare, ClipboardList, ExternalLink, Bot, Megaphone } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, LayoutDashboard, Database, Receipt, MessageSquare, ClipboardList, ExternalLink, Bot, Megaphone, FileDown } from "lucide-react";
 
 export type NavItem = {
   key: string;
@@ -27,6 +27,7 @@ export const DELIVER_ITEMS: NavItem[] = [
   { key: "client-reports", to: "/admin/client-reports", label: "Performance Reports", icon: FileSearch, staffOnly: true, external: true },
   // Resolved dynamically in Sidebar/MobileNav to the scoped location's public report URL.
   { key: "external-report", to: "#external-report", label: "External Report", icon: ExternalLink, superAdminOnly: true, external: true },
+  { key: "generate-report", to: "/admin/generate-report", label: "Generate Report", icon: FileDown, superAdminOnly: true },
   { key: "reports", to: "/reports", label: "Reports", icon: FileText },
 ];
 
