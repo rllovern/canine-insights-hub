@@ -338,6 +338,27 @@ async function logToolRun(
   });
 }
 
+/**
+ * Call-tracking "verified_sale" counts (daily_metrics / v_lead_counts_daily /
+ * ai_assistant_context) are attribution tags, not CRM Wons, and are usually 0.
+ * Bob once read that 0 as "no sales" next to a real verified_sales block. Every
+ * numeric verified_sale(s) key is removed from all tool output so the only sale
+ * figure Bob can ever see is a CRM-backed verified_sales object.
+ */
+function stripAttributedSales(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(stripAttributedSales);
+  if (v && typeof v === "object") {
+    const o: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if ((k === "verified_sale" || k === "verified_sales") && (typeof val !== "object" || val === null)) continue;
+      if (k === "verified_sale" && typeof val === "object" && val && "current" in (val as object)) continue;
+      o[k] = stripAttributedSales(val);
+    }
+    return o;
+  }
+  return v;
+}
+
 function wrap<I, O>(
   ctx: Ctx,
   name: string,
@@ -347,7 +368,7 @@ function wrap<I, O>(
     const start = Date.now();
     ctx.turn.toolRuns += 1;
     try {
-      const out = await fn(input);
+      const out = stripAttributedSales(await fn(input)) as O;
       await logToolRun(ctx, name, input, out, "success", Date.now() - start);
       return out;
     } catch (e) {
@@ -1358,6 +1379,10 @@ function buildTools(ctx: Ctx) {
         });
         const c = derive(totals(cur));
         const p = derive(totals(prev));
+        const [vsCur, vsPrev] = await Promise.all([
+          fetchVerifiedSales(ctx.supabase, id, `${i.current_from}T00:00:00Z`, `${i.current_to}T23:59:59Z`),
+          fetchVerifiedSales(ctx.supabase, id, `${i.previous_from}T00:00:00Z`, `${i.previous_to}T23:59:59Z`),
+        ]);
         const delta = (a: number, b: number) => ({ abs: a - b, pct: b !== 0 ? (a - b) / b : null });
         const metrics = {
           cost: { current: c.cost, previous: p.cost, ...delta(c.cost, p.cost) },
@@ -2109,9 +2134,14 @@ function buildTools(ctx: Ctx) {
           ctx.userSupabase.rpc("lead_perf_pipeline", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: prevFromStr, _to: prevToStr }),
         ]);
-        const verified_sales = await fetchVerifiedSales(ctx.supabase, id, from.toISOString(), to.toISOString());
+        const [verified_sales, verified_sales_previous_range] = await Promise.all([
+          fetchVerifiedSales(ctx.supabase, id, from.toISOString(), to.toISOString()),
+          fetchVerifiedSales(ctx.supabase, id, prevFrom.toISOString(), new Date(from.getTime() - 1).toISOString()),
+        ]);
         return {
           property_id: id,
+          sales_note: `verified_sales is the CURRENT range (${fromStr} to ${toStr}); verified_sales_previous_range is the PREVIOUS range (${prevFromStr} to ${prevToStr}). Never swap them.`,
+          verified_sales_previous_range,
           current_range: { from: fromStr, to: toStr },
           previous_range: { from: prevFromStr, to: prevToStr },
           current_summary: summary.data, previous_summary: prev.data,
