@@ -141,7 +141,8 @@ SALES, WINS AND REVENUE — ONE SOURCE ONLY
 - Pipeline stage counts are NOT sales. A field like "in_sold_type_stage" means people are sitting in a stage the location named something like "Sold" — the CRM has not marked those deals Won. Describe them as pipeline position ("ten people are sitting in a Sold stage"), never as sales, wins, revenue, or "moved into won", and never add them to a sales number.
 - If "in_sold_type_stage" is higher than "verified_sales.count", say so plainly in one short sentence: the stages say Sold but the CRM has not marked them Won, so those sales are not confirmed in the system and the cards will show fewer.
 - If a pipeline block carries needs_mapping: true, treat every stage-based figure as unconfirmed and say so rather than quoting it as fact.
-- If verified_sales.count is 0, say there were no confirmed sales in that window. Never substitute a stage count, an appointment count, or a previous location's number to fill the gap.`;
+- If verified_sales.count is 0, say there were no confirmed sales in that window. Never substitute a stage count, an appointment count, or a previous location's number to fill the gap.
+- Check which date range a verified_sales block belongs to before quoting it (verified_sales = current range, verified_sales_previous_range or verified_sales.previous = earlier range). If no verified_sales block covers the window being asked about, fetch one; never infer "zero sales" from any other field.`;
 
 const CARD_VOCABULARY_RULES = `
 WORD-TO-SOURCE BINDING (non-negotiable)
@@ -338,6 +339,27 @@ async function logToolRun(
   });
 }
 
+/**
+ * Call-tracking "verified_sale" counts (daily_metrics / v_lead_counts_daily /
+ * ai_assistant_context) are attribution tags, not CRM Wons, and are usually 0.
+ * Bob once read that 0 as "no sales" next to a real verified_sales block. Every
+ * numeric verified_sale(s) key is removed from all tool output so the only sale
+ * figure Bob can ever see is a CRM-backed verified_sales object.
+ */
+function stripAttributedSales(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(stripAttributedSales);
+  if (v && typeof v === "object") {
+    const o: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if ((k === "verified_sale" || k === "verified_sales") && (typeof val !== "object" || val === null)) continue;
+      if (k === "verified_sale" && typeof val === "object" && val && "current" in (val as object)) continue;
+      o[k] = stripAttributedSales(val);
+    }
+    return o;
+  }
+  return v;
+}
+
 function wrap<I, O>(
   ctx: Ctx,
   name: string,
@@ -347,7 +369,7 @@ function wrap<I, O>(
     const start = Date.now();
     ctx.turn.toolRuns += 1;
     try {
-      const out = await fn(input);
+      const out = stripAttributedSales(await fn(input)) as O;
       await logToolRun(ctx, name, input, out, "success", Date.now() - start);
       return out;
     } catch (e) {
@@ -1358,6 +1380,10 @@ function buildTools(ctx: Ctx) {
         });
         const c = derive(totals(cur));
         const p = derive(totals(prev));
+        const [vsCur, vsPrev] = await Promise.all([
+          fetchVerifiedSales(ctx.supabase, id, `${i.current_from}T00:00:00Z`, `${i.current_to}T23:59:59Z`),
+          fetchVerifiedSales(ctx.supabase, id, `${i.previous_from}T00:00:00Z`, `${i.previous_to}T23:59:59Z`),
+        ]);
         const delta = (a: number, b: number) => ({ abs: a - b, pct: b !== 0 ? (a - b) / b : null });
         const metrics = {
           cost: { current: c.cost, previous: p.cost, ...delta(c.cost, p.cost) },
@@ -1404,6 +1430,7 @@ function buildTools(ctx: Ctx) {
         }
         const daily_current = [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date));
         return {
+          verified_sales: { current: vsCur, previous: vsPrev, note: "CRM Won counts per window — the only sales figures you may quote." },
           property_id: id,
           current_range: { from: i.current_from, to: i.current_to },
           previous_range: { from: i.previous_from, to: i.previous_to },
@@ -2109,9 +2136,14 @@ function buildTools(ctx: Ctx) {
           ctx.userSupabase.rpc("lead_perf_pipeline", { _property_ids: [id], _from: from.toISOString(), _to: to.toISOString() }),
           ctx.supabase.rpc("ai_assistant_context", { _property_id: id, _from: prevFromStr, _to: prevToStr }),
         ]);
-        const verified_sales = await fetchVerifiedSales(ctx.supabase, id, from.toISOString(), to.toISOString());
+        const [verified_sales, verified_sales_previous_range] = await Promise.all([
+          fetchVerifiedSales(ctx.supabase, id, from.toISOString(), to.toISOString()),
+          fetchVerifiedSales(ctx.supabase, id, prevFrom.toISOString(), new Date(from.getTime() - 1).toISOString()),
+        ]);
         return {
           property_id: id,
+          sales_note: `verified_sales is the CURRENT range (${fromStr} to ${toStr}); verified_sales_previous_range is the PREVIOUS range (${prevFromStr} to ${prevToStr}). Never swap them.`,
+          verified_sales_previous_range,
           current_range: { from: fromStr, to: toStr },
           previous_range: { from: prevFromStr, to: prevToStr },
           current_summary: summary.data, previous_summary: prev.data,
