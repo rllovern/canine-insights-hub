@@ -1429,6 +1429,7 @@ function buildTools(ctx: Ctx) {
         }
         const daily_current = [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date));
         return {
+          verified_sales: { current: vsCur, previous: vsPrev, note: "CRM Won counts per window — the only sales figures you may quote." },
           property_id: id,
           current_range: { from: i.current_from, to: i.current_to },
           previous_range: { from: i.previous_from, to: i.previous_to },
