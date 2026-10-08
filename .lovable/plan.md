@@ -1,133 +1,127 @@
-# Marketing Ops: Private Access Security Specification (rev. 2)
+# Marketing Ops and Client Lifecycle: Complete Implementation Plan
 
-Scope: security architecture only. Nothing is built until approved. Feature design (directory, onboarding, SOPs, journal UI, change archive) follows in a separate plan on top of this foundation.
+Nothing is built until this plan is approved. Built in five phases, each released and checked before the next.
 
-## 1. Principles
+## Part A. Security foundation (final)
 
-1. Access = verified sign-in AND an explicit grant tied to one account ID. No role (including super_admin) implies access.
-2. The browser never touches private tables. All private data moves through a small set of authenticated backend endpoints.
-3. Identity always comes from the verified sign-in token. No endpoint accepts a user ID for authorization.
-4. Deny by default at every layer; a forgotten check fails closed, not open.
-5. Existing roles, pages, reports, exports, sync jobs, and Bob are untouched.
+**Verified against the live database (Oct 8 2026):** service accounts bypass row rules (confirmed); existing locked-down check functions are owned by `postgres` (confirmed); signed-in users cannot create objects in `public` (confirmed); there is currently no `mops` schema; the read-only audit account cannot create roles, so whether migrations may create a dedicated owner role is UNVERIFIED and becomes Phase 1, step 1 (fallback: functions owned by `postgres`, the same pattern already in use).
 
-## 2. Exact permission model (resolves the RPC tension)
+**Access rule:** signed in AND a grant row for that exact account. No role grants access.
 
-All private objects live in a dedicated schema `mops`, which is NOT added to the Data API's exposed schemas. Even with a valid token, the browser cannot address it.
+**Where data lives:** schema `mops`, not exposed to the browser API. The browser never reads private tables. All data goes through `mops-*` backend endpoints.
 
+**Privileges (exact):**
 ```sql
--- Schema: nobody but the owner and service_role
+CREATE SCHEMA mops;
 REVOKE ALL ON SCHEMA mops FROM PUBLIC, anon, authenticated;
 GRANT USAGE ON SCHEMA mops TO service_role;
-
--- Every table in mops
-REVOKE ALL ON ALL TABLES IN SCHEMA mops FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA mops TO service_role;  -- no DELETE by default
-ALTER DEFAULT PRIVILEGES IN SCHEMA mops REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA mops REVOKE ALL ON TABLES    FROM PUBLIC, anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA mops REVOKE ALL ON FUNCTIONS FROM PUBLIC, anon, authenticated;
-
--- RLS still enabled on every mops table, with ZERO policies for anon/authenticated
--- (defense in depth if a grant is ever added by mistake).
+-- per table: RLS ON, zero policies; service_role gets SELECT/INSERT (+UPDATE only where edits are allowed); never DELETE/TRUNCATE.
 ```
 
-**Grant table** `mops.access_grants(user_id uuid PK, granted_at, granted_by_note, revoked_at, revoked_reason)`. Active grant = row with `revoked_at IS NULL`. A unique partial index enforces at most one active grant (single-owner system by construction).
+**One active grant, globally (exact constraint):**
+```sql
+CREATE TABLE mops.access_grants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL, granted_at timestamptz NOT NULL DEFAULT now(),
+  revoked_at timestamptz, reason text);
+CREATE UNIQUE INDEX one_active_grant ON mops.access_grants ((true)) WHERE revoked_at IS NULL;
+```
+The index has a constant key, so a second active row of any user fails.
 
-**Access check (the only browser-callable piece):**
-
+**Browser-callable check (resolves the RPC tension):**
 ```sql
 CREATE FUNCTION public.mops_my_access() RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
-AS $$ SELECT EXISTS (SELECT 1 FROM mops.access_grants
-       WHERE user_id = auth.uid() AND revoked_at IS NULL) $$;
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS
+$$ SELECT EXISTS (SELECT 1 FROM mops.access_grants WHERE user_id = auth.uid() AND revoked_at IS NULL) $$;
 REVOKE ALL ON FUNCTION public.mops_my_access() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.mops_my_access() TO authenticated;
+
+CREATE FUNCTION mops.has_access(_uid uuid) ... SECURITY DEFINER SET search_path = '';
+REVOKE ALL ON FUNCTION mops.has_access(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION mops.has_access(uuid) TO service_role;
 ```
+No arguments, answers only for the caller, returns no data. Used to show/hide the menu; every endpoint re-checks.
 
-- Takes no arguments; answers only "do I have access?" for the caller. It cannot probe other accounts and returns no private data. Returns false for everyone else, so it leaks only the fact that a feature exists, which the code already reveals.
-- Owned by a dedicated non-login role `mops_owner` (not `postgres`) that holds SELECT on `access_grants` only.
-- Server-side variant `mops.has_access(_uid uuid)` exists for endpoints, executable by `service_role` only, never by `authenticated`.
+**Endpoints:** every `mops-*` function uses one shared wrapper that verifies the token, takes identity only from it, checks `mops.has_access`, logs the outcome, and only then creates the privileged client. Denials return 404. Request bodies reject any user ID field.
 
-**Frontend:** calls `mops_my_access()` to decide whether to show the menu and route. That is cosmetic. Every data request still goes to an endpoint that re-checks.
+**Bypass prevention (automated tests that block release):**
+1. Static test: every `mops-*` function must use the wrapper and must not read the service key itself; no other function (Bob, old assistant, reports, onboarding-public, sync, alerts) may reference `mops`.
+2. Endpoint registry test: each `mops-*` folder must have its denial tests.
+3. Live tests per endpoint: no token, every other role, revoked grant, forged user ID all get 404 and a `denied` log row.
+4. Database test: zero privileges for `anon`/`authenticated`/`PUBLIC` on `mops`; only the two approved definer functions touch `mops`; existing `public` definer functions confirmed not to read `mops`.
 
-## 3. Endpoints and the service-role problem
+**Audit and history:** `mops.audit_log` (allowed, denied, error; IDs only, never secret contents). Journal edits copied to `mops.journal_revisions`. Google Ads events insert-only. Update/delete blocked by triggers on audit log, revisions and change events. No hash chain and no digest emails. Retention via normal platform backups.
 
-Service-role credentials bypass RLS, so the database cannot be the last line of defense for privileged code. Enforcement therefore sits in a single mandatory wrapper.
+**Plain limit:** this is application-level privacy. Authorized infrastructure administrators with database-owner access can still read or alter data; protections stop the app, its users, its functions, and leaked app keys.
 
-**3.1 The wrapper** (`supabase/functions/_shared/mops/guard.ts`):
+**Emergency recovery:** through Lovable's supported project administration. The project owner (you, signed into the Lovable workspace that owns this project; or Lovable support after their own account verification) authorizes it. It does not need the lost account. The administrator runs `mops.recover_access(new_user_id, reason)`, owner-only: revokes the active grant, inserts the new one in one transaction, writes `access_revoked` and `access_granted` audit rows. The AI agent only runs it when instructed from the owning workspace and never treats a chat claim alone as identity proof. Afterwards, the denial tests are re-run.
 
-```ts
-export const mopsHandler = (handler: (ctx: MopsCtx) => Promise<Response>) =>
-  async (req: Request) => { /* CORS; verify JWT via getClaims; reject if none;
-    uid = claims.sub; call mops.has_access(uid) with service client;
-    on deny: audit(denied) and return 404;
-    on allow: build ctx { uid, db: scoped client, audit } and run handler;
-    audit(allowed/failed) in finally */ };
-```
+## Part B. Data model (all in `mops`, linked to existing tables)
 
-- The privileged database client is created INSIDE the wrapper and handed to the handler only after the grant passes. Handlers never import the service key themselves.
-- `ctx.uid` is the only identity available. Request bodies are validated with a schema that rejects any `user_id`/`actor` field.
-- Denials return 404 with no body detail.
+Existing `properties` remain the single client record. No duplicate client table. Prospects are created as inactive properties through the existing creation flow.
 
-**3.2 Preventing omission (automated, fails the release):**
-
-1. **Naming rule:** every private endpoint is named `mops-*`. Nothing else may reference schema `mops`.
-2. **Static check test** (Deno test in `_shared/mops/static_test.ts`), run on every change:
-   - every `supabase/functions/mops-*/index.ts` must call `Deno.serve(mopsHandler(...))` and must not reference `SUPABASE_SERVICE_ROLE_KEY` or `createClient` directly;
-   - no function outside `mops-*` and `_shared/mops` may contain the string `mops.` / `schema('mops')`, including `jarvis`, `ai-assistant`, `monthly-report-data`, `onboarding-public`, sync and alert functions.
-3. **Live denial tests** per endpoint (Deno tests): no token, other super admin, admin, owner, location owner, viewer, revoked grant, and forged `user_id` in body each get 404 and produce a `denied` audit row; the granted user gets 200 and an `allowed` row.
-4. **Endpoint registry test:** a list of all `mops-*` functions is enumerated from the folder and compared with the tests; an endpoint without denial tests fails the check.
-5. **Database drift check** (SQL test): asserts zero privileges for `anon`/`authenticated`/`PUBLIC` on schema `mops` and all objects in it, `mops` absent from exposed schemas, and that no SECURITY DEFINER function outside the approved list reads `mops`.
-
-Planned endpoints are few and coarse (e.g. `mops-directory`, `mops-onboarding`, `mops-journal`, `mops-changes`) to keep the attack surface small.
-
-## 4. Audit logging
-
-**Table** `mops.audit_log(id bigserial, at timestamptz default now(), actor uuid, endpoint, action, target_type, target_id, outcome ['allowed','denied','error'], request_id, ip_hash, detail jsonb)`.
-
-- Written by the wrapper for every request: allowed, denied (including the caller's ID when the token is valid), and errors. Sensitive reads (access credentials, private notes) log the record ID read, never its contents.
-- Reliability: the audit insert happens before the handler returns data; if the audit write fails, the request fails (no unlogged access). Denials use a best-effort write plus a console log so attackers cannot block logging to hide denial attempts from the platform logs.
-- Protected by trigger: `BEFORE UPDATE OR DELETE` raises an exception; `service_role` has INSERT and SELECT only. TRUNCATE revoked.
-
-**Journal edit history:** `mops.journal_entries` holds the current text; every change writes the prior version to `mops.journal_revisions` (trigger-driven, same no-update/no-delete protection). Entries are "archived," never deleted.
-
-**Google Ads change archive:** `mops.ads_change_events` is insert-only (update/delete blocked by trigger); a unique key on the Google change resource ID makes re-imports idempotent. Your annotations live in a separate table linked to the event, so notes can be edited without touching the historical record.
-
-**Limits of append-only (stated plainly):** triggers and revoked grants stop the app, the endpoints, and stolen service keys. They do not stop an infrastructure administrator with database-owner access, who can disable triggers, alter tables, or restore backups. Mitigations: protection triggers are owned by `mops_owner`; a daily hash chain (each audit row stores a hash of the previous row) makes silent edits detectable; a daily digest (row count + chain head hash) is emailed to you so tampering would be visible against an external record. This makes alteration detectable, not impossible.
-
-## 5. Emergency access recovery
-
-Used only if you lose your account (lost password with no email access, compromised account, account deleted).
-
-1. **Request:** you contact the infrastructure administrator (Lovable agent acting on your instruction in this project, or Lovable support) from the project owner workspace.
-2. **Identity verification:** the request must come from the Lovable workspace that owns the project, plus confirmation via the out-of-band email on record, plus the replacement account must be newly created and signed in once.
-3. **Revoke:** set `revoked_at` and `revoked_reason` on the old grant (never delete). Optionally sign out all sessions of the old account.
-4. **Replace:** insert a grant for the new account ID; the single-active-grant index guarantees the old one was revoked first.
-5. **Log:** the recovery is done through one SQL procedure `mops.recover_access(old_uid, new_uid, ticket_ref)`, executable only by the database owner, which writes `access_revoked` and `access_granted` audit rows with the ticket reference in one transaction, and triggers an email notification to both old and new addresses.
-6. **Verify:** run the full denial test suite against the old account and an allow test against the new one.
-
-No UI exists to grant or revoke access. Routine grant changes use the same procedure.
-
-## 6. Bob and existing systems
-
-- Bob (`jarvis`), `ai-assistant`, `ai_assistant_context*`, report token functions, exports, and sync/alert jobs receive no `mops` privileges and are covered by the static check in 3.2.
-- No private data is copied into public tables. Data may flow INTO `mops` from existing tables (read by `mops-*` endpoints), never out.
-- Preview-as-role mode cannot grant access (check is server-side by real account).
-
-## 7. Test plan before release
-
-| Case | Expected |
+| Table | Purpose / key fields |
 |---|---|
-| You | 200 on all endpoints; `allowed` audit rows |
-| Other super admin, admin, owner, location owner, internal, viewer | 404 everywhere; `denied` rows; menu hidden; direct DB queries to `mops` rejected |
-| No token / public report token | 401/404; no data |
-| Your token + forged `user_id` in body | Ignored; acts as you only |
-| Your grant revoked | 404 (proves grant, not role) |
-| Update/delete on audit, revisions, ads events | Rejected by trigger |
-| Static and privilege drift checks | Pass |
-| Bob asked about private notes/clients | No access; static check clean |
-| Existing pages for each role | Unchanged |
+| `client_lifecycle` | 1 row per property (PK `property_id`): stage (prospect, questionnaire, access_discovery, configuration, validation, active, paused, archived), `legacy` flag, ownership model, billing responsibility, billing status, `last_activity_at` |
+| `requirement_catalog` | SOP library: key, area (google_ads, ctm, ghl_forms, website, access, billing), title, instructions (markdown), how verified (auto, detect+confirm, manual, conditional), applicability rule |
+| `client_requirements` | per property x requirement: status (not_started, awaiting_access, in_progress, awaiting_verification, verified, blocked, not_applicable), severity (blocking/warning), evidence JSON, unique (property, requirement) |
+| `requirement_decisions` | exceptions: requirement, resolution, reason, authorized by, date |
+| `client_assets` | per property x platform (ads, GA4, GTM, GSC, GBP, website, CTM, GHL): exists (yes/no/unknown), controlled by (corporate/franchisee/prior agency/unknown), access status, external ID, notes. No passwords ever |
+| `form_integration_config` | GHL-to-CTM snippet references per property (thank-you slug, FormReactor ID, tracking number, capture host, default form) plus installed/redirect/thank-you/FormReactor/end-to-end test status. Record-keeping only; the live integration is not touched |
+| `journal_entries` / `journal_revisions` | freeform note, optional tags, property, timestamps, archived flag; revision copy on every edit |
+| `ads_change_events` | archived Google Ads changes: unique (customer_id, change resource name), property, campaign, type, old/new values, event time (UTC), raw JSON |
+| `note_event_links` | optional journal-to-change links |
+| `ops_signals` | Phase 5: state (healthy/observing/action_required), reason, opened/resolved, cooldown key |
+| `access_grants`, `audit_log` | from Part A |
 
-## 8. Decisions to confirm
+Legacy locations get `legacy = true` and `legacy_unverified` requirement status, which is shown neutrally and never counted as a problem unless live data shows one.
 
-- Designated account: rl.lovern@gmail.com.
-- Recovery verification steps in section 5 are acceptable.
-- Daily integrity digest email to you: yes/no.
+## Part C. Phases
+
+**Phase 1: Private Client Directory**
+- Security foundation, grant for rl.lovern@gmail.com, tests.
+- Directory page (private menu item): search, filter, sort, Active vs Onboarding tabs, columns for stage, questionnaire status, readiness, Google Ads/CTM/GHL connection (read from existing connection data), ownership, billing, last activity, "needs attention".
+- Client profile: Overview, Business Discovery (shows existing questionnaire answers read-only), Access & Assets, Configuration, Journal, Performance (links into existing pages, no duplicate charts).
+- Backfill lifecycle rows for the 11 existing properties as legacy.
+
+**Phase 2: Adaptive Onboarding**
+- Lifecycle row created when a property is created and when an invite is sent (from existing flows, idempotent).
+- Valid questionnaire submission moves stage to Access & Discovery automatically; repeat submissions never roll back progress.
+- Requirements generated from questionnaire answers (which accounts exist, who owns them) using the catalog rules.
+- Consolidated access instructions generated per client (what they have, what to grant, which corporate identity to invite, what corporate will create). Sent via the existing email service; a client-facing view, if used, reuses the onboarding token pattern and shows only those instructions.
+- Ownership/billing tracking: corporate vs franchisee control, franchisee pays Google directly, billing status entered manually unless the Google Ads API confirms it (to be checked; manager linkage is not treated as ownership).
+
+**Phase 3: SOPs and verification**
+- Load the Google Ads (A–L) and CTM (A–I) areas into the catalog as section headings only. Full instruction text is NOT invented: you supply the Asana SOP exports and they are imported verbatim.
+- Auto-verification where real evidence exists: Google Ads connected and spending, CTM calls arriving for the property, GHL leads syncing, budget present in existing pacing. Everything else is detect-and-confirm or manual once.
+- Profile shows completed / outstanding / blocked / next action; detailed steps in expandable sections.
+
+**Phase 4: Journal and Google Ads change history**
+- One-box note entry (type and save; optional tags), search by keyword and date, edit with history.
+- New private job archives Google Ads change events daily with a 3-day overlapping lookback, deduplicated by the Google resource ID, mapped to properties using existing campaign label filters. Reuses the existing change-history code as a reference only; the existing function Bob uses is unchanged. Google keeps ~30 days, so history starts at go-live plus that window.
+- Unified timeline: notes, Google Ads changes, data-source incidents, budget changes. Suggested note-to-change links by time and campaign, one click to confirm.
+
+**Phase 5 (optional): Private intelligence**
+- Rule-based states (Healthy, Observing, Action Required) from existing signals: qualified leads, CRM sales, pacing, freshness, incidents, readiness; minimum samples, persistence and cooldowns; auto-resolve.
+- Private Operations Brief page: who needs attention, onboarding blockers, recent changes, what changed since last visit.
+- Optional private AI summary through a separate `mops-ai` endpoint with its own wrapper, usage cap and audit, built only on your request. Never shares Bob's code path.
+- Read-only: nothing ever changes Google Ads, CTM, or GHL automatically.
+
+## Part D. Not changed
+
+Bob and all its tools, the old assistant, existing reports and PDFs, exports, the public report links, onboarding questionnaire content, sync jobs, and the live GHL-to-CTM form integration.
+
+## Part E. Needed from you
+
+1. Asana SOP exports (Google Ads and CTM templates, including nested instructions and the position-increase rule).
+2. Asana historical notes export, if you want them imported into the journal (Phase 4).
+3. Confirm Phase 5 is wanted, and whether to include the private AI summary.
+
+## Technical details
+
+- Shared wrapper: `supabase/functions/_shared/mops/guard.ts`; static/registry tests in `_shared/mops/*_test.ts`; endpoints `mops-directory`, `mops-client`, `mops-onboarding`, `mops-journal`, `mops-changes`, `mops-brief`, cron job `mops-ads-changes-sync` (cron secret + no user context, writes only to `ads_change_events`).
+- Lifecycle initialization: AFTER INSERT trigger on `properties` and on `onboarding_submissions` status change to submitted calls a `mops`-owned definer function; triggers run as owner so no browser privilege is added.
+- Frontend: `useMopsAccess()` (RPC), `RequireMopsAccess` route guard, TanStack queries keyed under `mops` and cleared on sign-out; nav item gated by the RPC, not `superAdminOnly`; preview-as-role cannot unlock it.
+- AGENTS.md rule: Marketing Ops access derives only from `mops.access_grants`, through `mops-*` endpoints using the shared guard.
