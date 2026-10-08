@@ -71,6 +71,13 @@
       "when": 1791435867395,
       "tag": "0009_mops_sop_questionnaire_gate",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791436079669,
+      "tag": "0010_mops_sop_node_kind",
+      "breakpoints": true
     }
   ]
 }
