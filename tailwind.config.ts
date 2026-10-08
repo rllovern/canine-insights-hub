@@ -36,6 +36,16 @@ export default {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
         },
+        ops: {
+          verified: "hsl(var(--ops-verified))",
+          progress: "hsl(var(--ops-progress))",
+          access: "hsl(var(--ops-access))",
+          blocked: "hsl(var(--ops-blocked))",
+          unknown: "hsl(var(--ops-unknown))",
+          na: "hsl(var(--ops-na))",
+          surface: "hsl(var(--ops-surface))",
+          track: "hsl(var(--ops-ring-track))",
+        },
         success: {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
