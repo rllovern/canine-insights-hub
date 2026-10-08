@@ -43,6 +43,13 @@
       "when": 1791433346285,
       "tag": "0005_mops_ads_changes_one_time_test",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791433954994,
+      "tag": "0006_mops_adaptive_requirements",
+      "breakpoints": true
     }
   ]
 }
