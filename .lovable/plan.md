@@ -1,67 +1,41 @@
-# Marketing Ops and Client Lifecycle: Master Implementation Plan (rev. 4)
+# Marketing Ops and Client Lifecycle: Full Build Plan (rev. 5)
 
-Five-phase architecture approved in principle. Nothing is built until you explicitly authorize Phase 1. This revision folds in your eight final requirements; the structure is unchanged.
+You authorized the complete system in one coordinated build. Approving this plan starts it. Work runs in checkpoints; a failed checkpoint stops the build and I report back.
 
-## Part A. Security foundation
+## Security foundation (as approved)
 
-(Unchanged from rev. 3: schema `mops` not exposed to the browser; zero privileges for `PUBLIC`/`anon`/`authenticated`; RLS on with no policies; `public.mops_my_access()` as the only browser-callable check; `mops.has_access(uid)` for `service_role` only; global single-active-grant index; shared `mops-*` endpoint wrapper; protected audit log, journal revisions and insert-only change events; recovery via `mops.recover_access` run through Lovable's supported project administration, authorized by the project owner workspace, never by the lost account or a chat claim alone. This is application-level privacy; authorized infrastructure administrators retain database access.)
+- Only rl.lovern@gmail.com, through an explicit grant tied to that account ID. The Super Admin role grants nothing. One active grant at a time, enforced by the database (`CREATE UNIQUE INDEX one_active_grant ON mops.access_grants ((true)) WHERE revoked_at IS NULL`).
+- Private data lives in schema `mops`, which is not exposed to the browser. `PUBLIC`, `anon` and `authenticated` get no privileges on it. RLS is on with no policies.
+- Browser check: `public.mops_my_access()` takes no arguments, answers only for the caller and returns no data. Every data request is checked again on the server.
+- **How endpoints reach `mops`:** the service key does not give REST access to a schema that isn't exposed, and `mops` will stay unexposed. Preferred route: narrow `public.mops_api_*` functions (definer, `search_path=''`, run permission for `service_role` only), called by `mops-*` endpoints after the shared guard passes. Fallback route: a direct database connection, if the platform provides one to functions. The compatibility checks decide which route is used.
+- Every `mops-*` endpoint uses one shared guard. It verifies the token, takes identity from the token only, checks the grant, and writes an audit row. Anyone who fails the check gets a 404.
+- Internal exceptions are limited to an approved list: the lifecycle trigger, the questionnaire trigger and the change-history cron job. They can only write narrow records and return nothing private.
+- The audit log, journal revisions and Google Ads change events are protected from updates and deletes. There is no hash chain and no digest email.
+- This is privacy at the application level. Authorized infrastructure administrators keep database access.
+- Emergency recovery uses `mops.recover_access`. It runs through Lovable's supported project administration, authorized from the workspace that owns this project, and is fully audited.
 
-Access is granted only to rl.lovern@gmail.com through the grant table. The Super Admin role grants nothing, including to other super admins and to preview-as-role mode.
+## Existing locations and prospects
 
-### A1. Internal (non-user) access paths — the controlled exceptions
+- All 11 existing locations are classified Legacy / Active. Their questionnaire history is marked Unknown. They get no blockers, no tasks and no re-onboarding, and reporting is unaffected.
+- **Finding:** existing sync jobs, the Command Center and the location list don't filter on `is_active`. Only public report links do. So prospects are kept in `mops.prospects` and are not created as locations. Converting a prospect uses the existing location-creation flow, at the point you're ready to connect it. Nothing about reporting or sync changes.
 
-| Path | Runs as | May touch | Cannot |
-|---|---|---|---|
-| Lifecycle trigger on `properties` insert | owner-owned definer function `mops.init_lifecycle()` | insert one `mops.client_lifecycle` row (ON CONFLICT DO NOTHING) | read any `mops` data; return anything to the caller |
-| Questionnaire trigger on `onboarding_submissions` -> submitted | `mops.on_questionnaire_submitted()` | set stage forward only, write `audit_log` row (actor = `system:questionnaire`) | move stage backward; read journal/assets |
-| Change-history job `mops-ads-changes-sync` | cron secret, no user | insert into `ads_change_events`, `ads_change_sync_state`, `audit_log` | read any other `mops` table; be called with a user token |
-| Everything else (Bob, old assistant, reports, exports, public token functions, existing sync/alerts, onboarding-public) | — | nothing in `mops` | — |
+## Checkpoints
 
-Rules: trigger functions are `SECURITY DEFINER`, `search_path = ''`, `EXECUTE` revoked from `PUBLIC/anon/authenticated` (triggers fire regardless of caller grants), and they return `NEW` only, so no private data reaches the calling app. The cron job uses its own narrow wrapper (`cronHandler`) that rejects user tokens and only accepts the existing vault cron secret.
+1. **Compatibility checks** (disposable `mops_probe` schema, then dropped): schema creation and revokes, default privileges, function ownership, trigger reach, a `service_role`-only RPC that is denied to signed-in users, availability of the direct-connection fallback, and a read-only look at how onboarding submissions move through their statuses. I report the results; the build stops on any failure.
+2. **Foundation:** create the `mops` schema, grants, audit log and the single grant. Add the shared guard, its tests and the private menu item gated by the check.
+3. **Directory and profiles:** `/ops` directory (search, filter, sort, Active vs Onboarding). Each profile has Overview, Business Discovery (questionnaire answers, read-only), Access & Assets (ownership, control, franchisee-paid billing; no passwords), Configuration, Journal and Performance (links to existing pages).
+4. **Adaptive onboarding:** the questionnaire is a hard prerequisite, enforced in the database. A valid submission advances the location automatically and idempotently, and never moves it backward. Requirements are generated from the answers. Consolidated access instructions are produced per client, using the existing email service.
+5. **SOPs:** the Google Ads (A–L) and CTM (A–I) areas go in as headings. Missing instruction text is flagged "Source needed" and never invented. Items are marked verified automatically only where existing data proves it.
+6. **Journal and change history:** one text box and one Save button, with preserved revisions and search. A daily change archive with overlap and catch-up within Google's 30-day window, with gaps recorded. Account-wide changes are labeled as such and never assigned to a single location. Everything appears on one combined timeline.
+7. **Intelligence and Brief:** rule-based Healthy / Observing / Action Required states, with minimum samples, persistence, cooldowns and auto-resolve. A Brief page.
+8. **Private AI (limited):** a separate `mops-ai` summary endpoint behind the same guard, with a daily usage cap and auditing, available only on demand. It never touches Bob.
+9. **Verification:** static tests, privilege tests, and denial tests for every endpoint and every role. Exception tests, regression checks on existing pages and Bob, and the database linter.
 
-Tests cover each exception: a static test lists the exact allowed definer functions that reference `mops` (any new one fails); the cron endpoint rejects a valid user token, rejects missing/wrong secret; trigger tests prove a viewer inserting/submitting through existing flows gets no `mops` data back and cannot call the trigger functions directly.
+## Not changed
 
-### A2. Environment verification gate (before any Phase 1 migration)
+Bob and his tools, reporting calculations, client dashboards and reports, the Google Ads/CTM/GHL syncs, the GHL-to-CTM PHP integration, franchisee permissions, and live ad accounts.
 
-Verified so far (live, read-only): service role bypasses RLS; existing definer functions are owned by `postgres`; signed-in users cannot create objects in `public`; no `mops` schema exists; `get_property_by_report_token` already filters inactive properties.
+## Still needed from you (doesn't block the build)
 
-Still UNVERIFIED and checked as Phase 1 step 1 on a disposable test schema `mops_probe` (dropped afterwards): migrations can create a schema and revoke `USAGE`; default privileges apply; `postgres` can own definer functions in it; triggers on `public` tables can call into it; edge functions with the service key can read it through a non-exposed schema client; `authenticated` truly gets "permission denied". If creating a dedicated owner role is not permitted, functions are owned by `postgres` (the existing pattern). If any check fails, implementation stops and I report back before adapting.
-
-## Part B. Data model
-
-Unchanged from rev. 3, with these changes:
-- `journal_entries`: only `id, property_id, body, created_at, updated_at, archived_at`. No tags or categories. `journal_revisions` keeps every prior body verbatim.
-- `ads_change_events`: adds `scope` (`campaign` or `account`), `campaign_id` nullable; `property_id` nullable.
-- New `ads_change_sync_state`: per Google Ads customer, `last_success_through`, `last_attempt_at`, `consecutive_failures`.
-
-## Part C. Phases
-
-**Requirement 1 — prospects and inactive locations (finding):** existing sync jobs, Command Center data and the location list do not filter on `is_active` (only the public report token check does). Creating prospect properties today could leak them into reporting. Therefore:
-- Phase 1 creates no new property records. The directory shows only the existing 11 locations.
-- Prospect support moves into Phase 2 and starts with an audit of every place that lists properties; a prospect is only allowed once each place is shown to exclude it (with a stored `is_active = false` and no connected data sources). Any filter added must leave current active-location results byte-identical, checked by before/after comparison.
-
-**Requirement 2 — questionnaire prerequisite:** enforced in the database. `client_requirements` rows other than questionnaire stay `locked` until `client_lifecycle.questionnaire_submitted_at` is set; endpoints refuse status changes on locked items. After submission, each requirement advances independently based on its own dependencies. Legacy locations are marked as having a pre-existing questionnaire equivalent so nothing is fabricated.
-
-**Requirement 3 — change-history resilience (Phase 4):**
-- Daily job reads from `last_success_through - 2 days` to now, capped at Google's 30-day window; after an outage it catches up the full available window automatically. Gaps older than 30 days are recorded as a visible "unrecoverable gap" note, not silently skipped.
-- Idempotent by Google's change resource name; per-customer state so one failing account doesn't block others; quota backoff.
-- Shared accounts: a change is attributed to a location only when its campaign matches that location's existing campaign label filter. Account-wide changes (account settings, shared negative lists, shared budgets) are stored with `scope = account` and shown on every location sharing that account labeled "Account-wide", never assigned to a single location.
-
-**Requirement 4 — journal:** one text box, one Save button. Edits keep the original and all revisions. No required fields anywhere.
-
-**Requirement 7:** the GHL-to-CTM PHP integration and Bob (jarvis and its tools) are not modified. Static tests confirm no file under `jarvis`, `ai-assistant` or the form integration changes reference `mops`.
-
-Phases 2–5 otherwise as in rev. 3.
-
-## Part D. Phase 1 execution checklist
-
-1. **Environment gate** — `mops_probe` checks from A2; drop probe; report results.
-2. **Migration `mops_foundation`** — schema `mops`; revokes and default privileges; tables `access_grants` (+ `one_active_grant` index), `audit_log` (+ no-update/delete trigger), `client_lifecycle`; functions `public.mops_my_access()`, `mops.has_access(uuid)`, `mops.recover_access(uuid, text)`, `mops.init_lifecycle()` + AFTER INSERT trigger on `public.properties`; grants exactly as Part A.
-3. **Data step** — insert the single grant for rl.lovern@gmail.com's account ID; insert legacy lifecycle rows for the 11 existing properties.
-4. **Shared code** — `supabase/functions/_shared/mops/guard.ts` (`mopsHandler`), `_shared/mops/audit.ts`.
-5. **Endpoints** — `supabase/functions/mops-directory/index.ts` (list with stage, questionnaire status, connection status from `property_data_sources`, last activity); `supabase/functions/mops-client/index.ts` (one location's profile; questionnaire answers read-only from `onboarding_submissions`).
-6. **Frontend** — `src/hooks/useMopsAccess.ts`; `src/components/RequireMopsAccess.tsx`; `src/pages/ops/OpsDirectory.tsx`; `src/pages/ops/OpsClient.tsx` (Overview, Business Discovery, Access & Assets placeholder, Performance links); routes `/ops` and `/ops/:propertyId` in `src/App.tsx`; menu item in `src/components/layout/Sidebar.tsx` and `MobileNav.tsx` gated by `useMopsAccess` (not `superAdminOnly`); `mops` query cache cleared on sign-out.
-7. **Tests** — `_shared/mops/static_test.ts` (wrapper use, no direct service key, no `mops` outside allowed paths, allowed definer list); `mops-directory/index_test.ts`, `mops-client/index_test.ts` (no token, each role, revoked grant, forged user ID -> 404 + denied audit row; you -> 200); SQL privilege test (zero grants to `PUBLIC/anon/authenticated`, second active grant fails, audit update/delete fails, lifecycle trigger fires and returns nothing private); regression: Command Center, reports, Bob answer unchanged for each role; database linter.
-8. **Docs** — AGENTS.md rule (access only via `mops.access_grants` + `mops-*` guard); `docs/SYSTEM_OVERVIEW.md` section on Marketing Ops security and recovery.
-
-Not in Phase 1: prospects, onboarding requirements, SOPs, journal, change history, intelligence.
+- Asana SOP exports, so the "Source needed" sections can be filled in word for word.
+- An Asana notes export, if you want it imported into the journal.
