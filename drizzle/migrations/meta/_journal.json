@@ -50,6 +50,13 @@
       "when": 1791433954994,
       "tag": "0006_mops_adaptive_requirements",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791433992584,
+      "tag": "0007_mops_sustained_signals",
+      "breakpoints": true
     }
   ]
 }
