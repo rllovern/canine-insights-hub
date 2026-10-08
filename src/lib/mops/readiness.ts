@@ -38,8 +38,8 @@ export function evalRule(rule: ApplicabilityRule | null | undefined, answers: Re
 export function effectiveStatus(node: SopNode, ctx: ClientCtx): Effective {
   const manual = ctx.statuses[node.stable_key];
   const auto = ctx.auto[node.stable_key];
-  const isAutoOnly = node.verification === "auto" && !node.legacy_req_key;
-  if (manual && !isAutoOnly) {
+  // An explicit status you set always wins; connected data is shown as a suggestion.
+  if (manual) {
     return { status: manual.status, source: "manual", suggestion: auto && auto !== manual.status ? auto : undefined };
   }
   if (evalRule(node.applicability_rule, ctx.answers) === false) return { status: "not_applicable", source: "rule" };
