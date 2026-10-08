@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { ClientSopWorkspace } from "@/components/ops/ClientSopWorkspace";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowLeft, Lock, Sparkles } from "lucide-react";
-import { mopsCall, mopsSummary, STAGE_LABEL, REQ_STATUS_LABEL, Q_LABEL, PLATFORM_LABEL, AREA_LABEL } from "@/lib/mops";
+import { mopsCall, mopsSummary, STAGE_LABEL, Q_LABEL, PLATFORM_LABEL } from "@/lib/mops";
 
 const dt = (d?: string | null) => (d ? new Date(d).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—");
 
@@ -25,6 +26,7 @@ function Pick({ value, options, onChange, labels }: { value: string; options: st
 
 export default function OpsClient() {
   const { propertyId = "" } = useParams();
+  const [tab, setTab] = useState("onboarding");
   const qc = useQueryClient();
   const key = ["mops", "client", propertyId];
   const c = useQuery({ queryKey: key, queryFn: () => mopsCall<any>("client", { property_id: propertyId }) });
@@ -54,11 +56,6 @@ export default function OpsClient() {
   const summarize = useMutation({ mutationFn: () => mopsSummary(propertyId), onSuccess: setSummary, onError: (e: Error) => toast.error(e.message) });
 
   const d = c.data;
-  const reqsByArea = useMemo(() => {
-    const m: Record<string, any[]> = {};
-    for (const r of d?.requirements ?? []) (m[r.area] ??= []).push(r);
-    return m;
-  }, [d]);
 
   if (c.isLoading) return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
   if (c.error || !d?.property) return <p className="p-6 text-sm text-destructive">{(c.error as Error)?.message ?? "Not found"}</p>;
@@ -70,17 +67,17 @@ export default function OpsClient() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <Link to="/ops" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
-        <h1 className="text-2xl font-semibold">{d.property.name}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{d.property.name}</h1>
         {l.classification === "legacy" && <Badge variant="outline">Legacy / Active · history unknown</Badge>}
         <Badge variant="secondary">{STAGE_LABEL[l.stage]}</Badge>
         <Lock className="ml-auto h-4 w-4 text-muted-foreground" />
       </div>
 
-      <Tabs defaultValue="journal">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap">
+          <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
           <TabsTrigger value="journal">Journal & History</TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
           <TabsTrigger value="assets">Access & Assets</TabsTrigger>
           <TabsTrigger value="forms">Call & Form Tracking</TabsTrigger>
         </TabsList>
@@ -164,29 +161,12 @@ export default function OpsClient() {
         </TabsContent>
 
         <TabsContent value="onboarding" className="space-y-4">
+          <ClientSopWorkspace propertyId={propertyId} locked={!!d.locked} />
           <Card><CardContent className="space-y-1 p-4 text-sm">
             <div>Questionnaire: <span className="font-medium">{Q_LABEL[l.questionnaire_status]}</span>{l.questionnaire_submitted_at ? ` on ${dt(l.questionnaire_submitted_at)}` : ""}</div>
             {d.invites.length > 0 && <div className="text-muted-foreground">Latest invite: {d.invites[0].contact_name ?? d.invites[0].contact_email} · {d.invites[0].status} · sent {dt(d.invites[0].last_sent_at ?? d.invites[0].created_at)}</div>}
             {l.classification === "legacy" && <p className="text-muted-foreground">Existing location: onboarding history unknown. Nothing here blocks it; track items only if useful.</p>}
-            {d.locked && <p className="text-destructive">The questionnaire must be submitted before onboarding work can start. Send it from Onboarding.</p>}
           </CardContent></Card>
-          {!d.locked && Object.entries(reqsByArea).map(([area, list]) => (
-            <Card key={area}>
-              <CardHeader><CardTitle className="text-base">{AREA_LABEL[area] ?? area}</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
-                {list.map((r) => (
-                  <div key={r.key} className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 text-sm last:border-0">
-                    <div className="min-w-[240px] flex-1">
-                      <div className="font-medium">{r.title}{r.severity === "blocking" && r.tracked && <Badge variant="outline" className="ml-2 text-[10px]">Required</Badge>}</div>
-                      {r.auto_status && r.auto_status !== r.status && <div className="text-xs text-muted-foreground">Data suggests: {REQ_STATUS_LABEL[r.auto_status]}</div>}
-                      {r.note && <div className="text-xs text-muted-foreground">{r.note}</div>}
-                    </div>
-                    <Pick value={r.status} options={Object.keys(REQ_STATUS_LABEL)} labels={REQ_STATUS_LABEL} onChange={(v) => set("requirement_set", { key: r.key, status: v, severity: r.severity })} />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
           {d.submission?.answers && (
             <Card>
               <CardHeader><CardTitle className="text-base">Questionnaire answers</CardTitle></CardHeader>

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { mopsCall } from "@/lib/mops";
 import { useSopClient, useMopsOp, fileToBase64, openAttachment, type ClientPin } from "@/lib/mops/hooks";
 import { summarize, AREAS, type SopStatus } from "@/lib/mops/readiness";
-import { diffVersions, pathOf, isMissingDescription, type SopArea, type SopNode } from "@/lib/mops/sopTree";
+import { areaOf, diffVersions, pathOf, isMissingDescription, type SopArea, type SopNode } from "@/lib/mops/sopTree";
 import { AreaCard } from "./AreaCard";
 import { OpsCard, ProgressRing, ReadinessBadge, StatusPill } from "./OpsPrimitives";
 import { SopTreeView } from "./SopTreeView";
@@ -141,7 +141,7 @@ export function ClientSopWorkspace({ propertyId, locked }: { propertyId: string;
             {missingCount > 0 && <span className="ml-auto text-xs text-ops-access">{missingCount} descriptions still need importing</span>}
           </div>
           {d.pins.map((pin) => {
-            const has = pin.nodes.some((n) => n.kind !== "section" && (!area || (n.area ?? byId.get(n.parent_id ?? "")?.area) === area));
+            const has = pin.nodes.some((n) => n.kind !== "section" && (!area || areaOf(n, byId) === area));
             if (!has) return null;
             return (
               <div key={pin.template_id} className="space-y-1.5">
