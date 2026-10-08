@@ -3432,6 +3432,10 @@ export type Database = {
           finding: string
         }[]
       }
+      mops_sop_api: {
+        Args: { _actor: string; _args?: Json; _endpoint: string; _op: string }
+        Returns: Json
+      }
       normalize_tag: { Args: { _t: string }; Returns: string }
       public_ai_assistant_context: {
         Args: { _from: string; _to: string; _token: string }
