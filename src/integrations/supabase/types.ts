@@ -3395,6 +3395,7 @@ export type Database = {
           verified: number
         }[]
       }
+      mops_probe_rpc: { Args: never; Returns: string }
       normalize_tag: { Args: { _t: string }; Returns: string }
       public_ai_assistant_context: {
         Args: { _from: string; _to: string; _token: string }

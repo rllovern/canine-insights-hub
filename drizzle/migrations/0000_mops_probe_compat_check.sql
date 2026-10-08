@@ -1,0 +1,17 @@
+CREATE SCHEMA mops_probe;
+REVOKE ALL ON SCHEMA mops_probe FROM PUBLIC, anon, authenticated;
+GRANT USAGE ON SCHEMA mops_probe TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA mops_probe REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA mops_probe REVOKE ALL ON FUNCTIONS FROM PUBLIC, anon, authenticated;
+CREATE TABLE mops_probe.t (id int PRIMARY KEY, v text);
+REVOKE ALL ON mops_probe.t FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT ON mops_probe.t TO service_role;
+ALTER TABLE mops_probe.t ENABLE ROW LEVEL SECURITY;
+INSERT INTO mops_probe.t VALUES (1,'ok');
+CREATE TABLE mops_probe.g (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL, revoked_at timestamptz);
+CREATE UNIQUE INDEX mops_probe_one_active ON mops_probe.g ((true)) WHERE revoked_at IS NULL;
+CREATE FUNCTION public.mops_probe_rpc() RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$ SELECT v FROM mops_probe.t WHERE id = 1 $$;
+REVOKE ALL ON FUNCTION public.mops_probe_rpc() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mops_probe_rpc() TO service_role;
+CREATE FUNCTION mops_probe.trg() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$ BEGIN RETURN NEW; END $$;
+REVOKE ALL ON FUNCTION mops_probe.trg() FROM PUBLIC, anon, authenticated;
