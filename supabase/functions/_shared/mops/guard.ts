@@ -65,7 +65,9 @@ export function mopsHandler(endpoint: string, handler: (ctx: MopsCtx) => Promise
     if ((granted as { error?: string })?.error === "not_found") return notFound();
 
     const call = async (op: string, args: Record<string, unknown> = {}) => {
-      const { data, error } = await admin.rpc("mops_api", { _actor: uid, _endpoint: endpoint, _op: op, _args: args });
+      // SOP operations live in a sibling entry point with the identical grant check.
+      const fn = op.startsWith("sop_") ? "mops_sop_api" : "mops_api";
+      const { data, error } = await admin.rpc(fn, { _actor: uid, _endpoint: endpoint, _op: op, _args: args });
       if (error) throw new Error(error.message);
       const out = (data ?? {}) as Record<string, unknown>;
       if (out.error === "not_found") throw new MopsNotFound();
@@ -73,7 +75,7 @@ export function mopsHandler(endpoint: string, handler: (ctx: MopsCtx) => Promise
     };
 
     try {
-      return await handler({ uid, body: body ?? {}, call });
+      return await handler({ uid, body: body ?? {}, call, sopStorage: () => admin.storage.from("mops-sop") });
     } catch (e) {
       if (e instanceof MopsNotFound) return notFound();
       const msg = e instanceof Error ? e.message : String(e);
