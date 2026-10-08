@@ -22,6 +22,8 @@ export interface MopsCtx {
   body: Record<string, unknown>;
   /** Runs one whitelisted operation through the grant-checking database entry point. */
   call: (op: string, args?: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /** Private SOP file storage. Only reachable after the grant check passed. */
+  sopStorage: () => ReturnType<SupabaseClient["storage"]["from"]>;
 }
 
 // Fields a caller may never use to influence identity.
