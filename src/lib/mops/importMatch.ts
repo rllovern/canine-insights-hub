@@ -177,13 +177,20 @@ export function buildActions(results: MatchResult[], resolutions: Record<string,
     else if (r.kind === "updated" && r.node) others.push({ action: "update", node_id: r.node.id, body_md: r.row.body, asana_gid: r.row.asana_gid });
     else if (r.kind === "unchanged" && r.node && r.needsLink) others.push({ action: "link", node_id: r.node.id, asana_gid: r.row.asana_gid });
   }
-  // Parents before children: order creates so referenced refs come first.
-  const ordered: ImportAction[] = []; const done = new Set<string>(); let guard = 0;
-  while (ordered.length < creates.length && guard++ < creates.length + 5) {
-    for (const c of creates) if (!done.has(c.ref!) && (!c.parent_ref || done.has(c.parent_ref) || !creates.some((x) => x.ref === c.parent_ref))) {
-      if (c.parent_ref && !creates.some((x) => x.ref === c.parent_ref)) { c.parent_ref = undefined; }
-      ordered.push(c); done.add(c.ref!);
-    }
+  // Drop creates whose parent is not being created (never silently re-home them to the top level).
+  let pending = creates;
+  for (;;) {
+    const refs = new Set(pending.map((c) => c.ref));
+    const next = pending.filter((c) => !c.parent_ref || refs.has(c.parent_ref));
+    if (next.length === pending.length) break;
+    pending = next;
+  }
+  // Parents before children.
+  const ordered: ImportAction[] = []; const done = new Set<string>();
+  while (ordered.length < pending.length) {
+    const before = ordered.length;
+    for (const c of pending) if (!done.has(c.ref!) && (!c.parent_ref || done.has(c.parent_ref))) { ordered.push(c); done.add(c.ref!); }
+    if (ordered.length === before) break;
   }
   return [...ordered, ...others];
 }
