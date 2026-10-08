@@ -8,6 +8,7 @@ import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { useMopsAccess } from "@/hooks/useMopsAccess";
 import { ScopeSelector } from "./ScopeSelector";
 import { SourceHealthPanel } from "./SourceHealthPanel";
 import {
@@ -51,8 +52,9 @@ export function MobileNav() {
   const showRichNav = isStaff && !isMinimal;
   const showAdminSection = isStaff && !isMinimal;
 
+  const { hasAccess: hasMops } = useMopsAccess();
   const visible = (items: NavItem[], groupKey: string) =>
-    applyNavOrder(groupKey, filterVisibleItems(items, { isStaff, isSuperAdmin }));
+    applyNavOrder(groupKey, filterVisibleItems(items, { isStaff, isSuperAdmin, hasMops }));
 
   const monitorItems = visible(MONITOR_ITEMS, "monitor");
   const deliverItems = visible(DELIVER_ITEMS, "deliver");
