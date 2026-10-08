@@ -61,11 +61,11 @@ export default function OpsHome() {
     if (q) r = r.filter((l) => l.name.toLowerCase().includes(q.toLowerCase()));
     if (view === "active") r = r.filter((l) => l.stage === "active");
     if (view === "onboarding") r = r.filter((l) => l.classification === "onboarding" && !["active", "archived", "paused"].includes(l.stage ?? ""));
-    if (view === "attention") r = r.filter((l) => l.signals.length || l.blocked || (summaries.get(l.id)?.blockers.length ?? 0) > 0);
+    if (view === "attention") r = r.filter((l) => l.signals.length || l.blocked || (summaries.get(l.id)?.readiness === "not_ready") || (summaries.get(l.id)?.readiness === "at_risk"));
     if (readyFilter) r = r.filter((l) => summaries.get(l.id)?.readiness === readyFilter);
     if (sort === "activity") r = [...r].sort((a, b) => (b.last_activity_at ?? "").localeCompare(a.last_activity_at ?? ""));
     if (sort === "attention") {
-      const score = (l: Loc) => (l.signals.some((s) => s.state === "action_required") ? 1000 : 0) + (summaries.get(l.id)?.blockers.length ?? 0) * 10 + l.signals.length;
+      const score = (l: Loc) => { const sm = summaries.get(l.id); return (l.signals.some((s) => s.state === "action_required") ? 1000 : 0) + (sm && sm.readiness !== "not_assessed" ? sm.blockers.length * 10 : 0) + l.signals.length; };
       r = [...r].sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
     }
     return r;
@@ -181,8 +181,8 @@ export default function OpsHome() {
                     </div>
                     <div>{sm ? <ReadinessBadge readiness={sm.readiness} /> : <span className="text-xs text-muted-foreground">—</span>}</div>
                     <div className="max-lg:hidden">{sm && <ProgressRing value={sm.completion} size={36} stroke={3.5} />}</div>
-                    <div className="flex items-center gap-1.5 max-lg:col-span-2">{sm && AREAS.map((a) => <AreaDot key={a} s={sm.byArea[a]} />)}</div>
-                    <div className={sm?.blockers.length ? "text-sm font-semibold text-ops-blocked" : "text-sm text-muted-foreground"}>{sm ? (sm.blockers.length ? `${sm.blockers.length} open` : "None") : "—"}</div>
+                    <div className="flex items-center gap-1.5 max-lg:col-span-2">{sm && AREAS.map((a) => <AreaDot key={a} calm={sm.readiness === "not_assessed"} s={sm.byArea[a]} />)}</div>
+                    <div className={sm?.blockers.length && sm.readiness !== "not_assessed" ? "text-sm font-semibold text-ops-blocked" : "text-sm text-muted-foreground"}>{!sm ? "—" : sm.readiness === "not_assessed" ? "Not tracked" : sm.blockers.length ? `${sm.blockers.length} open` : "None"}</div>
                     <div><StateBadge signals={l.signals} /></div>
                   </Link>
                 );
@@ -214,8 +214,8 @@ export default function OpsHome() {
   );
 }
 
-function AreaDot({ s }: { s: AreaSummary }) {
-  const state = s.blockers > 0 ? "blocked" : !s.applicable ? "na" : s.verified === s.applicable ? "verified" : s.verified > 0 || (s.counts.in_progress ?? 0) + (s.counts.awaiting_verification ?? 0) + (s.counts.awaiting_access ?? 0) > 0 ? "progress" : s.unknown > 0 ? "unknown" : "idle";
+function AreaDot({ s, calm }: { s: AreaSummary; calm?: boolean }) {
+  const state = (calm ? (s.counts.blocked ?? 0) : s.blockers) > 0 ? "blocked" : !s.applicable ? "na" : s.verified === s.applicable ? "verified" : s.verified > 0 || (s.counts.in_progress ?? 0) + (s.counts.awaiting_verification ?? 0) + (s.counts.awaiting_access ?? 0) > 0 ? "progress" : s.unknown > 0 ? "unknown" : "idle";
   const cls = {
     blocked: "bg-ops-blocked", verified: "bg-ops-verified", progress: "bg-ops-progress/70", na: "bg-ops-na/40",
     unknown: "border border-dashed border-ops-unknown bg-transparent", idle: "border border-border bg-transparent",

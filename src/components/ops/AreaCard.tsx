@@ -4,10 +4,12 @@ import type { AreaSummary } from "@/lib/mops/readiness";
 import { AREA_META } from "./statusMeta";
 import { ProgressRing, SegmentBar } from "./OpsPrimitives";
 
-export function AreaCard({ s, topBlocker, onOpen, active }: { s: AreaSummary; topBlocker?: string; onOpen: () => void; active?: boolean }) {
+/** `calm`: existing client not yet assessed — only real "Blocked" statuses are emphasized. */
+export function AreaCard({ s, topBlocker, onOpen, active, calm }: { s: AreaSummary; topBlocker?: string; onOpen: () => void; active?: boolean; calm?: boolean }) {
   const m = AREA_META[s.area];
   const Icon = m.icon;
-  const hot = s.blockers > 0;
+  const hot = calm ? (s.counts.blocked ?? 0) > 0 : s.blockers > 0;
+  const n = calm ? (s.counts.blocked ?? 0) : s.blockers;
   const done = s.applicable > 0 && s.verified === s.applicable;
   return (
     <button
@@ -33,7 +35,9 @@ export function AreaCard({ s, topBlocker, onOpen, active }: { s: AreaSummary; to
       <div className="flex items-center justify-between text-xs">
         <span className="tabular-nums text-muted-foreground">{s.applicable ? `${s.verified} of ${s.applicable} verified` : "Nothing applicable"}{s.unknown ? ` · ${s.unknown} unknown` : ""}</span>
         {hot ? (
-          <span className="flex items-center gap-1 font-medium text-ops-blocked"><AlertTriangle className="h-3.5 w-3.5" />{s.blockers} blocker{s.blockers > 1 ? "s" : ""}</span>
+          <span className="flex items-center gap-1 font-medium text-ops-blocked"><AlertTriangle className="h-3.5 w-3.5" />{n} blocker{n > 1 ? "s" : ""}</span>
+        ) : calm && s.criticalOpen > 0 ? (
+          <span className="text-muted-foreground">{s.criticalOpen} critical not tracked</span>
         ) : (
           <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         )}

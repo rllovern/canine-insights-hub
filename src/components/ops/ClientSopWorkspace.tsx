@@ -48,6 +48,7 @@ export function ClientSopWorkspace({ propertyId, locked }: { propertyId: string;
     if (locked && n.stable_key !== "discovery_questionnaire") { toast.error("The questionnaire must be submitted before onboarding work can start"); return; }
     op.mutate({ op: "sop_status_set", args: { property_id: propertyId, stable_key: n.stable_key, status: s } });
   };
+  const calm = sum.readiness === "not_assessed";
   const outdated = d.pins.filter((p) => p.latest_id && p.latest_id !== p.version_id);
 
   const openUpdate = async (pin: ClientPin) => {
@@ -77,9 +78,13 @@ export function ClientSopWorkspace({ propertyId, locked }: { propertyId: string;
         <div className="h-10 w-px bg-border max-sm:hidden" />
         <div>
           <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Blockers</div>
-          <div className={cn("flex items-center gap-1.5 text-sm font-semibold", sum.blockers.length ? "text-ops-blocked" : "text-muted-foreground")}>
-            {sum.blockers.length ? <AlertTriangle className="h-4 w-4" /> : null}{sum.blockers.length} open · {sum.criticalOpen} critical
-          </div>
+          {calm ? (
+            <div className="text-sm text-muted-foreground">{sum.blockers.filter((b) => b.status === "blocked").length} blocked · {sum.criticalOpen} critical not tracked</div>
+          ) : (
+            <div className={cn("flex items-center gap-1.5 text-sm font-semibold", sum.blockers.length ? "text-ops-blocked" : "text-muted-foreground")}>
+              {sum.blockers.length ? <AlertTriangle className="h-4 w-4" /> : null}{sum.blockers.length} open · {sum.criticalOpen} critical
+            </div>
+          )}
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {outdated.map((p) => (
@@ -104,12 +109,12 @@ export function ClientSopWorkspace({ propertyId, locked }: { propertyId: string;
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {AREAS.map((a) => (
-              <AreaCard key={a} s={sum.byArea[a]} topBlocker={sum.blockers.find((b) => b.area === a)?.node.title} onOpen={() => setArea(a)} />
+              <AreaCard key={a} calm={calm} s={sum.byArea[a]} topBlocker={sum.blockers.find((b) => b.area === a)?.node.title} onOpen={() => setArea(a)} />
             ))}
           </div>
           {sum.blockers.length > 0 && (
             <OpsCard className="p-0">
-              <div className="border-b border-border/60 px-4 py-3 text-sm font-semibold">What's holding launch</div>
+              <div className="border-b border-border/60 px-4 py-3 text-sm font-semibold">{calm ? <span>Critical items not yet tracked <span className="font-normal text-muted-foreground">— only matters if you choose to assess this client</span></span> : "What's holding launch"}</div>
               <ul>
                 {sum.blockers.slice(0, 8).map((b) => (
                   <li key={b.node.stable_key}>
@@ -134,7 +139,7 @@ export function ClientSopWorkspace({ propertyId, locked }: { propertyId: string;
               return (
                 <Button key={a} size="sm" variant={area === a ? "secondary" : "ghost"} className="h-7 gap-1.5" onClick={() => setArea(a)}>
                   {AREA_META[a].label}
-                  {s.blockers > 0 && <span className="rounded-full bg-ops-blocked/15 px-1.5 text-[10px] font-semibold text-ops-blocked">{s.blockers}</span>}
+                  {(calm ? (s.counts.blocked ?? 0) : s.blockers) > 0 && <span className="rounded-full bg-ops-blocked/15 px-1.5 text-[10px] font-semibold text-ops-blocked">{calm ? s.counts.blocked : s.blockers}</span>}
                 </Button>
               );
             })}
