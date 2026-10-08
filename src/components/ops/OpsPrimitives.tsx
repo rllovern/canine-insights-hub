@@ -10,13 +10,13 @@ export function StatusIcon({ status, className }: { status: SopStatus; className
   return <Icon className={cn("h-4 w-4 shrink-0", m.text, className)} aria-label={m.label} />;
 }
 
-export function StatusPill({ status, compact, className }: { status: SopStatus; compact?: boolean; className?: string }) {
+export function StatusPill({ status, compact, responsive, className }: { status: SopStatus; compact?: boolean; responsive?: boolean; className?: string }) {
   const m = STATUS_META[status];
   return (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
       m.text, m.bg, m.ring, m.dashed && "ring-0 outline-dashed outline-1 outline-ops-unknown/60", status === "not_applicable" && "line-through decoration-ops-na/60", className)}>
       <StatusIcon status={status} className="h-3.5 w-3.5" />
-      {!compact && m.label}
+      {!compact && (responsive ? <span className="hidden sm:inline">{m.label}</span> : m.label)}
     </span>
   );
 }
@@ -25,7 +25,7 @@ export function StatusSelect({ value, onChange, disabled }: { value: SopStatus; 
   return (
     <Select value={value} onValueChange={(v) => onChange(v as SopStatus)} disabled={disabled}>
       <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-0 shadow-none focus:ring-0 [&>svg]:opacity-40" aria-label="Change status" onClick={(e) => e.stopPropagation()}>
-        <div className="flex"><StatusPill status={value} /></div>
+        <div className="flex"><StatusPill status={value} responsive /></div>
       </SelectTrigger>
       <SelectContent onClick={(e) => e.stopPropagation()}>
         {STATUS_ORDER.map((s) => <SelectItem key={s} value={s}><span className="flex items-center gap-2"><StatusIcon status={s} />{STATUS_META[s].label}</span></SelectItem>)}

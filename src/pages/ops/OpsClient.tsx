@@ -74,7 +74,7 @@ export default function OpsClient() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex-wrap">
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
           <TabsTrigger value="journal">Journal & History</TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
