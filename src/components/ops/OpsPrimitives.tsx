@@ -25,7 +25,7 @@ export function StatusSelect({ value, onChange, disabled }: { value: SopStatus; 
   return (
     <Select value={value} onValueChange={(v) => onChange(v as SopStatus)} disabled={disabled}>
       <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-0 shadow-none focus:ring-0 [&>svg]:opacity-40" aria-label="Change status" onClick={(e) => e.stopPropagation()}>
-        <StatusPill status={value} />
+        <div className="flex"><StatusPill status={value} /></div>
       </SelectTrigger>
       <SelectContent onClick={(e) => e.stopPropagation()}>
         {STATUS_ORDER.map((s) => <SelectItem key={s} value={s}><span className="flex items-center gap-2"><StatusIcon status={s} />{STATUS_META[s].label}</span></SelectItem>)}
