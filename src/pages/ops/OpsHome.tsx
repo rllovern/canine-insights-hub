@@ -156,7 +156,7 @@ export default function OpsHome() {
                       <td className="p-2 text-muted-foreground">{Q_LABEL[l.questionnaire_status ?? "unknown"]}</td>
                       <td className="p-2">{l.classification === "legacy" ? <span className="text-muted-foreground">History unknown</span> : l.blocking ? `${l.blocking} required open` : "Ready"}</td>
                       <td className="p-2 space-x-2 text-xs"><Conn c={l.connections.google_ads} label="Ads" /><Conn c={l.connections.ctm} label="CTM" /><Conn c={l.connections.ghl} label="GHL" /></td>
-                      <td className="p-2 text-xs text-muted-foreground capitalize">{l.ads_control.replace("_", " ")} · {l.billing_responsibility} pays</td>
+                      <td className="p-2 text-xs text-muted-foreground capitalize">{(l.ads_control ?? "unknown").replace("_", " ")} · {l.billing_responsibility ?? "unknown"} pays</td>
                       <td className="p-2 text-muted-foreground">{fmt(l.last_activity_at)}</td>
                       <td className="p-2"><StateBadge signals={l.signals} /></td>
                     </tr>
