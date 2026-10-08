@@ -6,6 +6,7 @@ import { usePreviewMode } from "@/contexts/PreviewModeContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { useMopsAccess } from "@/hooks/useMopsAccess";
 import { ScopeSelector } from "./ScopeSelector";
 import { SourceHealthPanel } from "./SourceHealthPanel";
 import {
@@ -38,8 +39,9 @@ export function Sidebar() {
   // Full monitoring / deliver / assistant groups only for internal staff.
   const showRichNav = isStaff && !isMinimal;
 
+  const { hasAccess: hasMops } = useMopsAccess();
   const filterVisible = (items: NavItem[]) =>
-    filterVisibleItems(items, { isStaff, isSuperAdmin });
+    filterVisibleItems(items, { isStaff, isSuperAdmin, hasMops });
 
   const applyOrder = applyNavOrder;
 
@@ -49,7 +51,7 @@ export function Sidebar() {
 
   useEffect(() => { setMonitorItems(applyOrder("monitor", filterVisible(MONITOR_ITEMS))); }, [effectiveRole]);
   useEffect(() => { setDeliverItems(applyOrder("deliver", filterVisible(DELIVER_ITEMS))); }, [effectiveRole]);
-  useEffect(() => { setAdminItems(applyOrder("admin", filterVisible(ADMIN_ITEMS))); }, [effectiveRole]);
+  useEffect(() => { setAdminItems(applyOrder("admin", filterVisible(ADMIN_ITEMS))); }, [effectiveRole, hasMops]);
 
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);

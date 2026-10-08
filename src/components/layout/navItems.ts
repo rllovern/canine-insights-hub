@@ -1,4 +1,4 @@
-import { BarChart3, PhoneCall, Settings, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, LayoutDashboard, Database, Receipt, MessageSquare, ClipboardList, ExternalLink, Bot, Megaphone, FileDown } from "lucide-react";
+import { BarChart3, PhoneCall, Settings, Users, FileText, FileSearch, Wallet, Target, GitBranch, Timer, LayoutDashboard, Database, Receipt, MessageSquare, ClipboardList, ExternalLink, Bot, Megaphone, FileDown, Briefcase } from "lucide-react";
 
 export type NavItem = {
   key: string;
@@ -10,6 +10,8 @@ export type NavItem = {
   staffOnly?: boolean;
   /** Show only to Super Admin. */
   superAdminOnly?: boolean;
+  /** Show only to the account holding the explicit Marketing Ops grant (never role-based). */
+  mopsOnly?: boolean;
 };
 
 export const COMMAND_ITEM: NavItem = { key: "command", to: "/command", label: "Command", icon: LayoutDashboard };
@@ -32,6 +34,7 @@ export const DELIVER_ITEMS: NavItem[] = [
 ];
 
 export const ADMIN_ITEMS: NavItem[] = [
+  { key: "marketing-ops", to: "/ops", label: "Marketing Ops", icon: Briefcase, mopsOnly: true },
   { key: "clients", to: "/admin/properties", label: "Clients", icon: Users, staffOnly: true },
   { key: "users", to: "/admin/users", label: "Users", icon: Users, superAdminOnly: true },
   { ...ONBOARDING_ITEM, staffOnly: true },
@@ -46,9 +49,10 @@ export const ADMIN_ITEMS: NavItem[] = [
 
 export function filterVisibleItems(
   items: NavItem[],
-  opts: { isStaff: boolean; isSuperAdmin: boolean },
+  opts: { isStaff: boolean; isSuperAdmin: boolean; hasMops?: boolean },
 ): NavItem[] {
   return items.filter((i) => {
+    if (i.mopsOnly && !opts.hasMops) return false;
     if (i.superAdminOnly && !opts.isSuperAdmin) return false;
     if (i.staffOnly && !opts.isStaff) return false;
     return true;

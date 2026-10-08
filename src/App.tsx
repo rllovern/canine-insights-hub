@@ -43,6 +43,9 @@ import PublicMonthlyReport from "./pages/PublicMonthlyReport";
 import { AppShell } from "./components/layout/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
 import { ViewerBlock } from "./components/ViewerBlock";
+import { RequireMopsAccess } from "./components/RequireMopsAccess";
+import OpsHome from "./pages/ops/OpsHome";
+import OpsClient from "./pages/ops/OpsClient";
 
 const queryClient = new QueryClient();
 
@@ -134,6 +137,8 @@ const App = () => (
                       path="/admin/announcements"
                       element={<RequireAuth requireSuperAdmin><AdminAnnouncements /></RequireAuth>}
                     />
+                    <Route path="/ops" element={<RequireMopsAccess><OpsHome /></RequireMopsAccess>} />
+                    <Route path="/ops/:propertyId" element={<RequireMopsAccess><OpsClient /></RequireMopsAccess>} />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />
