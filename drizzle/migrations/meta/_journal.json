@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791431938455,
+      "tag": "0000_mops_probe_compat_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791432223512,
+      "tag": "0001_mops_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791432453514,
+      "tag": "0002_mops_api_dispatcher",
+      "breakpoints": true
+    }
+  ]
+}

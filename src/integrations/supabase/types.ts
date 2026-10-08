@@ -3395,6 +3395,44 @@ export type Database = {
           verified: number
         }[]
       }
+      mops_api: {
+        Args: { _actor: string; _args?: Json; _endpoint: string; _op: string }
+        Returns: Json
+      }
+      mops_audit_event: {
+        Args: {
+          _actor: string
+          _detail: Json
+          _endpoint: string
+          _outcome: string
+        }
+        Returns: undefined
+      }
+      mops_change_sync_state: {
+        Args: never
+        Returns: {
+          customer_id: string
+          last_success_through: string
+        }[]
+      }
+      mops_ingest_changes: {
+        Args: {
+          _customer: string
+          _error: string
+          _events: Json
+          _ok: boolean
+          _through: string
+        }
+        Returns: Json
+      }
+      mops_my_access: { Args: never; Returns: boolean }
+      mops_privilege_audit: {
+        Args: never
+        Returns: {
+          finding: string
+        }[]
+      }
+      mops_probe_rpc: { Args: never; Returns: string }
       normalize_tag: { Args: { _t: string }; Returns: string }
       public_ai_assistant_context: {
         Args: { _from: string; _to: string; _token: string }
