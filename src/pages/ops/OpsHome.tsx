@@ -8,8 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { mopsCall, STAGE_LABEL, Q_LABEL } from "@/lib/mops";
-import { AlertTriangle, Eye, CheckCircle2, Lock } from "lucide-react";
+import { mopsCall, STAGE_LABEL } from "@/lib/mops";
+import { AlertTriangle, Eye, CheckCircle2, Lock, BookOpen } from "lucide-react";
+import { useSopPortfolio } from "@/lib/mops/hooks";
+import { summarize, AREAS, type AreaSummary, type Readiness, type Summary } from "@/lib/mops/readiness";
+import { OpsCard, ProgressRing, ReadinessBadge } from "@/components/ops/OpsPrimitives";
+import { AREA_META, READINESS_META } from "@/components/ops/statusMeta";
+import { cn } from "@/lib/utils";
 
 type Loc = {
   id: string; name: string; is_active: boolean; classification: string | null; stage: string | null;
@@ -37,17 +42,34 @@ export default function OpsHome() {
   const brief = useQuery({ queryKey: ["mops", "brief"], queryFn: () => mopsCall<any>("brief") });
   const [q, setQ] = useState("");
   const [view, setView] = useState<"all" | "active" | "onboarding" | "attention">("all");
-  const [sort, setSort] = useState<"name" | "activity">("name");
+  const [sort, setSort] = useState<"name" | "activity" | "attention">("attention");
+  const [readyFilter, setReadyFilter] = useState<Readiness | null>(null);
+  const portfolio = useSopPortfolio();
+  const summaries = useMemo(() => {
+    const m = new Map<string, Summary>();
+    const p = portfolio.data;
+    if (!p) return m;
+    for (const c of p.clients) {
+      const nodes = c.pins.flatMap((v) => p.versions[v] ?? []);
+      m.set(c.property_id, summarize(nodes, { statuses: c.statuses, auto: c.auto, answers: c.answers, classification: c.classification }));
+    }
+    return m;
+  }, [portfolio.data]);
 
   const rows = useMemo(() => {
     let r = dir.data?.locations ?? [];
     if (q) r = r.filter((l) => l.name.toLowerCase().includes(q.toLowerCase()));
     if (view === "active") r = r.filter((l) => l.stage === "active");
     if (view === "onboarding") r = r.filter((l) => l.classification === "onboarding" && !["active", "archived", "paused"].includes(l.stage ?? ""));
-    if (view === "attention") r = r.filter((l) => l.signals.length || l.blocked);
+    if (view === "attention") r = r.filter((l) => l.signals.length || l.blocked || (summaries.get(l.id)?.readiness === "not_ready") || (summaries.get(l.id)?.readiness === "at_risk"));
+    if (readyFilter) r = r.filter((l) => summaries.get(l.id)?.readiness === readyFilter);
     if (sort === "activity") r = [...r].sort((a, b) => (b.last_activity_at ?? "").localeCompare(a.last_activity_at ?? ""));
+    if (sort === "attention") {
+      const score = (l: Loc) => { const sm = summaries.get(l.id); return (l.signals.some((s) => s.state === "action_required") ? 1000 : 0) + (sm && sm.readiness !== "not_assessed" ? sm.blockers.length * 10 : 0) + l.signals.length; };
+      r = [...r].sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
+    }
     return r;
-  }, [dir.data, q, view, sort]);
+  }, [dir.data, q, view, sort, readyFilter, summaries]);
 
   const [pName, setPName] = useState(""); const [pNotes, setPNotes] = useState("");
   const addProspect = useMutation({
@@ -65,13 +87,14 @@ export default function OpsHome() {
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Lock className="h-4 w-4 text-muted-foreground" />
-        <h1 className="text-2xl font-semibold">Marketing Ops</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Marketing Ops</h1>
         <span className="text-xs text-muted-foreground">Private to you</span>
+        <Button asChild size="sm" variant="outline" className="ml-auto gap-1.5"><Link to="/ops/templates"><BookOpen className="h-3.5 w-3.5" />SOP templates</Link></Button>
       </div>
-      <Tabs defaultValue="brief">
+      <Tabs defaultValue="directory">
         <TabsList>
+          <TabsTrigger value="directory">Clients</TabsTrigger>
           <TabsTrigger value="brief">Brief</TabsTrigger>
-          <TabsTrigger value="directory">Client Directory</TabsTrigger>
           <TabsTrigger value="prospects">Prospects{dir.data?.prospects.length ? ` (${dir.data.prospects.length})` : ""}</TabsTrigger>
         </TabsList>
 
@@ -134,36 +157,38 @@ export default function OpsHome() {
           )}
         </TabsContent>
 
-        <TabsContent value="directory" className="space-y-3">
+        <TabsContent value="directory" className="space-y-4">
+          <PortfolioStrip rows={dir.data?.locations ?? []} summaries={summaries} onPick={(r) => setReadyFilter(readyFilter === r ? null : r)} active={readyFilter} />
           <div className="flex flex-wrap items-center gap-2">
-            <Input placeholder="Search locations" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
+            <Input placeholder="Search locations" value={q} onChange={(e) => setQ(e.target.value)} className="h-9 max-w-xs" />
             {(["all", "active", "onboarding", "attention"] as const).map((v) => (
-              <Button key={v} size="sm" variant={view === v ? "default" : "outline"} onClick={() => setView(v)} className="capitalize">{v === "attention" ? "Needs attention" : v}</Button>
+              <Button key={v} size="sm" variant={view === v ? "secondary" : "ghost"} onClick={() => setView(v)} className="h-8 capitalize">{v === "attention" ? "Needs attention" : v}</Button>
             ))}
-            <Button size="sm" variant="ghost" onClick={() => setSort(sort === "name" ? "activity" : "name")}>Sort: {sort === "name" ? "Name" : "Recent activity"}</Button>
+            <Button size="sm" variant="ghost" className="ml-auto h-8" onClick={() => setSort(sort === "name" ? "attention" : sort === "attention" ? "activity" : "name")}>Sort: {sort === "name" ? "Name" : sort === "attention" ? "Needs attention" : "Recent activity"}</Button>
           </div>
-          {dir.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : dir.error ? <p className="text-sm text-destructive">{(dir.error as Error).message}</p> : (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-                  <tr><th className="p-2">Location</th><th className="p-2">Stage</th><th className="p-2">Questionnaire</th><th className="p-2">Readiness</th><th className="p-2">Connections</th><th className="p-2">Ads control / billing</th><th className="p-2">Last activity</th><th className="p-2">State</th></tr>
-                </thead>
-                <tbody>
-                  {rows.map((l) => (
-                    <tr key={l.id} className="border-t hover:bg-muted/30">
-                      <td className="p-2"><Link to={`/ops/${l.id}`} className="font-medium hover:underline">{l.name}</Link>{l.classification === "legacy" && <Badge variant="outline" className="ml-2 text-[10px]">Legacy</Badge>}</td>
-                      <td className="p-2">{l.stage ? STAGE_LABEL[l.stage] : "Not yet tracked"}</td>
-                      <td className="p-2 text-muted-foreground">{Q_LABEL[l.questionnaire_status ?? "unknown"]}</td>
-                      <td className="p-2">{l.classification === "legacy" ? <span className="text-muted-foreground">History unknown</span> : l.blocking ? `${l.blocking} required open` : "Ready"}</td>
-                      <td className="p-2 space-x-2 text-xs"><Conn c={l.connections.google_ads} label="Ads" /><Conn c={l.connections.ctm} label="CTM" /><Conn c={l.connections.ghl} label="GHL" /></td>
-                      <td className="p-2 text-xs text-muted-foreground capitalize">{(l.ads_control ?? "unknown").replace("_", " ")} · {l.billing_responsibility ?? "unknown"} pays</td>
-                      <td className="p-2 text-muted-foreground">{fmt(l.last_activity_at)}</td>
-                      <td className="p-2"><StateBadge signals={l.signals} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {dir.isLoading ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-16 animate-pulse rounded-xl bg-muted/60" />)}</div> : dir.error ? <p className="text-sm text-destructive">{(dir.error as Error).message}</p> : (
+            <OpsCard className="divide-y divide-border/60 overflow-hidden">
+              <div className="hidden grid-cols-[minmax(180px,1.4fr)_120px_70px_150px_90px_120px] items-center gap-4 bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground lg:grid">
+                <span>Client</span><span>Readiness</span><span>Done</span><span>Areas</span><span>Blockers</span><span>Signals</span>
+              </div>
+              {rows.map((l) => {
+                const sm = summaries.get(l.id);
+                return (
+                  <Link key={l.id} to={`/ops/${l.id}`} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors hover:bg-muted/40 lg:grid-cols-[minmax(180px,1.4fr)_120px_70px_150px_90px_120px]">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 truncate font-medium">{l.name}{l.classification === "legacy" && <span className="rounded bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">Legacy</span>}</div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">{l.stage ? STAGE_LABEL[l.stage] : "Not yet tracked"}<span className="space-x-1.5"><Conn c={l.connections.google_ads} label="Ads" /><Conn c={l.connections.ctm} label="CTM" /><Conn c={l.connections.ghl} label="GHL" /></span></div>
+                    </div>
+                    <div>{sm ? <ReadinessBadge readiness={sm.readiness} /> : <span className="text-xs text-muted-foreground">—</span>}</div>
+                    <div className="max-lg:hidden">{sm && <ProgressRing value={sm.completion} size={36} stroke={3.5} />}</div>
+                    <div className="flex items-center gap-1.5 max-lg:col-span-2">{sm && AREAS.map((a) => <AreaDot key={a} calm={sm.readiness === "not_assessed"} s={sm.byArea[a]} />)}</div>
+                    <div className={sm?.blockers.length && sm.readiness !== "not_assessed" ? "text-sm font-semibold text-ops-blocked" : "text-sm text-muted-foreground"}>{!sm ? "—" : sm.readiness === "not_assessed" ? "Not tracked" : sm.blockers.length ? `${sm.blockers.length} open` : "None"}</div>
+                    <div><StateBadge signals={l.signals} /></div>
+                  </Link>
+                );
+              })}
+              {rows.length === 0 && <p className="p-6 text-sm text-muted-foreground">No clients match.</p>}
+            </OpsCard>
           )}
         </TabsContent>
 
@@ -185,6 +210,35 @@ export default function OpsHome() {
           ))}
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function AreaDot({ s, calm }: { s: AreaSummary; calm?: boolean }) {
+  const state = (calm ? (s.counts.blocked ?? 0) : s.blockers) > 0 ? "blocked" : !s.applicable ? "na" : s.verified === s.applicable ? "verified" : s.verified > 0 || (s.counts.in_progress ?? 0) + (s.counts.awaiting_verification ?? 0) + (s.counts.awaiting_access ?? 0) > 0 ? "progress" : s.unknown > 0 ? "unknown" : "idle";
+  const cls = {
+    blocked: "bg-ops-blocked", verified: "bg-ops-verified", progress: "bg-ops-progress/70", na: "bg-ops-na/40",
+    unknown: "border border-dashed border-ops-unknown bg-transparent", idle: "border border-border bg-transparent",
+  }[state];
+  return <span className={cn("h-3 w-3 rounded-full", cls)} title={`${AREA_META[s.area].label}: ${s.applicable ? `${s.verified}/${s.applicable} verified` : "nothing applicable"}${s.blockers ? `, ${s.blockers} blocker(s)` : ""}`} />;
+}
+
+function PortfolioStrip({ rows, summaries, onPick, active }: { rows: Loc[]; summaries: Map<string, Summary>; onPick: (r: Readiness) => void; active: Readiness | null }) {
+  const counts: Record<Readiness, number> = { not_ready: 0, at_risk: 0, launch_ready: 0, not_assessed: 0 };
+  rows.forEach((l) => { const s = summaries.get(l.id); if (s) counts[s.readiness]++; });
+  const action = rows.filter((l) => l.signals.some((s) => s.state === "action_required")).length;
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      {(["not_ready", "at_risk", "launch_ready", "not_assessed"] as Readiness[]).map((r) => (
+        <button key={r} onClick={() => onPick(r)} className={cn("rounded-xl border bg-card p-3 text-left shadow-[var(--ops-shadow)] transition-colors hover:bg-muted/30", active === r ? "border-primary/50 ring-1 ring-primary/30" : "border-border/70")}>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><span className={cn("h-1.5 w-1.5 rounded-full", READINESS_META[r].dot)} />{READINESS_META[r].label}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{counts[r]}</div>
+        </button>
+      ))}
+      <div className="col-span-2 rounded-xl border border-border/70 bg-card p-3 shadow-[var(--ops-shadow)] md:col-span-1">
+        <div className="text-xs text-muted-foreground">Live signals needing action</div>
+        <div className={cn("mt-1 text-2xl font-semibold tabular-nums", action ? "text-ops-blocked" : "")}>{action}</div>
+      </div>
     </div>
   );
 }

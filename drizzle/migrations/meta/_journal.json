@@ -57,6 +57,34 @@
       "when": 1791433992584,
       "tag": "0007_mops_sustained_signals",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791435521610,
+      "tag": "0008_mops_sop_workspace",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791435867395,
+      "tag": "0009_mops_sop_questionnaire_gate",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791436079669,
+      "tag": "0010_mops_sop_node_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791436094457,
+      "tag": "0011_mops_sop_node_kind_clone_safe",
+      "breakpoints": true
     }
   ]
 }
