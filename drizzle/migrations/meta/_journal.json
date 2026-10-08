@@ -15,6 +15,13 @@
       "when": 1791432223512,
       "tag": "0001_mops_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791432453514,
+      "tag": "0002_mops_api_dispatcher",
+      "breakpoints": true
     }
   ]
 }
