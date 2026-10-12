@@ -287,11 +287,14 @@ Deno.serve(async (req) => {
     // Campaign identity is the Google Ads campaign ID, not its name. Fold any history
     // recorded under a previous name into the current name so a rename never
     // double-counts spend or orphans history (incl. shared-account label scoping).
+    let renameReconcile: unknown = null;
+    const reconcileDryRun = Deno.env.get("RENAME_RECONCILE_MODE") !== "apply" && !body?.reconcile_apply;
     try {
       const currentById: Record<string, string> = {};
       for (const r of rows) if (r.campaign_id) currentById[r.campaign_id] = r.campaign;
       if (Object.keys(currentById).length) {
-        const { data: rec, error: recErr } = await admin.rpc("reconcile_campaign_renames", { _property_id: propertyId, _current: currentById, _dry_run: false });
+        const { data: rec, error: recErr } = await admin.rpc("reconcile_campaign_renames", { _property_id: propertyId, _current: currentById, _dry_run: reconcileDryRun });
+        renameReconcile = recErr ? { error: recErr.message } : { dry_run: reconcileDryRun, changes: rec };
         if (recErr) console.error("rename reconcile failed", recErr.message);
         else if (Array.isArray(rec) && rec.length) console.log("rename reconcile", JSON.stringify(rec));
       }
@@ -376,7 +379,7 @@ Deno.serve(async (req) => {
       console.error("campaign_labels snapshot failed", e);
     }
 
-    return finish("success", { ok: true, written, range: { from, to } });
+    return finish("success", { ok: true, written, range: { from, to }, rename_reconcile: renameReconcile });
   } catch (e) {
     return finish("failure", { error: String(e) }, 500, String(e));
   }
