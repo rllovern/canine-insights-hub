@@ -288,7 +288,7 @@ Deno.serve(async (req) => {
     // recorded under a previous name into the current name so a rename never
     // double-counts spend or orphans history (incl. shared-account label scoping).
     let renameReconcile: unknown = null;
-    const reconcileDryRun = Deno.env.get("RENAME_RECONCILE_MODE") !== "apply" && !body?.reconcile_apply;
+    const reconcileDryRun = body?.reconcile_dry_run === true;
     try {
       const currentById: Record<string, string> = {};
       for (const r of rows) if (r.campaign_id) currentById[r.campaign_id] = r.campaign;
