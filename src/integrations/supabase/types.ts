@@ -458,6 +458,7 @@ export type Database = {
       campaign_budgets: {
         Row: {
           campaign: string
+          campaign_id: string | null
           daily_budget: number
           id: string
           property_id: string
@@ -466,6 +467,7 @@ export type Database = {
         }
         Insert: {
           campaign: string
+          campaign_id?: string | null
           daily_budget?: number
           id?: string
           property_id: string
@@ -474,6 +476,7 @@ export type Database = {
         }
         Update: {
           campaign?: string
+          campaign_id?: string | null
           daily_budget?: number
           id?: string
           property_id?: string
@@ -493,18 +496,21 @@ export type Database = {
       campaign_labels: {
         Row: {
           campaign: string
+          campaign_id: string | null
           label_name: string
           property_id: string
           synced_at: string
         }
         Insert: {
           campaign: string
+          campaign_id?: string | null
           label_name: string
           property_id: string
           synced_at?: string
         }
         Update: {
           campaign?: string
+          campaign_id?: string | null
           label_name?: string
           property_id?: string
           synced_at?: string
@@ -518,6 +524,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      campaign_rename_log: {
+        Row: {
+          at: string
+          campaign_id: string | null
+          id: string
+          merged_cost: number
+          merged_rows: number
+          method: string
+          new_name: string
+          old_name: string
+          property_id: string
+          renamed_rows: number
+        }
+        Insert: {
+          at?: string
+          campaign_id?: string | null
+          id?: string
+          merged_cost?: number
+          merged_rows?: number
+          method: string
+          new_name: string
+          old_name: string
+          property_id: string
+          renamed_rows?: number
+        }
+        Update: {
+          at?: string
+          campaign_id?: string | null
+          id?: string
+          merged_cost?: number
+          merged_rows?: number
+          method?: string
+          new_name?: string
+          old_name?: string
+          property_id?: string
+          renamed_rows?: number
+        }
+        Relationships: []
       }
       ctm_calls: {
         Row: {
@@ -583,6 +628,7 @@ export type Database = {
           ad_source: string
           bad_leads: number
           campaign: string
+          campaign_id: string | null
           clicks: number
           cost: number
           created_at: string
@@ -605,6 +651,7 @@ export type Database = {
           ad_source: string
           bad_leads?: number
           campaign: string
+          campaign_id?: string | null
           clicks?: number
           cost?: number
           created_at?: string
@@ -627,6 +674,7 @@ export type Database = {
           ad_source?: string
           bad_leads?: number
           campaign?: string
+          campaign_id?: string | null
           clicks?: number
           cost?: number
           created_at?: string
@@ -3075,6 +3123,7 @@ export type Database = {
           ad_source: string
           bad_leads: number
           campaign: string
+          campaign_id: string | null
           clicks: number
           cost: number
           created_at: string
@@ -3459,6 +3508,7 @@ export type Database = {
           ad_source: string
           bad_leads: number
           campaign: string
+          campaign_id: string | null
           clicks: number
           cost: number
           created_at: string
@@ -3503,6 +3553,10 @@ export type Database = {
         }
       }
       rebuild_lead_facts: { Args: { _property_id: string }; Returns: Json }
+      reconcile_campaign_renames: {
+        Args: { _current: Json; _dry_run?: boolean; _property_id: string }
+        Returns: Json
+      }
       report_data_freshness: {
         Args: { _token: string }
         Returns: {
