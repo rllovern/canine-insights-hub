@@ -181,6 +181,7 @@ Deno.serve(async (req) => {
     const gaql = `
       SELECT
         segments.date,
+        campaign.id,
         campaign.name,
         metrics.cost_micros,
         metrics.impressions,
@@ -200,12 +201,13 @@ Deno.serve(async (req) => {
 
     // searchStream returns an array of result chunks
     const chunks = Array.isArray(adsJson) ? adsJson : [adsJson];
-    const rows: Array<{ date: string; campaign: string; cost: number; impressions: number; clicks: number; conversions: number }> = [];
+    const rows: Array<{ date: string; campaign: string; campaign_id: string | null; cost: number; impressions: number; clicks: number; conversions: number }> = [];
     for (const chunk of chunks) {
       for (const r of chunk.results ?? []) {
         rows.push({
           date: r.segments?.date,
           campaign: r.campaign?.name ?? "(unknown)",
+          campaign_id: r.campaign?.id ? String(r.campaign.id) : null,
           cost: Number(r.metrics?.costMicros ?? 0) / 1_000_000,
           impressions: Number(r.metrics?.impressions ?? 0),
           clicks: Number(r.metrics?.clicks ?? 0),
@@ -234,6 +236,7 @@ Deno.serve(async (req) => {
       date: r.date,
       ad_source: "Google PPC",
       campaign: r.campaign,
+      campaign_id: r.campaign_id,
       cost: r.cost,
       impressions: r.impressions,
       clicks: r.clicks,
@@ -281,6 +284,24 @@ Deno.serve(async (req) => {
       written = count ?? merged.length;
     }
 
+    // Campaign identity is the Google Ads campaign ID, not its name. Fold any history
+    // recorded under a previous name into the current name so a rename never
+    // double-counts spend or orphans history (incl. shared-account label scoping).
+    let renameReconcile: unknown = null;
+    const reconcileDryRun = body?.reconcile_dry_run === true;
+    try {
+      const currentById: Record<string, string> = {};
+      for (const r of rows) if (r.campaign_id) currentById[r.campaign_id] = r.campaign;
+      if (Object.keys(currentById).length) {
+        const { data: rec, error: recErr } = await admin.rpc("reconcile_campaign_renames", { _property_id: propertyId, _current: currentById, _dry_run: reconcileDryRun });
+        renameReconcile = recErr ? { error: recErr.message } : { dry_run: reconcileDryRun, changes: rec };
+        if (recErr) console.error("rename reconcile failed", recErr.message);
+        else if (Array.isArray(rec) && rec.length) console.log("rename reconcile", JSON.stringify(rec));
+      }
+    } catch (e) {
+      console.error("rename reconcile threw", e);
+    }
+
     await admin
       .from("property_data_sources")
       .update({ status: "connected", last_synced_at: new Date().toISOString(), last_error: null })
@@ -298,7 +319,7 @@ Deno.serve(async (req) => {
       const bJson = await bRes.json();
       if (bRes.ok) {
         const bChunks = Array.isArray(bJson) ? bJson : [bJson];
-        const budgetRows: Array<{ property_id: string; campaign: string; daily_budget: number; status: string }> = [];
+        const budgetRows: Array<{ property_id: string; campaign: string; campaign_id: string | null; daily_budget: number; status: string }> = [];
         const seen = new Set<string>();
         for (const chunk of bChunks) {
           for (const r of chunk.results ?? []) {
@@ -308,6 +329,7 @@ Deno.serve(async (req) => {
             budgetRows.push({
               property_id: propertyId,
               campaign: name,
+              campaign_id: r.campaign?.id ? String(r.campaign.id) : null,
               daily_budget: Number(r.campaignBudget?.amountMicros ?? 0) / 1_000_000,
               status: String(r.campaign?.status ?? ""),
             });
@@ -326,7 +348,7 @@ Deno.serve(async (req) => {
     // Refresh campaign↔label mapping for Budget Pacing label filtering.
     try {
       const labelMapGaql = `
-        SELECT campaign.name, label.name
+        SELECT campaign.id, campaign.name, label.name
         FROM campaign_label
         WHERE campaign.status != 'REMOVED'
         ${campaignIdAllowlist ? `AND campaign.id IN (${campaignIdAllowlist.join(",")})` : ""}
@@ -335,7 +357,7 @@ Deno.serve(async (req) => {
       const lmJson = await lmRes.json();
       if (lmRes.ok) {
         const lmChunks = Array.isArray(lmJson) ? lmJson : [lmJson];
-        const labelRows: Array<{ property_id: string; campaign: string; label_name: string }> = [];
+        const labelRows: Array<{ property_id: string; campaign: string; campaign_id: string | null; label_name: string }> = [];
         const seen = new Set<string>();
         for (const chunk of lmChunks) {
           for (const r of chunk.results ?? []) {
@@ -345,7 +367,7 @@ Deno.serve(async (req) => {
             const key = `${c}::${l}`;
             if (seen.has(key)) continue;
             seen.add(key);
-            labelRows.push({ property_id: propertyId, campaign: c, label_name: l });
+            labelRows.push({ property_id: propertyId, campaign: c, campaign_id: r.campaign?.id ? String(r.campaign.id) : null, label_name: l });
           }
         }
         await admin.from("campaign_labels").delete().eq("property_id", propertyId);
@@ -357,7 +379,7 @@ Deno.serve(async (req) => {
       console.error("campaign_labels snapshot failed", e);
     }
 
-    return finish("success", { ok: true, written, range: { from, to } });
+    return finish("success", { ok: true, written, range: { from, to }, rename_reconcile: renameReconcile });
   } catch (e) {
     return finish("failure", { error: String(e) }, 500, String(e));
   }

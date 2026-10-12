@@ -271,17 +271,19 @@ export function CallTracking({
 
   // Campaign breakdown
   const campaignAgg = useMemo(
-    () => aggregate(calls, (c) => `${c.channel ?? "Other"}|${c.campaign_name ?? "(no campaign)"}`),
+    () => aggregate(calls, (c) => `${c.channel ?? "Other"}\u0000${c.campaign_name ?? "(no campaign)"}`),
     [calls],
   );
   const campaignAggPrev = useMemo(
-    () => aggregate(prevCalls, (c) => `${c.channel ?? "Other"}|${c.campaign_name ?? "(no campaign)"}`),
+    () => aggregate(prevCalls, (c) => `${c.channel ?? "Other"}\u0000${c.campaign_name ?? "(no campaign)"}`),
     [prevCalls],
   );
   const [sortKey, setSortKey] = useState<keyof RowAgg>("record_count");
   const campaignRows = useMemo(() => {
     const arr = Array.from(campaignAgg.entries()).map(([k, v]) => {
-      const [channel, campaign] = k.split("|");
+      const sep = k.indexOf("\u0000");
+      const channel = k.slice(0, sep);
+      const campaign = k.slice(sep + 1);
       return { key: k, channel, campaign, agg: v, prev: campaignAggPrev.get(k) ?? emptyAgg() };
     });
     arr.sort((a, b) => (b.agg[sortKey] as number) - (a.agg[sortKey] as number));
