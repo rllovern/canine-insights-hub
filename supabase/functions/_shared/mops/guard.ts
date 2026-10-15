@@ -65,8 +65,8 @@ export function mopsHandler(endpoint: string, handler: (ctx: MopsCtx) => Promise
     if ((granted as { error?: string })?.error === "not_found") return notFound();
 
     const call = async (op: string, args: Record<string, unknown> = {}) => {
-      // SOP operations live in a sibling entry point with the identical grant check.
-      const fn = op.startsWith("sop_") ? "mops_sop_api" : "mops_api";
+      // SOP and Form Sync operations live in sibling entry points with the identical grant check.
+      const fn = op.startsWith("sop_") ? "mops_sop_api" : op.startsWith("formsync_") ? "mops_formsync_api" : "mops_api";
       const { data, error } = await admin.rpc(fn, { _actor: uid, _endpoint: endpoint, _op: op, _args: args });
       if (error) throw new Error(error.message);
       const out = (data ?? {}) as Record<string, unknown>;
