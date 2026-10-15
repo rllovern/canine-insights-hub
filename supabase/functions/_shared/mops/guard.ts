@@ -24,6 +24,8 @@ export interface MopsCtx {
   call: (op: string, args?: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /** Private SOP file storage. Only reachable after the grant check passed. */
   sopStorage: () => ReturnType<SupabaseClient["storage"]["from"]>;
+  /** Existing GHL/CTM connection settings for one location (backend only, never returned to the browser). */
+  connections: (propertyId: string) => Promise<{ ghl?: { location_id: string; token: string }; ctm?: { account_id: string; api_token: string; api_secret: string } }>;
 }
 
 // Fields a caller may never use to influence identity.
@@ -75,7 +77,20 @@ export function mopsHandler(endpoint: string, handler: (ctx: MopsCtx) => Promise
     };
 
     try {
-      return await handler({ uid, body: body ?? {}, call, sopStorage: () => admin.storage.from("mops-sop") });
+      return await handler({ uid, body: body ?? {}, call, sopStorage: () => admin.storage.from("mops-sop"), connections: async (propertyId: string) => {
+        const { data, error } = await admin.from("property_data_sources").select("source, config, secret_token").eq("property_id", propertyId).in("source", ["ghl", "ctm"]);
+        if (error) throw new Error(error.message);
+        const out: Awaited<ReturnType<MopsCtx["connections"]>> = {};
+        for (const r of data ?? []) {
+          const c = (r.config ?? {}) as Record<string, string>;
+          if (r.source === "ghl" && c.location_id && r.secret_token) out.ghl = { location_id: c.location_id, token: r.secret_token as string };
+          if (r.source === "ctm" && c.account_id) {
+            const agency = (c as Record<string, unknown>).use_agency_credentials === true || !c.api_token;
+            out.ctm = { account_id: c.account_id, api_token: agency ? Deno.env.get("CTM_API_ACCESS_KEY") ?? "" : c.api_token, api_secret: agency ? Deno.env.get("CTM_API_SECRET_KEY") ?? "" : c.api_secret };
+          }
+        }
+        return out;
+      } });
     } catch (e) {
       if (e instanceof MopsNotFound) return notFound();
       const msg = e instanceof Error ? e.message : String(e);
