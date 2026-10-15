@@ -47,6 +47,7 @@ import { RequireMopsAccess } from "./components/RequireMopsAccess";
 import OpsHome from "./pages/ops/OpsHome";
 import OpsClient from "./pages/ops/OpsClient";
 import OpsTemplates from "./pages/ops/OpsTemplates";
+import OpsFormSync from "./pages/ops/OpsFormSync";
 
 const queryClient = new QueryClient();
 
@@ -139,6 +140,7 @@ const App = () => (
                       element={<RequireAuth requireSuperAdmin><AdminAnnouncements /></RequireAuth>}
                     />
                     <Route path="/ops" element={<RequireMopsAccess><OpsHome /></RequireMopsAccess>} />
+                    <Route path="/ops/form-sync" element={<RequireMopsAccess><OpsFormSync /></RequireMopsAccess>} />
                     <Route path="/ops/templates" element={<RequireMopsAccess><OpsTemplates /></RequireMopsAccess>} />
                     <Route path="/ops/:propertyId" element={<RequireMopsAccess><OpsClient /></RequireMopsAccess>} />
                   </Route>

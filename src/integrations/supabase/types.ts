@@ -3464,6 +3464,14 @@ export type Database = {
           last_success_through: string
         }[]
       }
+      mops_formsync_api: {
+        Args: { _actor: string; _args?: Json; _endpoint: string; _op: string }
+        Returns: Json
+      }
+      mops_formsync_internal: {
+        Args: { _args?: Json; _op: string }
+        Returns: Json
+      }
       mops_ingest_changes: {
         Args: {
           _customer: string
