@@ -77,20 +77,7 @@ export function mopsHandler(endpoint: string, handler: (ctx: MopsCtx) => Promise
     };
 
     try {
-      return await handler({ uid, body: body ?? {}, call, sopStorage: () => admin.storage.from("mops-sop"), connections: async (propertyId: string) => {
-        const { data, error } = await admin.from("property_data_sources").select("source, config, secret_token").eq("property_id", propertyId).in("source", ["ghl", "ctm"]);
-        if (error) throw new Error(error.message);
-        const out: Awaited<ReturnType<MopsCtx["connections"]>> = {};
-        for (const r of data ?? []) {
-          const c = (r.config ?? {}) as Record<string, string>;
-          if (r.source === "ghl" && c.location_id && r.secret_token) out.ghl = { location_id: c.location_id, token: r.secret_token as string };
-          if (r.source === "ctm" && c.account_id) {
-            const agency = (c as Record<string, unknown>).use_agency_credentials === true || !c.api_token;
-            out.ctm = { account_id: c.account_id, api_token: agency ? Deno.env.get("CTM_API_ACCESS_KEY") ?? "" : c.api_token, api_secret: agency ? Deno.env.get("CTM_API_SECRET_KEY") ?? "" : c.api_secret };
-          }
-        }
-        return out;
-      } });
+      return await handler({ uid, body: body ?? {}, call, sopStorage: () => admin.storage.from("mops-sop"), connections: (propertyId: string) => loadConnections(admin, propertyId) });
     } catch (e) {
       if (e instanceof MopsNotFound) return notFound();
       const msg = e instanceof Error ? e.message : String(e);
@@ -102,3 +89,19 @@ export function mopsHandler(endpoint: string, handler: (ctx: MopsCtx) => Promise
 }
 
 class MopsNotFound extends Error {}
+
+/** Existing GHL/CTM connection settings for one location. Backend only. */
+export async function loadConnections(admin: SupabaseClient, propertyId: string) {
+  const { data, error } = await admin.from("property_data_sources").select("source, config, secret_token").eq("property_id", propertyId).in("source", ["ghl", "ctm"]);
+  if (error) throw new Error(error.message);
+  const out: Awaited<ReturnType<MopsCtx["connections"]>> = {};
+  for (const r of data ?? []) {
+    const c = (r.config ?? {}) as Record<string, string>;
+    if (r.source === "ghl" && c.location_id && r.secret_token) out.ghl = { location_id: c.location_id, token: r.secret_token as string };
+    if (r.source === "ctm" && c.account_id) {
+      const agency = (c as Record<string, unknown>).use_agency_credentials === true || !c.api_token;
+      out.ctm = { account_id: c.account_id, api_token: agency ? Deno.env.get("CTM_API_ACCESS_KEY") ?? "" : c.api_token, api_secret: agency ? Deno.env.get("CTM_API_SECRET_KEY") ?? "" : c.api_secret };
+    }
+  }
+  return out;
+}
