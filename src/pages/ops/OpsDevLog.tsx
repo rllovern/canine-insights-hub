@@ -47,7 +47,7 @@ export default function OpsDevLog() {
         <Button asChild size="sm" variant="ghost" className="gap-1.5 -ml-2"><Link to="/ops"><ArrowLeft className="h-3.5 w-3.5" />Marketing Ops</Link></Button>
         <Lock className="h-4 w-4 text-muted-foreground" />
         <h1 className="text-2xl font-semibold tracking-tight">Development Log</h1>
-        <span className="text-xs text-muted-foreground">Syncs to Asana · Dashboard Management</span>
+        <span className="text-xs text-muted-foreground">Posts comments to the permanent Asana Dashboard Development Log task</span>
         <Button size="sm" variant="outline" className="ml-auto gap-1.5" disabled={run.isPending} onClick={() => run.mutate()}>
           <RefreshCw className={`h-3.5 w-3.5 ${run.isPending ? "animate-spin" : ""}`} />Sync now
         </Button>
