@@ -48,6 +48,7 @@ import OpsHome from "./pages/ops/OpsHome";
 import OpsClient from "./pages/ops/OpsClient";
 import OpsTemplates from "./pages/ops/OpsTemplates";
 import OpsFormSync from "./pages/ops/OpsFormSync";
+import OpsDevLog from "./pages/ops/OpsDevLog";
 
 const queryClient = new QueryClient();
 
@@ -141,6 +142,7 @@ const App = () => (
                     />
                     <Route path="/ops" element={<RequireMopsAccess><OpsHome /></RequireMopsAccess>} />
                     <Route path="/ops/form-sync" element={<RequireMopsAccess><OpsFormSync /></RequireMopsAccess>} />
+                    <Route path="/ops/dev-log" element={<RequireMopsAccess><OpsDevLog /></RequireMopsAccess>} />
                     <Route path="/ops/templates" element={<RequireMopsAccess><OpsTemplates /></RequireMopsAccess>} />
                     <Route path="/ops/:propertyId" element={<RequireMopsAccess><OpsClient /></RequireMopsAccess>} />
                   </Route>

@@ -1,11 +1,9 @@
-# Roadmap — Agency-wide Lead Reconciliation
+# Roadmap
 
-- [x] Schema: location status (mode: off/monitor/live, manual_hold), preflight runs/results, discovered forms, call discrepancies
-- [x] Preflight module (read-only checks, never auto-reactivates manual holds; passes -> monitoring-only + "needs validation")
-- [x] Form discovery + classification (unknown source stays unknown; unclassified visible, never sent)
-- [x] Engine: per-form config from discovered forms; monitor mode never posts
-- [x] Call discrepancy monitor (expectation unverified unless configured; no writes)
-- [x] Scheduler: all locations in monitor/live; daily preflight inside 5-min job
-- [x] Alerts: connection failure, schedule stopped, preflight fail, review needed
-- [x] Lead Reconciliation UI (overview, filters, location drill-down)
-- [x] Tests, deploy, run preflight on all 10 locations, report
+## Done
+- Asana development-log sync: live, hourly schedule, end-to-end tested (create/update/no-duplicates/denials).
+
+## Open / blocked
+- Lead Reconciliation: matching outside DFW needs user decision (pass GHL IDs into CTM on websites, or allow strict phone+email+time match).
+- Classify 4 held forms (Central IL Grooming/Boarding Contract; NoVA Simple Trifold, Dog Assessment Quiz).
+- CTM native Google Ads attribution for recovered leads: unverified.
