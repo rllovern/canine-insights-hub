@@ -2,10 +2,11 @@
 // Two entry paths:
 //  - Granted user (shared mops guard): view the log, check sync status, run a sync now,
 //    and record change entries (original request + reasoning captured at request time).
-//  - Scheduled (cron secret only, hourly): pushes pending entries to the private
-//    "Dashboard Management" Asana project as one dated parent task per development day
-//    (America/New_York) with one subtask per change. Idempotent: entries carry a stable
-//    change_id and content hash; changed entries update their existing subtask in place.
+//  - Scheduled (cron secret only, hourly fallback): appends one comment per pending change
+//    to the single permanent "Dashboard Development Log" task. Append-only: an edited entry
+//    posts a new UPDATE comment, older comments are never rewritten. Ledger
+//    (mops.dev_log_comments) keyed by change_id + content hash prevents duplicates.
+//  Entries are also pushed immediately after each devlog_upsert.
 // Never writes API credentials or customer data into Asana.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { mopsHandler, json, corsHeaders } from "../_shared/mops/guard.ts";
@@ -89,8 +90,9 @@ async function runSync(call: Internal): Promise<Record<string, unknown>> {
         throw err; // stop the run; remaining entries retry next hour
       }
     }
+    const taskOpen = await ensureTaskOpen();
     await call("devlog_run_finish");
-    return { synced: Object.keys(results).length, results };
+    return { synced: Object.keys(results).length, results, task_open: taskOpen };
   } catch (err) {
     const fail = await call("devlog_run_fail", { error: (err as Error).message });
     if ((fail?.consecutive_failures ?? 0) >= 3) {
@@ -129,7 +131,14 @@ async function scheduled(req: Request): Promise<Response | null> {
 const userHandler = mopsHandler("mops-asana-sync", async (ctx) => {
   const op = String(ctx.body.op ?? "");
   const args = (ctx.body.args && typeof ctx.body.args === "object") ? ctx.body.args as Record<string, unknown> : {};
-  if (op === "devlog_list" || op === "devlog_status" || op === "devlog_upsert") return json(await ctx.call(op, args));
+  if (op === "devlog_list" || op === "devlog_status") return json(await ctx.call(op, args));
+  if (op === "devlog_upsert") {
+    const out = await ctx.call(op, args);
+    // Post promptly; the hourly run retries if this fails.
+    let sync: unknown = null;
+    try { sync = await runSync(internalCall()); } catch (e) { sync = { error: (e as Error).message }; }
+    return json({ ...out, sync });
+  }
   // Identity already verified and grant checked by the guard; the sync itself uses the internal entry point.
   if (op === "run") return json(await runSync(internalCall()));
   return json({ error: "Unknown operation" }, 400);
