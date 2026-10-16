@@ -1,0 +1,3 @@
+update mops.dev_log_entries set content_hash = md5(coalesce(change_id,'')||coalesce(title,'')||coalesce(what_changed,'')||coalesce(why_text,'')) where id in (select id from mops.dev_log_entries where content_hash is null);
+update mops.dev_log_comments c set content_hash = e.content_hash from mops.dev_log_entries e where c.entry_id = e.id and c.content_hash = 'nohash';
+update mops.dev_log_entries set synced_at = now() where id in (select entry_id from mops.dev_log_comments) and synced_at is null;
