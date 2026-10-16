@@ -102,7 +102,13 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
   for (const s of toDeliver) {
     const orig = subsById.get(s.ghl_submission_id);
     const form = s.ghl_form_id ? formMap[s.ghl_form_id] : undefined;
-    const eligible = (Date.parse(s.submitted_at) >= activation || !!s.approved_at) && !!form;
+    // Restricted test window: when test_email is set, ONLY that exact email inside the window may be sent.
+    const testEmail = String(cfg.test_email ?? "").trim().toLowerCase();
+    const origEmail = String(orig?.others?.email ?? orig?.email ?? "").trim().toLowerCase();
+    const sub = Date.parse(s.submitted_at);
+    const testOk = !testEmail || (origEmail === testEmail && !!cfg.test_window_start && sub >= Date.parse(cfg.test_window_start)
+      && !!cfg.test_window_end && now.getTime() <= Date.parse(cfg.test_window_end));
+    const eligible = (sub >= activation || !!s.approved_at) && !!form && testOk;
     const graceOk = Date.parse(s.submitted_at) + cfg.grace_minutes * MIN <= now.getTime();
     const retryOk = !s.next_attempt_at || Date.parse(s.next_attempt_at) <= now.getTime();
     const underMax = (s.attempts ?? 0) < cfg.max_attempts;
