@@ -169,6 +169,13 @@
       "when": 1792179436888,
       "tag": "0023_devlog_updates_where_id",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792180266570,
+      "tag": "0024_devlog_comments",
+      "breakpoints": true
     }
   ]
 }
