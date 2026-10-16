@@ -1,0 +1,2 @@
+ALTER TABLE mops.form_sync_config ADD COLUMN IF NOT EXISTS test_email text, ADD COLUMN IF NOT EXISTS test_window_start timestamptz, ADD COLUMN IF NOT EXISTS test_window_end timestamptz;
+UPDATE mops.form_sync_config SET test_email='formsync-recovery-1016@testing.com', test_window_start=now(), test_window_end=now()+interval '2 hours', delivery_enabled=true, schedule_enabled=true WHERE property_id='cbd7adea-bed7-4b2a-ab71-69194fe9fc62';
