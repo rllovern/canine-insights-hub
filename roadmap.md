@@ -1,7 +1,7 @@
 # Roadmap
 
-## In progress
-- Asana development-log sync: deploy function, hourly schedule, seed retrospective entries, end-to-end test, verify no duplicates on re-run.
+## Done
+- Asana development-log sync: live, hourly schedule, end-to-end tested (create/update/no-duplicates/denials).
 
 ## Open / blocked
 - Lead Reconciliation: matching outside DFW needs user decision (pass GHL IDs into CTM on websites, or allow strict phone+email+time match).
