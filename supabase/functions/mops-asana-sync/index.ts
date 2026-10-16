@@ -123,6 +123,16 @@ async function runSync(call: Internal): Promise<Record<string, unknown>> {
   }
 }
 
+function internalCall(): Internal {
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  return async (op, args = {}) => {
+    const { data, error } = await admin.rpc("mops_devlog_internal", { _op: op, _args: args });
+    if (error) throw new Error(error.message);
+    if ((data as any)?.error) throw new Error(String((data as any).error));
+    return data;
+  };
+}
+
 async function scheduled(req: Request): Promise<Response | null> {
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/, "");
   if (!token || token.split(".").length === 3) return null; // user JWTs go to the guarded path
@@ -130,20 +140,15 @@ async function scheduled(req: Request): Promise<Response | null> {
   const { data: vaultSecret } = await admin.rpc("get_cron_secret_v2");
   const envSecret = Deno.env.get("CRON_SECRET") ?? "";
   if (!((!!vaultSecret && token === vaultSecret) || (!!envSecret && token === envSecret))) return json({ error: "Not found" }, 404);
-  const call: Internal = async (op, args = {}) => {
-    const { data, error } = await admin.rpc("mops_devlog_internal", { _op: op, _args: args });
-    if (error) throw new Error(error.message);
-    if ((data as any)?.error) throw new Error(String((data as any).error));
-    return data;
-  };
-  return json(await runSync(call));
+  return json(await runSync(internalCall()));
 }
 
 const userHandler = mopsHandler("mops-asana-sync", async (ctx) => {
   const op = String(ctx.body.op ?? "");
   const args = (ctx.body.args && typeof ctx.body.args === "object") ? ctx.body.args as Record<string, unknown> : {};
   if (op === "devlog_list" || op === "devlog_status" || op === "devlog_upsert") return json(await ctx.call(op, args));
-  if (op === "run") return json(await runSync(ctx.call));
+  // Identity already verified and grant checked by the guard; the sync itself uses the internal entry point.
+  if (op === "run") return json(await runSync(internalCall()));
   return json({ error: "Unknown operation" }, 400);
 });
 
