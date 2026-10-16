@@ -89,7 +89,7 @@ export default function OpsHome() {
         <Lock className="h-4 w-4 text-muted-foreground" />
         <h1 className="text-2xl font-semibold tracking-tight">Marketing Ops</h1>
         <span className="text-xs text-muted-foreground">Private to you</span>
-        <Button asChild size="sm" variant="outline" className="ml-auto gap-1.5"><Link to="/ops/form-sync">Form Sync</Link></Button>
+        <Button asChild size="sm" variant="outline" className="ml-auto gap-1.5"><Link to="/ops/form-sync">Lead Reconciliation</Link></Button>
         <Button asChild size="sm" variant="outline" className="gap-1.5"><Link to="/ops/templates"><BookOpen className="h-3.5 w-3.5" />SOP templates</Link></Button>
       </div>
       <Tabs defaultValue="directory">
