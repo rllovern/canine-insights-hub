@@ -64,6 +64,7 @@ async function ensureDayTask(call: Internal, day: string): Promise<string> {
   const gid = found?.gid ?? (await asana("POST", "/tasks", {
     name: dayName(day),
     notes: "Automatic daily development log. One subtask per material dashboard change. Date is America/New_York.",
+    projects: [PROJECT_GID],
     memberships: [{ project: PROJECT_GID, section: SECTION_GID }],
   })).data.gid;
   await call("devlog_set_day_task", { day, gid: String(gid) });
@@ -87,7 +88,7 @@ async function syncEntry(call: Internal, e: any): Promise<void> {
     await call("devlog_mark_synced", { id: e.id, gid: String(existing.gid) });
     return;
   }
-  const created = await asana("POST", "/tasks", { name, notes, parent });
+  const created = await asana("POST", `/tasks/${parent}/subtasks`, { name, notes });
   await call("devlog_mark_synced", { id: e.id, gid: String(created.data.gid) });
 }
 
