@@ -2,17 +2,18 @@
 // Two entry paths:
 //  - Granted user (shared mops guard): view the log, check sync status, run a sync now,
 //    and record change entries (original request + reasoning captured at request time).
-//  - Scheduled (cron secret only, hourly): pushes pending entries to the private
-//    "Dashboard Management" Asana project as one dated parent task per development day
-//    (America/New_York) with one subtask per change. Idempotent: entries carry a stable
-//    change_id and content hash; changed entries update their existing subtask in place.
+//  - Scheduled (cron secret only, hourly fallback): appends one comment per pending change
+//    to the single permanent "Dashboard Development Log" task. Append-only: an edited entry
+//    posts a new UPDATE comment, older comments are never rewritten. Ledger
+//    (mops.dev_log_comments) keyed by change_id + content hash prevents duplicates.
+//  Entries are also pushed immediately after each devlog_upsert.
 // Never writes API credentials or customer data into Asana.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { mopsHandler, json, corsHeaders } from "../_shared/mops/guard.ts";
 import { sendPlainEmail } from "../_shared/send-email.ts";
 
-const PROJECT_GID = "1219565659491189";
-const SECTION_GID = "1219565659491190";
+// Permanent "Dashboard Development Log" task (project 1219565659491189). Kept open; never completed by this code.
+const LOG_TASK_GID = "1219592828722988";
 const GATEWAY = "https://connector-gateway.lovable.dev/asana";
 
 type Internal = (op: string, args?: Record<string, unknown>) => Promise<any>;
@@ -35,61 +36,43 @@ async function asana(method: string, path: string, body?: unknown, query?: Recor
 
 const field = (label: string, v: unknown) => (v && String(v).trim() ? `\n${label}:\n${String(v).trim()}\n` : "");
 
-function entryNotes(e: any): string {
+// Ledger marker embedded in every comment so a crash between posting and recording never duplicates it.
+const marker = (e: any) => `Ledger: ${e.change_id} · ${String(e.content_hash ?? "nohash").slice(0, 12)}`;
+
+export function commentText(e: any): string {
+  const isUpdate = Number(e.prior_comments ?? 0) > 0;
+  const header = e.retrospective
+    ? `RETROSPECTIVE ENTRY — original development date ${e.day}. Migrated/recorded after the fact; this comment's Asana timestamp is NOT the original development time. Original request wording was not captured at the time.`
+    : `Change recorded at request time from the original Lovable conversation. Change date (America/New_York): ${e.day}; entry last updated ${new Date(e.updated_at).toISOString()}.`;
   return [
-    e.retrospective ? "RETROSPECTIVE SUMMARY — recorded after the fact; original request context was not captured at the time." : "Recorded at request time from the original Lovable conversation.",
-    field("Original request", e.request_text),
-    field("Why / business context", e.why_text),
-    field("Problem being solved", e.problem),
+    `${isUpdate ? "UPDATE / CORRECTION to" : "NEW CHANGE"}: ${e.title}`,
+    `\n${header}\n`,
     field("What changed", e.what_changed),
-    field("Areas / modules affected", e.areas),
-    field("Implementation details", e.implementation),
+    field("Original request", e.request_text),
+    field("Why the change was requested", e.why_text),
+    field("Problem solved", e.problem),
+    field("What was implemented", [e.implementation, e.areas ? `Areas: ${e.areas}` : ""].filter(Boolean).join("\n")),
     field("Testing & verification", e.testing),
     field("Expected outcome", e.outcome_expected),
-    field("Actual outcome", e.outcome_actual),
-    field("Remaining issues / follow-up", e.followups),
-    field("Lovable reference", e.lovable_ref),
-    `\nStatus: ${e.status}\nChange ID: ${e.change_id}`,
+    field("Outcome", e.outcome_actual),
+    field("Outstanding issues", e.followups),
+    `\nStatus: ${e.status}\n${marker(e)}`,
   ].join("");
 }
 
-const dayName = (day: string) => `${day} | Dashboard Development Log`;
-
-async function ensureDayTask(call: Internal, day: string): Promise<string> {
-  const { asana_task_gid } = await call("devlog_day_task", { day });
-  if (asana_task_gid) return asana_task_gid;
-  // Look for an existing task with the exact dated name (e.g. the manually created one).
-  const list = await asana("GET", `/projects/${PROJECT_GID}/tasks`, undefined, { opt_fields: "gid,name", limit: "100" });
-  const found = (list.data ?? []).find((t: any) => t.name === dayName(day));
-  const gid = found?.gid ?? (await asana("POST", "/tasks", {
-    name: dayName(day),
-    notes: "Automatic daily development log. One subtask per material dashboard change. Date is America/New_York.",
-    projects: [PROJECT_GID],
-    memberships: [{ project: PROJECT_GID, section: SECTION_GID }],
-  })).data.gid;
-  await call("devlog_set_day_task", { day, gid: String(gid) });
-  return String(gid);
+async function syncEntry(call: Internal, e: any): Promise<void> {
+  if (e.already_posted) { await call("devlog_mark_synced", { id: e.id }); return; }
+  // Crash recovery: look for this exact revision's marker among existing comments.
+  const stories = await asana("GET", `/tasks/${LOG_TASK_GID}/stories`, undefined, { opt_fields: "gid,text,type", limit: "100" });
+  const m = marker(e);
+  const existing = (stories.data ?? []).find((s: any) => s.type === "comment" && String(s.text ?? "").includes(m));
+  const gid = existing?.gid ?? (await asana("POST", `/tasks/${LOG_TASK_GID}/stories`, { text: commentText(e) })).data.gid;
+  await call("devlog_record_comment", { id: e.id, hash: e.content_hash ?? "nohash", story_gid: String(gid), task_gid: LOG_TASK_GID });
 }
 
-async function syncEntry(call: Internal, e: any): Promise<void> {
-  const parent = await ensureDayTask(call, e.day);
-  const name = `${e.change_id} | ${e.title}`.slice(0, 500);
-  const notes = entryNotes(e);
-  if (e.asana_subtask_gid) {
-    await asana("PUT", `/tasks/${e.asana_subtask_gid}`, { name, notes });
-    await call("devlog_mark_synced", { id: e.id, gid: e.asana_subtask_gid });
-    return;
-  }
-  // No stored gid: check the parent's subtasks for this change_id before creating (crash recovery).
-  const subs = await asana("GET", `/tasks/${parent}/subtasks`, undefined, { opt_fields: "gid,name", limit: "100" });
-  const existing = (subs.data ?? []).find((s: any) => String(s.name).startsWith(`${e.change_id} |`));
-  if (existing) {
-    await asana("PUT", `/tasks/${existing.gid}`, { name, notes });
-    await call("devlog_mark_synced", { id: e.id, gid: String(existing.gid) });
-    return;
-  }
-  const created = await asana("POST", `/tasks/${parent}/subtasks`, { name, notes });
-  await call("devlog_mark_synced", { id: e.id, gid: String(created.data.gid) });
+async function ensureTaskOpen(): Promise<boolean> {
+  const t = await asana("GET", `/tasks/${LOG_TASK_GID}`, undefined, { opt_fields: "completed" });
+  return t.data?.completed === false;
 }
 
 async function runSync(call: Internal): Promise<Record<string, unknown>> {
@@ -107,8 +90,9 @@ async function runSync(call: Internal): Promise<Record<string, unknown>> {
         throw err; // stop the run; remaining entries retry next hour
       }
     }
+    const taskOpen = await ensureTaskOpen();
     await call("devlog_run_finish");
-    return { synced: Object.keys(results).length, results };
+    return { synced: Object.keys(results).length, results, task_open: taskOpen };
   } catch (err) {
     const fail = await call("devlog_run_fail", { error: (err as Error).message });
     if ((fail?.consecutive_failures ?? 0) >= 3) {
@@ -147,7 +131,14 @@ async function scheduled(req: Request): Promise<Response | null> {
 const userHandler = mopsHandler("mops-asana-sync", async (ctx) => {
   const op = String(ctx.body.op ?? "");
   const args = (ctx.body.args && typeof ctx.body.args === "object") ? ctx.body.args as Record<string, unknown> : {};
-  if (op === "devlog_list" || op === "devlog_status" || op === "devlog_upsert") return json(await ctx.call(op, args));
+  if (op === "devlog_list" || op === "devlog_status") return json(await ctx.call(op, args));
+  if (op === "devlog_upsert") {
+    const out = await ctx.call(op, args);
+    // Post promptly; the hourly run retries if this fails.
+    let sync: unknown = null;
+    try { sync = await runSync(internalCall()); } catch (e) { sync = { error: (e as Error).message }; }
+    return json({ ...out, sync });
+  }
   // Identity already verified and grant checked by the guard; the sync itself uses the internal entry point.
   if (op === "run") return json(await runSync(internalCall()));
   return json({ error: "Unknown operation" }, 400);
