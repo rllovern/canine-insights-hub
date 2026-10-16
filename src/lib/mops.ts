@@ -11,6 +11,17 @@ export async function mopsCall<T = any>(op: string, args: Record<string, unknown
   return data as T;
 }
 
+/** Calls the private Asana development-log endpoint. Identity comes from the session token only. */
+export async function devlogCall<T = any>(op: string, args: Record<string, unknown> = {}): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("mops-asana-sync", { body: { op, args } });
+  if (error) {
+    let msg = "Request failed";
+    try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return data as T;
+}
+
 export async function mopsSummary(propertyId: string): Promise<string> {
   const { data, error } = await supabase.functions.invoke("mops-ai", { body: { property_id: propertyId } });
   if (error) {
