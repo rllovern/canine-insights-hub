@@ -39,8 +39,16 @@ const field = (label: string, v: unknown) => (v && String(v).trim() ? `\n${label
 // Ledger marker embedded in every comment so a crash between posting and recording never duplicates it.
 const marker = (e: any) => `Ledger: ${e.change_id} · ${String(e.content_hash ?? "nohash").slice(0, 12)}`;
 
+const etTime = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }) + " ET";
+
 export function commentText(e: any): string {
   const isUpdate = Number(e.prior_comments ?? 0) > 0;
+  // Preferred format: a natural, first-person narrative written at request time from the real conversation.
+  if (e.narrative && String(e.narrative).trim()) {
+    const lead = isUpdate ? `Follow-up on "${e.title}"` : e.title;
+    const when = e.implemented_at ? `Implemented ${etTime(e.implemented_at)}.` : e.retrospective ? `Work done ${e.day}; written up afterward.` : "";
+    return [lead, "", String(e.narrative).trim(), "", [when, marker(e)].filter(Boolean).join(" · ")].join("\n");
+  }
   const header = e.retrospective
     ? `RETROSPECTIVE ENTRY — original development date ${e.day}. Migrated/recorded after the fact; this comment's Asana timestamp is NOT the original development time. Original request wording was not captured at the time.`
     : `Change recorded at request time from the original Lovable conversation. Change date (America/New_York): ${e.day}; entry last updated ${new Date(e.updated_at).toISOString()}.`;
