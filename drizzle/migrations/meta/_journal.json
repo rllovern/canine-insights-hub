@@ -141,6 +141,13 @@
       "when": 1792117200028,
       "tag": "0019_lead_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792117391030,
+      "tag": "0020_lead_recon_preflight_guard",
+      "breakpoints": true
     }
   ]
 }
