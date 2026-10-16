@@ -183,6 +183,13 @@
       "when": 1792180324069,
       "tag": "0025_devlog_nohash_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792180839891,
+      "tag": "0026_devlog_narrative",
+      "breakpoints": true
     }
   ]
 }
