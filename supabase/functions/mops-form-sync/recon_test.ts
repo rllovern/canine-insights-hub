@@ -12,8 +12,8 @@ Deno.test("form classification never guesses", () => {
 
 Deno.test("message key only when one field clearly stands out", () => {
   const s = (o: Record<string, unknown>) => ({ id: "x", createdAt: "2026-10-01T00:00:00Z", others: o });
-  assertEquals(pickMessageKey([s({ q1: "my dog pulls on the leash a lot" }), s({ q1: "barks at every guest who arrives" })]).key, "q1");
-  assertEquals(pickMessageKey([s({ q1: "my dog pulls on the leash", q2: "we live in a busy apartment" })]).key, null);
+  assertEquals(pickMessageKey([s({ q1: "my dog pulls on the leash a lot", Timezone: "America/Chicago (GMT-05:00)", n: "Louis and Priscilla" }), s({ q1: "barks at every guest who arrives" })]).key, "q1");
+  assertEquals(pickMessageKey([s({ q1: "my dog pulls on the leash", q2: "we live in a busy apartment downtown" })]).key, null);
 });
 
 const base = (over: Partial<PreflightDeps> = {}): PreflightDeps => ({

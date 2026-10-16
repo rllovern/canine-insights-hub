@@ -26,7 +26,8 @@ export function sourceOf(name: string): string | null {
 }
 
 const STANDARD = new Set(["first_name", "last_name", "full_name", "name", "email", "phone", "eventData", "sessionId", "formId", "submissionId", "contactId",
-  "address", "address1", "city", "state", "postal_code", "country", "terms_and_conditions", "signature", "date_of_birth", "company_name", "website", "source"]);
+  "address", "address1", "city", "state", "postal_code", "country", "terms_and_conditions", "signature", "date_of_birth", "company_name", "website", "source", "Timezone", "signatureHash", "ip", "location_id", "fieldsOriSequance", "full_address"]);
+const isProse = (v: string) => v.trim().length >= 20 && v.trim().split(/\s+/).length >= 4;
 
 /** Picks the free-text question field. Returns null when no single field stands out. */
 export function pickMessageKey(subs: GhlSubmission[]): { key: string | null; candidates: { key: string; share: number }[] } {
@@ -34,7 +35,7 @@ export function pickMessageKey(subs: GhlSubmission[]): { key: string | null; can
   const hits = new Map<string, number>();
   for (const s of subs) for (const [k, v] of Object.entries(s.others ?? {})) {
     if (STANDARD.has(k) || typeof v !== "string") continue;
-    if (v.trim().length >= 15 && /\s/.test(v.trim())) hits.set(k, (hits.get(k) ?? 0) + 1);
+    if (isProse(v)) hits.set(k, (hits.get(k) ?? 0) + 1);
   }
   const candidates = [...hits.entries()].map(([key, n]) => ({ key, share: Math.round((n / subs.length) * 100) / 100 })).sort((a, b) => b.share - a.share);
   const [a, b] = candidates;
@@ -115,7 +116,7 @@ export async function runPreflight(d: PreflightDeps, ctx: { ghl_status: string |
   // CTM message field: keep the agency default when present, otherwise detect a single long-text field.
   const onForm = formActs.filter((a) => a.form_id === numeric);
   const keyHits = new Map<string, number>();
-  for (const a of onForm) for (const [k, v] of Object.entries(a.custom ?? {})) if (typeof v === "string" && v.trim().length >= 15 && /\s/.test(v)) keyHits.set(k, (keyHits.get(k) ?? 0) + 1);
+  for (const a of onForm) for (const [k, v] of Object.entries(a.custom ?? {})) if (typeof v === "string" && isProse(v)) keyHits.set(k, (keyHits.get(k) ?? 0) + 1);
   const ranked = [...keyHits.entries()].sort((a, b) => b[1] - a[1]);
   const msgField = keyHits.has(DEFAULT_MSG_FIELD) ? DEFAULT_MSG_FIELD : ranked[0]?.[0] ?? null;
   out.message_field = msgField;
