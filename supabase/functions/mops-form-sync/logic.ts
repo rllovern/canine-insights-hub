@@ -10,6 +10,7 @@ export interface CtmActivity {
   submission_id?: string | null;
   trackback_id?: string | null;
   tag?: string | null;
+  custom?: Record<string, string>;
 }
 export type HashedActivity = CtmActivity & { message_hash: string | null };
 
@@ -99,7 +100,7 @@ export function classify(
   return { ...matchSubmission({ contact_id: sub.contact_id, submitted_at: sub.submitted_at, message_hash: sub.message_hash, form_numeric_id: formNumericId }, pool, claimed), via: "score" };
 }
 
-export interface FormMapEntry { form_name: string; form_source: string; label?: string }
+export interface FormMapEntry { form_name: string; form_source: string; label?: string; message_key?: string | null }
 
 export function buildCtmPayload(s: GhlSubmission, messageKey: string | null, messageField: string, form: FormMapEntry) {
   const o = s.others ?? {};

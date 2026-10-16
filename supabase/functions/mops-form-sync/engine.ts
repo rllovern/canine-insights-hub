@@ -46,7 +46,8 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
   const inWindow = ghlAll.filter((s) => Date.parse(s.createdAt) >= from.getTime());
   const items = await Promise.all(inWindow.map(async (s) => {
     const o = s.others ?? {};
-    const msg = cfg.ghl_message_key ? o[cfg.ghl_message_key] : null;
+    const mk = (s.formId ? formMap[s.formId]?.message_key : null) ?? cfg.ghl_message_key;
+    const msg = mk ? o[mk] : null;
     return { ghl_submission_id: s.id, ghl_contact_id: s.contactId ?? null, ghl_form_id: s.formId ?? null, submitted_at: s.createdAt,
       masked: { name: maskName(s.name ?? `${o.first_name ?? ""} ${o.last_name ?? ""}`.trim()), email: maskEmail(String(o.email ?? s.email ?? "")), phone: maskPhone(String(o.phone ?? "")), has_message: !!msg },
       message_hash: msg ? await sha256(normMsg(msg)) : null, attribution: attributionOf(s) };
@@ -85,6 +86,11 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
       res.needs_review++; continue;
     }
     // Nothing in CTM for this submission.
+    // Monitoring-only locations: after 7 days an unconfirmed lead is parked (already alerted) so runs stay bounded.
+    if (!d.live && now.getTime() - Date.parse(s.submitted_at) > 7 * DAY) {
+      await d.call("formsync_set", { id: s.id, status: "held", hold_reason: "monitor_unconfirmed", match_detail: detail, kind: "reconcile", log: { parked: "unconfirmed_after_7_days" } });
+      res.pending++; continue;
+    }
     if (s.status === "pending_verification") {
       const posted = s.posted_at ? Date.parse(s.posted_at) : 0;
       if (now.getTime() - posted >= VERIFY_WINDOW_MIN * MIN) {
@@ -112,7 +118,7 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
     const graceOk = Date.parse(s.submitted_at) + cfg.grace_minutes * MIN <= now.getTime();
     const retryOk = !s.next_attempt_at || Date.parse(s.next_attempt_at) <= now.getTime();
     const underMax = (s.attempts ?? 0) < cfg.max_attempts;
-    const payload = orig && form ? buildCtmPayload(orig, cfg.ghl_message_key, cfg.message_field, form) : null;
+    const payload = orig && form ? buildCtmPayload(orig, form.message_key ?? cfg.ghl_message_key, cfg.message_field, form) : null;
     if (payload && s.status === "pending_delivery") {
       await d.call("formsync_set", { id: s.id, kind: "plan", dry_run_payload: { target: { method: "POST", form_reactor: cfg.ctm_form_reactor_id, form_reactor_numeric_id: formId }, fields: maskPayload(payload, cfg.message_field) }, log: { planned: true } });
     }
