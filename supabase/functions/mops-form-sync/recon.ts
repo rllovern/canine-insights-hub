@@ -125,7 +125,8 @@ export async function runPreflight(d: PreflightDeps, ctx: { ghl_status: string |
   // Matching rehearsal (read-only): recent inquiry submissions vs existing CTM form activities.
   const reAct = msgField === DEFAULT_MSG_FIELD ? onForm : onForm.map((a) => ({ ...a, message: a.custom?.[msgField] ?? null }));
   const hashed: HashedActivity[] = await Promise.all(reAct.map(async (a) => ({ ...a, message_hash: a.message ? await sha256(normMsg(a.message)) : null })));
-  const inquiryIds = new Map(inquiry.map((f) => [f.id, f]));
+  // Only forms that would actually be reconciled (known source + message field) are rehearsed.
+  const inquiryIds = new Map(inquiry.filter((f) => f.form_source && f.message_key).map((f) => [f.id, f]));
   const sample = subs.filter((s) => s.formId && inquiryIds.has(s.formId) && Date.parse(s.createdAt) < now.getTime() - 30 * 60000);
   const claimed = new Set<string>(); let matched = 0, review = 0; const tagged: string[] = [];
   for (const s of sample) {
@@ -138,7 +139,7 @@ export async function runPreflight(d: PreflightDeps, ctx: { ghl_status: string |
   const rate = sample.length ? matched / sample.length : 0;
   out.matching_verified = sample.length >= 3 && rate >= 0.8;
   add("matching", "Matching against website-delivered leads", out.matching_verified, false,
-    sample.length < 3 ? `Only ${sample.length} recent inquiry submission(s); not enough to verify matching` : `${matched} of ${sample.length} matched (${Math.round(rate * 100)}%), ${review} ambiguous`);
+    sample.length < 3 ? `Only ${sample.length} recent submission(s) on ready forms; not enough to verify matching` : `${matched} of ${sample.length} matched (${Math.round(rate * 100)}%), ${review} ambiguous`);
   const known = tagged.filter((t) => REPORTING_TAGS.includes(t)).length;
   add("qualification", "Existing AskAI tagging observed", matched > 0 && known / matched >= 0.5, false, matched ? `${known} of ${matched} matched leads carry one of the seven reporting tags` : "No matched leads to observe");
   add("live_validation", "Server delivery validated for this location", false, false, "Not yet tested live. Monitoring only until you approve live sending.");
