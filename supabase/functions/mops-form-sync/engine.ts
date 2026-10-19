@@ -2,6 +2,7 @@
 // All I/O is injected so the same code runs in production and in the scenario tests.
 import { attributionOf, backoffMinutes, buildCtmPayload, classify, maskEmail, maskName, maskPayload, maskPhone, normMsg, sha256,
   type CtmActivity, type FormMapEntry, type GhlSubmission, type HashedActivity } from "./logic.ts";
+import { NORCAL, productionEvidence } from "./production-watch.ts";
 
 export type PostResult =
   | { kind: "accepted"; ref: string | null }
@@ -12,7 +13,7 @@ export interface Deps {
   call: (op: string, args?: Record<string, unknown>) => Promise<any>;
   ghlList: (from: Date, to: Date) => Promise<GhlSubmission[]>;
   ctmList: (from: Date, to: Date) => Promise<CtmActivity[]>;
-  ctmGet: (id: string) => Promise<{ tag: string | null; created_iso: string } | null>;
+  ctmGet: (id: string) => Promise<{ tag: string | null; created_iso: string; message?: string | null; askai_verified?: boolean } | null>;
   ctmPost: (payload: Record<string, string>) => Promise<PostResult>;
   now: () => Date;
   /** Location flag AND global kill switch. False = never posts. */
@@ -30,6 +31,11 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
   const { config: cfg, checkpoint } = await d.call("formsync_config", { property_id: pid });
   if (!cfg) throw new Error("Form Sync is not set up for this location");
   const now = d.now();
+  const guarded = pid === NORCAL && cfg.production_watch_limit === 5;
+  const stop = async (reason: string) => {
+    await d.call("formsync_safety", { property_id: pid, action: "stop", reason });
+    throw new Error(`NorCal automatic sending paused: ${reason}`);
+  };
   const formMap = (cfg.form_map ?? {}) as Record<string, FormMapEntry>;
   const activation = cfg.activation_at ? Date.parse(cfg.activation_at) : Infinity;
 
@@ -119,6 +125,10 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
     const retryOk = !s.next_attempt_at || Date.parse(s.next_attempt_at) <= now.getTime();
     const underMax = (s.attempts ?? 0) < cfg.max_attempts;
     const payload = orig && form ? buildCtmPayload(orig, form.message_key ?? cfg.ghl_message_key, cfg.message_field, form) : null;
+    if (guarded && eligible && payload && !normMsg(payload[`custom_${cfg.message_field}`])) {
+      await d.call("formsync_set", { id: s.id, status: "needs_review", last_error: "Missing GHL customer inquiry — no recovery attempted", kind: "review", log: { reason: "missing_inquiry" } });
+      res.needs_review++; continue;
+    }
     if (payload && s.status === "pending_delivery") {
       await d.call("formsync_set", { id: s.id, kind: "plan", dry_run_payload: { target: { method: "POST", form_reactor: cfg.ctm_form_reactor_id, form_reactor_numeric_id: formId }, fields: maskPayload(payload, cfg.message_field) }, log: { planned: true } });
     }
@@ -133,13 +143,18 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
       await d.call("formsync_set", { id: s.id, lock, last_error: `CTM check failed: ${(e as Error).message}`, next_attempt_at: new Date(now.getTime() + 5 * MIN).toISOString(), kind: "precheck", log: { error: (e as Error).message } });
       res.pending++; continue;
     }
-    const v = classify({ ghl_submission_id: s.ghl_submission_id, contact_id: s.ghl_contact_id, submitted_at: s.submitted_at, message_hash: s.message_hash }, formId, fresh, claimed);
+    const v = classify({ ghl_submission_id: s.ghl_submission_id, contact_id: s.ghl_contact_id, submitted_at: s.submitted_at, message_hash: s.message_hash,
+      form_source: form?.form_source ?? null }, formId, fresh, claimed, { composite: cfg.composite_match === true });
     if (v.status !== "pending_delivery") {
       const st = v.status === "matched" ? "matched" : "needs_review";
       await d.call("formsync_set", { id: s.id, lock, status: st, ctm_activity_id: v.activity_id ?? "", qualification: st === "matched" ? "pending" : "", match_detail: { checked_at: d.now().toISOString(), via: v.via, candidates: v.candidates, stage: "pre-delivery" }, kind: "precheck", log: { stopped: st } });
       if (v.activity_id) claimed.add(v.activity_id);
       st === "matched" ? res.matched++ : res.needs_review++;
       continue;
+    }
+    if (guarded) {
+      const { allowed } = await d.call("formsync_safety", { property_id: pid, action: "can_send", id: s.id });
+      if (!allowed) { res.pending++; continue; }
     }
     // Mark in-flight BEFORE posting: if anything breaks mid-post, the next run verifies instead of re-sending.
     const moved = await d.call("formsync_set", { id: s.id, lock, status: "pending_verification", posted_at: d.now().toISOString(), count_attempt: true, kind: "deliver", log: { posting: true } });
@@ -149,11 +164,15 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
     if (r.kind === "rejected") {
       const n = (s.attempts ?? 0) + 1;
       await d.call("formsync_set", { id: s.id, status: "failed", last_error: `CTM rejected (${r.status}): ${r.error}`.slice(0, 300), next_attempt_at: new Date(d.now().getTime() + backoffMinutes(n) * MIN).toISOString(), kind: "deliver", log: { rejected: r.status } });
-      res.failed++; continue;
+      res.failed++;
+      if (guarded) await stop(`CTM rejected recovery (${r.status})`);
+      continue;
     }
     if (r.kind === "ambiguous") {
       await d.call("formsync_set", { id: s.id, last_error: `Unclear CTM response: ${r.error}`.slice(0, 300), kind: "deliver", log: { ambiguous: true } });
-      res.ambiguous++; continue;
+      res.ambiguous++;
+      if (guarded) await stop("Recovery response uncertain; verify the existing attempt before resuming");
+      continue;
     }
     await d.call("formsync_set", { id: s.id, delivery_ref: r.ref ?? "", kind: "deliver", log: { accepted: true } });
     // Immediate verification by submission ID / receipt reference.
@@ -170,6 +189,31 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
     res.pending++;
   }
 
+  // Persisted first-five watch; includes already matched rows and is independent of the dashboard.
+  if (guarded) {
+    const { submissions: watched } = await d.call("formsync_safety", { property_id: pid, action: "watch" });
+    if (watched?.length) {
+      const scan = await d.ctmList(new Date(Math.min(...watched.map((s: any) => Date.parse(s.submitted_at))) - DAY), new Date(d.now().getTime() + DAY));
+      for (const s of watched) {
+        const orig = subsById.get(s.ghl_submission_id);
+        const form = formMap[s.ghl_form_id];
+        if (!orig || !form) continue;
+        const ev = productionEvidence(orig, form.message_key ?? cfg.ghl_message_key ?? "", form.form_source, formId, scan);
+        const a = ev.activity_count === 1 ? await d.ctmGet(ev.activity_ids[0]) : null;
+        const askai = a?.askai_verified === true;
+        const reasons = [!ev.inquiry_present ? "missing_ghl_inquiry" : null,
+          ev.activity_count === 1 && !ev.inquiry_complete ? "missing_or_incomplete_ctm_inquiry" : null,
+          ev.activity_count === 1 && !askai ? "askai_provenance_unverified" : null].filter(Boolean);
+        await d.call("formsync_safety", { property_id: pid, action: "record", id: s.id, evidence: { ...ev,
+          delivery_origin: s.recovered ? "Lovable recovery" : s.status === "matched" ? "Website/existing CTM" : "not confirmed",
+          askai_verified: askai, tag_observed: a?.tag ?? null, review_reasons: reasons, checked_at: d.now().toISOString() } });
+        if (ev.activity_count > 1) await stop("Multiple CTM activities may represent a production submission");
+        if (s.posted_at && ev.activity_count === 0 && d.now().getTime() - Date.parse(s.posted_at) >= VERIFY_WINDOW_MIN * MIN)
+          await stop("Recovery not verified after 15 minutes");
+      }
+    }
+  }
+
   // 4. Qualification monitoring (dashboard status only; never writes to CTM).
   const confirmed = ((await d.call("formsync_work", { property_id: pid })).submissions ?? []) as any[];
   for (const s of confirmed.filter((x) => ["matched", "delivered"].includes(x.status) && x.ctm_activity_id && (Date.parse(x.submitted_at) >= activation || x.approved_at))) {
@@ -177,7 +221,8 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
     if (!a) continue;
     res.qualification_checked++;
     const created = Date.parse(a.created_iso);
-    const q = a.tag ? "classified" : (d.now().getTime() - created >= cfg.qualify_minutes * MIN ? "needs_qualification" : "pending");
+    const q = guarded ? (normMsg(a.message) && a.askai_verified === true && a.tag ? "classified" : "needs_qualification")
+      : a.tag ? "classified" : (d.now().getTime() - created >= cfg.qualify_minutes * MIN ? "needs_qualification" : "pending");
     if (q === "needs_qualification") res.needs_qualification++;
     await d.call("formsync_qualify", { id: s.id, qualification: q, ctm_tag: a.tag ?? "", ctm_created_at: a.created_iso, changed: q !== (s.qualification ?? "pending") });
   }
