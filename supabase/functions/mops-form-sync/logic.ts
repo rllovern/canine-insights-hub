@@ -49,13 +49,15 @@ export function attributionOf(s: GhlSubmission) {
   };
 }
 
+export interface MatchOpts { composite?: boolean }
 export type Verdict = { status: "matched" | "needs_review" | "pending_delivery"; activity_id?: string; candidates: { id: string; score: number; reasons: string[] }[] };
 
 /** Scores CTM activities against one submission. Never matches on phone/email alone. */
 export function matchSubmission(
-  sub: { contact_id: string | null; submitted_at: string; message_hash: string | null; form_numeric_id: string },
+  sub: { contact_id: string | null; submitted_at: string; message_hash: string | null; form_numeric_id: string; form_source?: string | null },
   acts: HashedActivity[],
   claimed: Set<string>,
+  opts: MatchOpts = {},
 ): Verdict {
   const t0 = Date.parse(sub.submitted_at);
   const cands = acts.filter((a) => a.form_id === sub.form_numeric_id && !claimed.has(a.id)).map((a) => {
@@ -67,12 +69,17 @@ export function matchSubmission(
     if (contact) { score += 3; reasons.push("same GHL contact"); }
     if (msg) { score += 3; reasons.push("same message"); }
     if (dt <= 2) { score += 3; reasons.push("within 2 min"); } else if (dt <= 10) { score += 2; reasons.push("within 10 min"); }
-    return { id: a.id, score, reasons, contact, msg, dt };
+    // Composite evidence (per-location opt-in): same contact + same form source + submitted within 2 min,
+    // and CTM holds no message at all (a different message is never accepted).
+    const srcOk = !!sub.form_source && String(a.custom?.form_source ?? "").toLowerCase() === sub.form_source.toLowerCase();
+    const composite = !!opts.composite && contact && dt <= 2 && !a.message_hash && srcOk;
+    if (composite) reasons.push("same form source, CTM message empty");
+    return { id: a.id, score, reasons, contact, msg, dt, composite };
   }).filter((c) => c.contact || c.msg).sort((a, b) => b.score - a.score);
   const out = cands.map(({ id, score, reasons }) => ({ id, score, reasons }));
   if (!cands.length) return { status: "pending_delivery", candidates: [] };
   const top = cands[0];
-  const strong = (c: typeof top) => c.contact && c.dt <= 10 && (c.msg || !sub.message_hash);
+  const strong = (c: typeof top) => (c.contact && c.dt <= 10 && (c.msg || !sub.message_hash)) || c.composite;
   if (strong(top) && !(cands[1] && strong(cands[1]))) return { status: "matched", activity_id: top.id, candidates: out };
   return { status: "needs_review", candidates: out };
 }
@@ -84,10 +91,11 @@ export function matchSubmission(
  * because they share a contact, email or phone.
  */
 export function classify(
-  sub: { ghl_submission_id: string; contact_id: string | null; submitted_at: string; message_hash: string | null; delivery_ref?: string | null },
+  sub: { ghl_submission_id: string; contact_id: string | null; submitted_at: string; message_hash: string | null; delivery_ref?: string | null; form_source?: string | null },
   formNumericId: string,
   acts: HashedActivity[],
   claimed: Set<string>,
+  opts: MatchOpts = {},
 ): Verdict & { via?: string } {
   const exact = acts.filter((a) => a.submission_id && a.submission_id === sub.ghl_submission_id);
   if (exact.length === 1) return { status: "matched", activity_id: exact[0].id, via: "submission_id", candidates: [{ id: exact[0].id, score: 10, reasons: ["same GHL submission ID"] }] };
@@ -97,7 +105,7 @@ export function classify(
     if (ref) return { status: "matched", activity_id: ref.id, via: "receipt", candidates: [{ id: ref.id, score: 10, reasons: ["CTM receipt reference from our delivery"] }] };
   }
   const pool = acts.filter((a) => !a.submission_id);
-  return { ...matchSubmission({ contact_id: sub.contact_id, submitted_at: sub.submitted_at, message_hash: sub.message_hash, form_numeric_id: formNumericId }, pool, claimed), via: "score" };
+  return { ...matchSubmission({ contact_id: sub.contact_id, submitted_at: sub.submitted_at, message_hash: sub.message_hash, form_numeric_id: formNumericId, form_source: sub.form_source ?? null }, pool, claimed, opts), via: "score" };
 }
 
 export interface FormMapEntry { form_name: string; form_source: string; label?: string; message_key?: string | null }

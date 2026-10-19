@@ -70,7 +70,7 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
   const formId = String(cfg.ctm_form_numeric_id);
   const toDeliver: any[] = [];
   for (const s of open) {
-    const v = classify({ ghl_submission_id: s.ghl_submission_id, contact_id: s.ghl_contact_id, submitted_at: s.submitted_at, message_hash: s.message_hash, delivery_ref: s.delivery_ref }, formId, acts, claimed);
+    const v = classify({ ghl_submission_id: s.ghl_submission_id, contact_id: s.ghl_contact_id, submitted_at: s.submitted_at, message_hash: s.message_hash, delivery_ref: s.delivery_ref, form_source: s.ghl_form_id ? formMap[s.ghl_form_id]?.form_source ?? null : null }, formId, acts, claimed, { composite: cfg.composite_match === true });
     const detail = { checked_at: now.toISOString(), via: v.via, ctm_activities_scanned: acts.length, candidates: v.candidates };
     if (v.status === "matched" && v.activity_id) {
       claimed.add(v.activity_id);
