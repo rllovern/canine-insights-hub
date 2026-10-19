@@ -89,6 +89,7 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
     }
     if (v.status === "needs_review") {
       await d.call("formsync_set", { id: s.id, status: "needs_review", match_detail: detail, kind: "reconcile", log: { candidates: v.candidates.length } });
+      if (guarded && v.via === "submission_id" && v.candidates.length > 1) await stop("Duplicate CTM activities carry the same GHL submission ID");
       res.needs_review++; continue;
     }
     // Nothing in CTM for this submission.
@@ -100,6 +101,7 @@ export async function runLocation(d: Deps, pid: string, opts: { from?: string } 
     if (s.status === "pending_verification") {
       const posted = s.posted_at ? Date.parse(s.posted_at) : 0;
       if (now.getTime() - posted >= VERIFY_WINDOW_MIN * MIN) {
+        if (guarded) await stop("Recovery not verified after 15 minutes; no retry attempted");
         await d.call("formsync_set", { id: s.id, status: "pending_delivery", match_detail: detail, kind: "verify", log: { result: "not_in_ctm_after_verification_window" } });
         s.status = "pending_delivery";
       } else { res.pending++; continue; }
