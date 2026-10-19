@@ -1,0 +1,1 @@
+DO $$ DECLARE definition text; BEGIN SELECT pg_get_functiondef('mops.formsync_safety(uuid,jsonb)'::regprocedure) INTO definition; definition := replace(definition,'jsonb_object_length(cfg.form_map) <> 2','(SELECT count(*) FROM jsonb_object_keys(cfg.form_map)) <> 2'); EXECUTE definition; END $$;

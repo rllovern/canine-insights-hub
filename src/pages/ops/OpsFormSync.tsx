@@ -84,6 +84,8 @@ export default function OpsFormSync() {
   const loc = locs.find((l) => l.property_id === pid);
   const detail = useQuery({ queryKey: ["mops", "recon", "loc", pid], enabled: !!pid, queryFn: () => fsCall<any>("formsync_recon_location", { property_id: pid }) });
   const list = useQuery({ queryKey: ["mops", "recon", "list", pid], enabled: !!pid, queryFn: () => fsCall<{ submissions: any[] }>("formsync_list", { property_id: pid }) });
+  const watch = useQuery({ queryKey: ["mops", "recon", "watch", pid], enabled: pid === "a5f7eeea-dfe6-4ec2-a9eb-895d99c0c465" && loc?.mode === "live",
+    queryFn: () => fsCall<{ submissions: any[] }>("norcal_watch"), refetchInterval: 60000 });
   const act = useMutation({
     mutationFn: ({ op, args }: { op: string; args: Record<string, unknown> }) => fsCall(op, args),
     onSuccess: () => { toast.success("Done"); qc.invalidateQueries({ queryKey: ["mops", "recon"] }); },
@@ -154,17 +156,33 @@ export default function OpsFormSync() {
               {loc.manual_hold
                 ? <Button size="sm" variant="outline" disabled={act.isPending} onClick={() => confirm(`Resume ${loc.property_name}? It will start in monitoring only after its checks pass.`) && act.mutate({ op: "formsync_recon_set_hold", args: { property_id: loc.property_id, hold: false } })}>Resume</Button>
                 : <Button size="sm" variant="outline" disabled={act.isPending} onClick={() => { const r = prompt("Reason for pausing"); if (r !== null) act.mutate({ op: "formsync_recon_set_hold", args: { property_id: loc.property_id, hold: true, reason: r } }); }}>Pause</Button>}
-              {loc.mode === "monitor" && !loc.manual_hold && loc.preflight_status === "passed" && <Button size="sm" disabled={act.isPending} onClick={() => confirm(`Approve live CTM recovery for ${loc.property_name}? Missing leads will be sent to CTM automatically after the 15-minute grace period.`) && act.mutate({ op: "formsync_recon_set_live", args: { property_id: loc.property_id, live: true } })}>Approve live recovery</Button>}
+              {loc.mode === "monitor" && !loc.manual_hold && loc.preflight_status === "passed" && <Button size="sm" disabled={act.isPending} onClick={() => confirm(`Approve live CTM recovery for ${loc.property_name}? Missing leads will be sent to CTM automatically after the 15-minute grace period.`) && act.mutate({ op: loc.property_id === "a5f7eeea-dfe6-4ec2-a9eb-895d99c0c465" ? "norcal_activate" : "formsync_recon_set_live", args: { property_id: loc.property_id, live: true } })}>Approve live recovery</Button>}
               {loc.mode === "live" && <Button size="sm" variant="outline" disabled={act.isPending} onClick={() => confirm("Stop live sending and switch to monitoring only?") && act.mutate({ op: "formsync_recon_set_live", args: { property_id: loc.property_id, live: false } })}>Stop live sending</Button>}
             </div>
           </div>
 
           <section className="space-y-1">
             <div className="font-medium">Latest checks</div>
-            {(detail.data?.preflight?.[0]?.checks ?? []).map((c: any) => (
-              <div key={c.key} className="flex gap-2"><span className={c.ok ? "text-primary" : c.hard ? "text-destructive" : "text-muted-foreground"}>{c.ok ? "✓" : c.hard ? "✗" : "!"}</span><span>{c.label}</span><span className="text-muted-foreground">— {c.detail}</span></div>))}
+            {(detail.data?.preflight?.[0]?.checks ?? []).map((original: any) => {
+              const norcal = loc.property_id === "a5f7eeea-dfe6-4ec2-a9eb-895d99c0c465";
+              const c = norcal && original.key === "qualification" ? { ...original, ok: false, label: "Reporting tags observed — AskAI origin unverified", detail: "Existing tags do not establish which scoring rule applied them" }
+                : norcal && original.key === "live_validation" && loc.mode === "live" ? { ...original, label: "Live recovery approved", detail: "Awaiting first production recovery; approval is not an end-to-end recovery test" } : original;
+              return (
+              <div key={c.key} className="flex gap-2"><span className={c.ok ? "text-primary" : c.hard ? "text-destructive" : "text-muted-foreground"}>{c.ok ? "✓" : c.hard ? "✗" : "!"}</span><span>{c.label}</span><span className="text-muted-foreground">— {c.detail}</span></div>);
+            })}
             {!detail.data?.preflight?.length && <div className="text-muted-foreground">Not run yet.</div>}
           </section>
+
+          {watch.data && <section className="space-y-2">
+            <div className="font-medium">First five production submissions · {watch.data.submissions.length}/5 received</div>
+            {!watch.data.submissions.length && <div className="text-muted-foreground">Awaiting new production submissions.</div>}
+            {watch.data.submissions.map((s) => <div key={s.id} className="border-t py-2 flex flex-wrap gap-2">
+              <span>{fmt(s.submitted_at)}</span><span>{s.production_evidence?.delivery_origin ?? STATUS[s.status]?.label}</span>
+              <span>CTM activities: {s.production_evidence?.activity_count ?? "Not checked"}</span>
+              <Badge variant={s.production_evidence?.inquiry_complete ? "secondary" : "destructive"}>{s.production_evidence?.inquiry_complete ? "Full inquiry confirmed" : "Inquiry needs review"}</Badge>
+              <Badge variant="outline">{s.production_evidence?.askai_verified ? "AskAI verified" : "AskAI origin unverified"}</Badge>
+            </div>)}
+          </section>}
 
           <section className="space-y-1">
             <div className="font-medium">Forms</div>
@@ -200,7 +218,7 @@ export default function OpsFormSync() {
                   <td>{s.attribution?.gclid ? "GCLID (custom field)" : s.attribution?.gbraid ? "GBRAID" : s.attribution?.wbraid ? "WBRAID" : "—"}</td>
                   <td><Badge variant={STATUS[s.status]?.variant ?? "outline"}>{STATUS[s.status]?.label ?? s.status}</Badge></td>
                   <td>{s.ctm_activity_id ?? "—"}</td>
-                  <td>{s.qualification ? <Badge variant={s.qualification === "needs_qualification" ? "destructive" : "outline"}>{s.ctm_tag ?? QUAL[s.qualification]}</Badge> : "—"}</td>
+                  <td>{s.qualification ? <Badge variant={s.qualification === "needs_qualification" ? "destructive" : "outline"}>{s.qualification === "needs_qualification" ? `${QUAL[s.qualification]}${s.ctm_tag ? ` · ${s.ctm_tag} tag only` : ""}` : s.ctm_tag ?? QUAL[s.qualification]}</Badge> : "—"}</td>
                 </tr>))}</tbody>
             </table>
           </section>
