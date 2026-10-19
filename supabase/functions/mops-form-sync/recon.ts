@@ -147,7 +147,7 @@ export async function runPreflight(d: PreflightDeps, ctx: { ghl_status: string |
   out.matching_verified = sample.length >= 3 && rate >= 0.8;
   add("matching", "Matching against website-delivered leads", out.matching_verified, false,
     sample.length < 3 ? `Only ${sample.length} recent submission(s) on ready forms; not enough to verify matching` : `${matched} of ${sample.length} matched (${Math.round(rate * 100)}%), ${review} ambiguous`);
-  const known = tagged.filter((t) => REPORTING_TAGS.includes(t)).length;
+  const known = tagged.filter((t) => REPORTING_TAGS.some((r) => r.toLowerCase() === t.trim().toLowerCase())).length;
   add("qualification", "Existing AskAI tagging observed", matched > 0 && known / matched >= 0.5, false, matched ? `${known} of ${matched} matched leads carry one of the seven reporting tags` : "No matched leads to observe");
   add("live_validation", "Server delivery validated for this location", false, false, "Not yet tested live. Monitoring only until you approve live sending.");
   return finish();
