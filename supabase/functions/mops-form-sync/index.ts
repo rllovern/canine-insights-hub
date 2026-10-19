@@ -135,13 +135,15 @@ function depsFor(call: Call, conn: Conn, cfg: any): Deps {
 
 async function preflightFor(call: Call, conn: Conn, loc: any) {
   const ghl = conn.ghl, ctm = conn.ctm;
+  const { config: cur } = await call("formsync_config", { property_id: loc.property_id }).catch(() => ({ config: null }));
   const r = await runPreflight({
     ghlForms: () => ghlForms(ghl!.token, ghl!.location_id),
     ghlSubs: (f, t) => ghlList(ghl!.token, ghl!.location_id, f, t),
     ctmReactors: () => ctmReactors(ctm!),
     ctmActs: (f, t, m) => ctmList(ctm!, f, t, m),
     now: () => new Date(),
-  }, { ghl_status: loc.ghl_status, ctm_status: loc.ctm_status, has_ghl: !!ghl, has_ctm: !!ctm && !!ctm.api_token });
+  }, { ghl_status: loc.ghl_status, ctm_status: loc.ctm_status, has_ghl: !!ghl, has_ctm: !!ctm && !!ctm.api_token,
+    message_field: cur?.message_field ?? null, composite: cur?.composite_match === true });
   if (r.forms.length) await call("formsync_recon_forms_upsert", { property_id: loc.property_id, forms: r.forms });
   const saved = await call("formsync_recon_preflight_save", { property_id: loc.property_id, passed: r.passed, matching_verified: r.matching_verified,
     reasons: r.reasons, checks: r.checks, frt: r.frt ?? "", form_numeric_id: r.form_numeric_id ?? "", message_field: r.message_field ?? "" });

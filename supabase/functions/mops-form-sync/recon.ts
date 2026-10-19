@@ -58,7 +58,9 @@ export interface Check { key: string; label: string; ok: boolean; hard: boolean;
 const DAY = 86400000;
 const DEFAULT_MSG_FIELD = "how_can_we_help_your_dog";
 
-export async function runPreflight(d: PreflightDeps, ctx: { ghl_status: string | null; ctm_status: string | null; has_ghl: boolean; has_ctm: boolean }) {
+const NOT_MESSAGE = /(agent|page|referrer|url|landing|screen|device|timezone|form_name|form_source|_ts$|gclid|gbraid|wbraid|gad_|ga_|gcl|utm_|session|submitted_at|ip$)/i;
+
+export async function runPreflight(d: PreflightDeps, ctx: { ghl_status: string | null; ctm_status: string | null; has_ghl: boolean; has_ctm: boolean; message_field?: string | null; composite?: boolean }) {
   const checks: Check[] = [];
   const add = (key: string, label: string, ok: boolean, hard: boolean, detail: string) => checks.push({ key, label, ok, hard, detail });
   const out = { passed: false, matching_verified: false, checks, reasons: [] as string[], forms: [] as any[], frt: null as string | null, form_numeric_id: null as string | null, message_field: null as string | null };
@@ -116,9 +118,11 @@ export async function runPreflight(d: PreflightDeps, ctx: { ghl_status: string |
   // CTM message field: keep the agency default when present, otherwise detect a single long-text field.
   const onForm = formActs.filter((a) => a.form_id === numeric);
   const keyHits = new Map<string, number>();
-  for (const a of onForm) for (const [k, v] of Object.entries(a.custom ?? {})) if (typeof v === "string" && isProse(v)) keyHits.set(k, (keyHits.get(k) ?? 0) + 1);
+  for (const a of onForm) for (const [k, v] of Object.entries(a.custom ?? {})) if (!NOT_MESSAGE.test(k) && typeof v === "string" && isProse(v)) keyHits.set(k, (keyHits.get(k) ?? 0) + 1);
   const ranked = [...keyHits.entries()].sort((a, b) => b[1] - a[1]);
-  const msgField = keyHits.has(DEFAULT_MSG_FIELD) ? DEFAULT_MSG_FIELD : ranked[0]?.[0] ?? null;
+  // The location's configured field wins while recent activities still carry text in it; every location keeps its own field.
+  const cfgField = ctx.message_field && onForm.some((a) => String(a.custom?.[ctx.message_field!] ?? "").trim()) ? ctx.message_field : null;
+  const msgField = cfgField ?? (keyHits.has(DEFAULT_MSG_FIELD) ? DEFAULT_MSG_FIELD : ranked[0]?.[0] ?? null);
   out.message_field = msgField;
   add("ctm_message_field", "CTM message field identified", !!msgField, true, msgField ?? "No free-text field found on recent CTM form activities");
   if (!msgField) return finish();
@@ -128,12 +132,14 @@ export async function runPreflight(d: PreflightDeps, ctx: { ghl_status: string |
   const hashed: HashedActivity[] = await Promise.all(reAct.map(async (a) => ({ ...a, message_hash: a.message ? await sha256(normMsg(a.message)) : null })));
   // Only forms that would actually be reconciled (known source + message field) are rehearsed.
   const inquiryIds = new Map(inquiry.filter((f) => f.form_source && f.message_key).map((f) => [f.id, f]));
-  const sample = subs.filter((s) => s.formId && inquiryIds.has(s.formId) && Date.parse(s.createdAt) < now.getTime() - 30 * 60000);
+  // Only submissions made after this FormReactor started receiving leads can be expected in CTM.
+  const firstAct = Math.min(...onForm.map((a) => Date.parse(a.submitted_at ?? a.called_at_iso)));
+  const sample = subs.filter((s) => s.formId && inquiryIds.has(s.formId) && Date.parse(s.createdAt) < now.getTime() - 30 * 60000 && Date.parse(s.createdAt) >= firstAct - 60000);
   const claimed = new Set<string>(); let matched = 0, review = 0; const tagged: string[] = [];
   for (const s of sample) {
     const key = inquiryIds.get(s.formId!)!.message_key;
     const msg = key ? (s.others ?? {})[key] : null;
-    const v = classify({ ghl_submission_id: s.id, contact_id: s.contactId ?? null, submitted_at: s.createdAt, message_hash: msg ? await sha256(normMsg(msg)) : null }, numeric!, hashed, claimed);
+    const v = classify({ ghl_submission_id: s.id, contact_id: s.contactId ?? null, submitted_at: s.createdAt, message_hash: msg ? await sha256(normMsg(msg)) : null, form_source: inquiryIds.get(s.formId!)!.form_source }, numeric!, hashed, claimed, { composite: ctx.composite === true });
     if (v.status === "matched" && v.activity_id) { matched++; claimed.add(v.activity_id); const t = hashed.find((a) => a.id === v.activity_id)?.tag; if (t) tagged.push(t); }
     else if (v.status === "needs_review") review++;
   }
@@ -141,7 +147,7 @@ export async function runPreflight(d: PreflightDeps, ctx: { ghl_status: string |
   out.matching_verified = sample.length >= 3 && rate >= 0.8;
   add("matching", "Matching against website-delivered leads", out.matching_verified, false,
     sample.length < 3 ? `Only ${sample.length} recent submission(s) on ready forms; not enough to verify matching` : `${matched} of ${sample.length} matched (${Math.round(rate * 100)}%), ${review} ambiguous`);
-  const known = tagged.filter((t) => REPORTING_TAGS.includes(t)).length;
+  const known = tagged.filter((t) => REPORTING_TAGS.some((r) => r.toLowerCase() === t.trim().toLowerCase())).length;
   add("qualification", "Existing AskAI tagging observed", matched > 0 && known / matched >= 0.5, false, matched ? `${known} of ${matched} matched leads carry one of the seven reporting tags` : "No matched leads to observe");
   add("live_validation", "Server delivery validated for this location", false, false, "Not yet tested live. Monitoring only until you approve live sending.");
   return finish();
