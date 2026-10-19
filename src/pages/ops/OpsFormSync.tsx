@@ -168,7 +168,8 @@ export default function OpsFormSync() {
               const c = norcal && original.key === "qualification" ? { ...original, ok: false, label: "Reporting tags observed — AskAI origin unverified", detail: "Existing tags do not establish which scoring rule applied them" }
                 : norcal && original.key === "live_validation" && loc.mode === "live" ? { ...original, label: "Live recovery approved", detail: "Awaiting first production recovery; approval is not an end-to-end recovery test" } : original;
               return (
-              <div key={c.key} className="flex gap-2"><span className={c.ok ? "text-primary" : c.hard ? "text-destructive" : "text-muted-foreground"}>{c.ok ? "✓" : c.hard ? "✗" : "!"}</span><span>{c.label}</span><span className="text-muted-foreground">— {c.detail}</span></div>))}
+              <div key={c.key} className="flex gap-2"><span className={c.ok ? "text-primary" : c.hard ? "text-destructive" : "text-muted-foreground"}>{c.ok ? "✓" : c.hard ? "✗" : "!"}</span><span>{c.label}</span><span className="text-muted-foreground">— {c.detail}</span></div>);
+            })}
             {!detail.data?.preflight?.length && <div className="text-muted-foreground">Not run yet.</div>}
           </section>
 
