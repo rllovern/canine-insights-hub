@@ -306,7 +306,13 @@ const userHandler = mopsHandler("mops-form-sync", async (ctx) => {
     const conn = await ctx.connections(NORCAL);
     if (conn.ctm?.account_id !== "605552" || Deno.env.get("FORM_SYNC_LIVE") !== "true") return json({ error: "NorCal account/live-switch verification failed" }, 400);
     const reactors = await ctmReactors(conn.ctm);
-    if (!reactors.some((r) => r.numeric === "238734" && r.frt === config.ctm_form_reactor_id)) return json({ error: "NorCal FormReactor verification failed" }, 400);
+    const matching = reactors.filter((r) => r.frt === config.ctm_form_reactor_id);
+    const activities = await ctmList(conn.ctm, new Date(Date.now() - 7 * 86400000), new Date(), "how_can_we_help_you");
+    const ids = [...new Set(activities.map((a) => a.form_id).filter(Boolean))];
+    // CTM can omit the numeric ID on its reactor list; use the same unique-reactor/activity evidence as preflight.
+    const verified = matching.length === 1 && (matching[0].numeric === "238734" ||
+      (reactors.length === 1 && ids.length === 1 && ids[0] === "238734"));
+    if (!verified) return json({ error: "NorCal FormReactor verification failed" }, 400);
     return json(await ctx.call("formsync_safety", { property_id: NORCAL, action: "activate" }));
   }
   if (op === "norcal_watch") return json(await ctx.call("formsync_safety", { property_id: NORCAL, action: "watch" }));
