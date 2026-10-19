@@ -1,5 +1,8 @@
 # Roadmap
 
+## In progress
+- NorCal-only production recovery approval: preserve mappings, activate with a new cutoff after tests, investigate blank-message Good Lead tags, persist first-five monitoring and automatic fail-safe sending pause, verify scheduled check and append Asana summary.
+
 ## Done
 - Asana development-log sync: live, hourly schedule, end-to-end tested (create/update/no-duplicates/denials).
 - Native Asana directory capability investigation: existing Rory account/workspace reads returned 200; official Asana OpenAPI has no Client/Contact endpoints. No Asana records changed.
