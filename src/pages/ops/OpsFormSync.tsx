@@ -84,6 +84,8 @@ export default function OpsFormSync() {
   const loc = locs.find((l) => l.property_id === pid);
   const detail = useQuery({ queryKey: ["mops", "recon", "loc", pid], enabled: !!pid, queryFn: () => fsCall<any>("formsync_recon_location", { property_id: pid }) });
   const list = useQuery({ queryKey: ["mops", "recon", "list", pid], enabled: !!pid, queryFn: () => fsCall<{ submissions: any[] }>("formsync_list", { property_id: pid }) });
+  const watch = useQuery({ queryKey: ["mops", "recon", "watch", pid], enabled: pid === "a5f7eeea-dfe6-4ec2-a9eb-895d99c0c465" && loc?.mode === "live",
+    queryFn: () => fsCall<{ submissions: any[] }>("norcal_watch"), refetchInterval: 60000 });
   const act = useMutation({
     mutationFn: ({ op, args }: { op: string; args: Record<string, unknown> }) => fsCall(op, args),
     onSuccess: () => { toast.success("Done"); qc.invalidateQueries({ queryKey: ["mops", "recon"] }); },
@@ -166,6 +168,17 @@ export default function OpsFormSync() {
             {!detail.data?.preflight?.length && <div className="text-muted-foreground">Not run yet.</div>}
           </section>
 
+          {watch.data && <section className="space-y-2">
+            <div className="font-medium">First five production submissions · {watch.data.submissions.length}/5 received</div>
+            {!watch.data.submissions.length && <div className="text-muted-foreground">Awaiting new production submissions.</div>}
+            {watch.data.submissions.map((s) => <div key={s.id} className="border-t py-2 flex flex-wrap gap-2">
+              <span>{fmt(s.submitted_at)}</span><span>{s.production_evidence?.delivery_origin ?? STATUS[s.status]?.label}</span>
+              <span>CTM activities: {s.production_evidence?.activity_count ?? "Not checked"}</span>
+              <Badge variant={s.production_evidence?.inquiry_complete ? "secondary" : "destructive"}>{s.production_evidence?.inquiry_complete ? "Full inquiry confirmed" : "Inquiry needs review"}</Badge>
+              <Badge variant="outline">{s.production_evidence?.askai_verified ? "AskAI verified" : "AskAI origin unverified"}</Badge>
+            </div>)}
+          </section>}
+
           <section className="space-y-1">
             <div className="font-medium">Forms</div>
             <table className="w-full text-sm"><thead className="text-muted-foreground text-left"><tr><th>Form</th><th>30 days</th><th>Type</th><th>Source</th><th>Message field</th></tr></thead>
@@ -200,7 +213,7 @@ export default function OpsFormSync() {
                   <td>{s.attribution?.gclid ? "GCLID (custom field)" : s.attribution?.gbraid ? "GBRAID" : s.attribution?.wbraid ? "WBRAID" : "—"}</td>
                   <td><Badge variant={STATUS[s.status]?.variant ?? "outline"}>{STATUS[s.status]?.label ?? s.status}</Badge></td>
                   <td>{s.ctm_activity_id ?? "—"}</td>
-                  <td>{s.qualification ? <Badge variant={s.qualification === "needs_qualification" ? "destructive" : "outline"}>{s.ctm_tag ?? QUAL[s.qualification]}</Badge> : "—"}</td>
+                  <td>{s.qualification ? <Badge variant={s.qualification === "needs_qualification" ? "destructive" : "outline"}>{s.qualification === "needs_qualification" ? `${QUAL[s.qualification]}${s.ctm_tag ? ` · ${s.ctm_tag} tag only` : ""}` : s.ctm_tag ?? QUAL[s.qualification]}</Badge> : "—"}</td>
                 </tr>))}</tbody>
             </table>
           </section>

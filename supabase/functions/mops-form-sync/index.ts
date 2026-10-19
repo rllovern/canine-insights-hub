@@ -13,6 +13,7 @@ import { sendPlainEmail } from "../_shared/send-email.ts";
 import { runLocation, type Deps, type PostResult } from "./engine.ts";
 import { runPreflight, type ActWithCustom, type Reactor } from "./recon.ts";
 import type { GhlSubmission } from "./logic.ts";
+import { NORCAL } from "./production-watch.ts";
 
 const GHL = "https://services.leadconnectorhq.com";
 const CTM = "https://api.calltrackingmetrics.com/api/v1";
@@ -97,11 +98,14 @@ async function ctmReactors(c: NonNullable<Conn["ctm"]>): Promise<Reactor[]> {
   return out;
 }
 
-async function ctmGet(c: NonNullable<Conn["ctm"]>, id: string) {
+async function ctmGet(c: NonNullable<Conn["ctm"]>, id: string, messageField?: string) {
   const r = await fetch(`${CTM}/accounts/${c.account_id}/calls/${encodeURIComponent(id)}`, { headers: { Authorization: ctmAuth(c), Accept: "application/json" } });
   if (!r.ok) return null;
   const x = await r.json();
-  return { tag: (x.sale?.name ?? "").trim() || null, created_iso: new Date((x.unix_time ?? 0) * 1000).toISOString() };
+  const fields = Object.fromEntries((x.form?.custom ?? []).map((k: any) => [k.id ?? k.name, k.value]));
+  // CTM's reporting tag alone cannot establish which rule or AskAI applied it.
+  return { tag: (x.sale?.name ?? "").trim() || null, created_iso: new Date((x.unix_time ?? 0) * 1000).toISOString(),
+    message: messageField ? fields[messageField] ?? null : null, askai_verified: false };
 }
 
 async function ctmPost(c: NonNullable<Conn["ctm"]>, frt: string, payload: Record<string, string>): Promise<PostResult> {
@@ -128,7 +132,7 @@ function depsFor(call: Call, conn: Conn, cfg: any): Deps {
     live: cfg.mode === "live" && cfg.delivery_enabled === true && cfg.manual_hold !== true && Deno.env.get("FORM_SYNC_LIVE") === "true",
     ghlList: (f, t) => ghlList(ghl.token, ghl.location_id, f, t),
     ctmList: (f, t) => ctmList(ctm, f, t, cfg.message_field),
-    ctmGet: (id) => ctmGet(ctm, id),
+    ctmGet: (id) => ctmGet(ctm, id, cfg.message_field),
     ctmPost: (p) => ctmPost(ctm, cfg.ctm_form_reactor_id, p),
   };
 }
@@ -166,7 +170,7 @@ async function sendAlerts(call: Call, pid: string, cfg: any) {
   }
   if (a.unqualified.length) {
     const res = await sendPlainEmail(a.recipient, `Lead Reconciliation: ${a.unqualified.length} ${a.property_name} lead(s) not classified by AskAI`,
-      [`These leads reached CallTrackingMetrics but still have no reporting tag after the review window. No tag was applied automatically:`, "", ...a.unqualified.map(line), "", "Open Marketing Ops → Lead Reconciliation to review."].join("\n"));
+      [cfg?.production_watch_limit === 5 ? "These NorCal leads need inquiry/qualification review. A reporting tag is not proof that AskAI classified the inquiry." : "These leads reached CallTrackingMetrics but still have no reporting tag after the review window. No tag was applied automatically:", "", ...a.unqualified.map(line), "", "Open Marketing Ops → Lead Reconciliation to review."].join("\n"));
     if (res.sent) { sent++; await call("formsync_mark_alerted", { kind: "unqualified", ids: a.unqualified.map((r: any) => r.id) }); }
   }
   return { sent };
@@ -218,7 +222,15 @@ async function reconcileOne(call: Call, admin: any, pid: string) {
     return { error: (e as Error).message };
   } finally {
     try { await sendAlerts(call, pid, config); } catch (e) { console.error("[lead-recon] alerts", (e as Error).message); }
+    if (pid === NORCAL && config?.production_watch_limit === 5) await safetyAlert(call);
   }
+}
+
+async function safetyAlert(call: Call) {
+  const a = await call("formsync_safety", { property_id: NORCAL, action: "alert" });
+  if (!a.pending || !a.recipient) return;
+  const r = await sendPlainEmail(a.recipient, "URGENT: NorCal automatic recovery paused", `NorCal automatic sending was disabled to protect against a failed recovery or duplicate. Existing records are preserved.\n\n${a.reason}\n\nReview Lead Reconciliation before explicitly resuming. Other locations are unchanged.`);
+  if (r.sent) await call("formsync_safety", { property_id: NORCAL, action: "alerted" });
 }
 
 async function scheduled(req: Request): Promise<Response | null> {
@@ -256,6 +268,9 @@ async function scheduled(req: Request): Promise<Response | null> {
       for (let pid = queue.shift(); pid; pid = queue.shift()) results[pid] = await reconcileOne(call, admin, pid);
     }));
     out.reconciled = results;
+    // Retry a failed safety notification even while NorCal is excluded by its hold.
+    const { config: norcal } = await call("formsync_config", { property_id: NORCAL });
+    if (norcal?.production_watch_limit === 5) await safetyAlert(call);
 
     // 2. Daily preflight (and on request), at most 2 locations per run, never past the time budget.
     const { locations: cands } = await call("formsync_recon_candidates");
@@ -286,6 +301,27 @@ const userHandler = mopsHandler("mops-form-sync", async (ctx) => {
   if (READ_OPS.has(op) || ADMIN_OPS.has(op)) return json(await ctx.call(op, args));
   const pid = String(args.property_id ?? "");
 
+  if (op === "norcal_activate") {
+    const { config } = await ctx.call("formsync_config", { property_id: NORCAL }) as any;
+    const conn = await ctx.connections(NORCAL);
+    if (conn.ctm?.account_id !== "605552" || Deno.env.get("FORM_SYNC_LIVE") !== "true") return json({ error: "NorCal account/live-switch verification failed" }, 400);
+    const reactors = await ctmReactors(conn.ctm);
+    if (!reactors.some((r) => r.numeric === "238734" && r.frt === config.ctm_form_reactor_id)) return json({ error: "NorCal FormReactor verification failed" }, 400);
+    return json(await ctx.call("formsync_safety", { property_id: NORCAL, action: "activate" }));
+  }
+  if (op === "norcal_watch") return json(await ctx.call("formsync_safety", { property_id: NORCAL, action: "watch" }));
+  if (op === "norcal_audit") {
+    const conn = await ctx.connections(NORCAL);
+    if (!conn.ctm || conn.ctm.account_id !== "605552") return json({ error: "NorCal account verification failed" }, 400);
+    const { submissions } = await ctx.call("formsync_list", { property_id: NORCAL }) as any;
+    const records = [];
+    for (const s of (submissions ?? []).filter((s: any) => s.ctm_activity_id).slice(0, 10)) {
+      const a = await ctmGet(conn.ctm, String(s.ctm_activity_id), "how_can_we_help_you");
+      records.push({ activity_id: s.ctm_activity_id, tag: a?.tag, inquiry_characters: String(a?.message ?? "").length, askai_provenance: "Not exposed by documented call-details endpoint" });
+    }
+    return json({ records, rules_changed: false });
+  }
+
   if (op === "run" || op === "recheck") {
     const { config } = await ctx.call("formsync_config", { property_id: pid }) as any;
     if (!config) return json({ error: "Lead Reconciliation is not set up for this location" }, 400);
@@ -294,6 +330,7 @@ const userHandler = mopsHandler("mops-form-sync", async (ctx) => {
       return json(await runLocation(depsFor(ctx.call, await ctx.connections(pid), config), pid, { from: typeof args.from === "string" ? args.from : undefined }));
     } catch (e) {
       await ctx.call("formsync_run_failed", { property_id: pid, error: (e as Error).message });
+      if (pid === NORCAL && config?.production_watch_limit === 5) await safetyAlert(ctx.call);
       throw e;
     }
   }
