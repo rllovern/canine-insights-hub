@@ -204,6 +204,13 @@
       "when": 1792448980140,
       "tag": "0028_norcal_production_safety",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792449062297,
+      "tag": "0029_norcal_activation_validation_fix",
+      "breakpoints": true
     }
   ]
 }
