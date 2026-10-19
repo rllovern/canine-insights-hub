@@ -313,11 +313,11 @@ const userHandler = mopsHandler("mops-form-sync", async (ctx) => {
   if (op === "norcal_audit") {
     const conn = await ctx.connections(NORCAL);
     if (!conn.ctm || conn.ctm.account_id !== "605552") return json({ error: "NorCal account verification failed" }, 400);
-    const { submissions } = await ctx.call("formsync_list", { property_id: NORCAL }) as any;
+    const activities = await ctmList(conn.ctm, new Date(Date.now() - 7 * 86400000), new Date(), "how_can_we_help_you");
     const records = [];
-    for (const s of (submissions ?? []).filter((s: any) => s.ctm_activity_id).slice(0, 10)) {
-      const a = await ctmGet(conn.ctm, String(s.ctm_activity_id), "how_can_we_help_you");
-      records.push({ activity_id: s.ctm_activity_id, tag: a?.tag, inquiry_characters: String(a?.message ?? "").length, askai_provenance: "Not exposed by documented call-details endpoint" });
+    for (const activity of activities.filter((a) => a.form_id === "238734").slice(-10)) {
+      const a = await ctmGet(conn.ctm, activity.id, "how_can_we_help_you");
+      records.push({ activity_id: activity.id, tag: a?.tag, inquiry_characters: String(a?.message ?? "").length, askai_provenance: "Not exposed by documented call-details endpoint" });
     }
     return json({ records, rules_changed: false });
   }
