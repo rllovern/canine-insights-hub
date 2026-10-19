@@ -22,3 +22,7 @@ Deno.test("two composite candidates are held for review", () => {
 Deno.test("phone/email alone never match (no contact)", () => {
   assertEquals(classify(sub, "238734", [act("a", "2026-10-19T20:11:58Z", { contact_id: null })], new Set(), { composite: true }).status, "pending_delivery");
 });
+Deno.test("composite: unique strong candidate beats a distant same-message activity", () => {
+  const v = classify(sub, "238734", [act("far", "2026-10-19T22:30:00Z", { message: "m", message_hash: "h" }), act("a", "2026-10-19T20:11:58Z")], new Set(), { composite: true });
+  assertEquals([v.status, v.activity_id], ["matched", "a"]);
+});

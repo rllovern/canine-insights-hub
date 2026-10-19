@@ -81,6 +81,8 @@ export function matchSubmission(
   const top = cands[0];
   const strong = (c: typeof top) => (c.contact && c.dt <= 10 && (c.msg || !sub.message_hash)) || c.composite;
   if (strong(top) && !(cands[1] && strong(cands[1]))) return { status: "matched", activity_id: top.id, candidates: out };
+  // Composite locations: exactly one strong candidate wins even if a far-off (separate) submission scores higher on message.
+  if (opts.composite) { const st = cands.filter(strong); if (st.length === 1) return { status: "matched", activity_id: st[0].id, candidates: out }; }
   return { status: "needs_review", candidates: out };
 }
 
