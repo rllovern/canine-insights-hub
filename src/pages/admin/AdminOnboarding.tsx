@@ -244,6 +244,21 @@ export default function AdminOnboarding() {
                       <Button variant="outline" size="sm" disabled={!sub} onClick={() => setOpenId(inv.id)}>
                         View
                       </Button>
+                      {(inv as { is_test?: boolean }).is_test && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            if (!window.confirm("Reset the test submission? All test answers will be cleared.")) return;
+                            const { data, error } = await supabase.functions.invoke("onboarding-public", { body: { action: "reset", token: inv.token } });
+                            if (error || data?.error) { toast({ title: "Reset failed", description: data?.error ?? error?.message, variant: "destructive" }); return; }
+                            toast({ title: "Test submission reset", description: "Open the link to start from the beginning." });
+                            void load();
+                          }}
+                        >
+                          <RefreshCw className="mr-1 h-4 w-4" /> Reset test
+                        </Button>
+                      )}
                       {canDelete && (
                         <Button
                           variant="ghost"
