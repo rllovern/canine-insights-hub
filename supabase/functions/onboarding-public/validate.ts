@@ -109,6 +109,32 @@ export function incompleteSections(a: Answers): string[] {
   return out;
 }
 
+// ---- Step 2: website & brand ----
+export const STEP2_DONE_KEY = "_step2_completed_at";
+const TRAINING_LOCATIONS = ["In my home", "At a training facility", "In the client's home", "Out in public places"];
+const LOGOS = ["Standard", "Custom"];
+const PALETTES = ["Deep Moss", "Midnight Steel", "Ember", "Custom"];
+
+/** Keep only valid Step 2 values; everything else in the request is ignored. */
+export function pickStep2(a: Answers): Answers {
+  const out: Answers = {};
+  if (Array.isArray(a.training_locations)) {
+    out.training_locations = (a.training_locations as unknown[]).filter((x): x is string => typeof x === "string" && TRAINING_LOCATIONS.includes(x));
+  }
+  if (typeof a.logo_choice === "string" && LOGOS.includes(a.logo_choice)) out.logo_choice = a.logo_choice;
+  if (typeof a.color_palette === "string" && PALETTES.includes(a.color_palette)) out.color_palette = a.color_palette;
+  if (typeof a.brand_notes === "string") out.brand_notes = a.brand_notes.slice(0, 2000);
+  return out;
+}
+
+export function step2Missing(a: Answers): string[] {
+  const m: string[] = [];
+  if (!Array.isArray(a.training_locations) || a.training_locations.length === 0) m.push("where you train");
+  if (!a.logo_choice) m.push("logo");
+  if (!a.color_palette) m.push("website colors");
+  return m;
+}
+
 export type Flag = { flag_type: string; severity: string; field_key?: string; detail: string };
 
 /** Review notes raised automatically for staff. */
