@@ -301,7 +301,7 @@ export default function Onboarding() {
             needs a second look.
           </p>
         </div>
-      </div>
+      </div></div>
     );
   }
 
