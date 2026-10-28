@@ -2027,6 +2027,7 @@ export type Database = {
           created_by: string | null
           expires_at: string
           id: string
+          is_test: boolean
           last_sent_at: string | null
           location_label: string
           prefill: Json
@@ -2043,6 +2044,7 @@ export type Database = {
           created_by?: string | null
           expires_at?: string
           id?: string
+          is_test?: boolean
           last_sent_at?: string | null
           location_label: string
           prefill?: Json
@@ -2059,6 +2061,7 @@ export type Database = {
           created_by?: string | null
           expires_at?: string
           id?: string
+          is_test?: boolean
           last_sent_at?: string | null
           location_label?: string
           prefill?: Json

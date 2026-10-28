@@ -211,6 +211,13 @@
       "when": 1792449062297,
       "tag": "0029_norcal_activation_validation_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793162715225,
+      "tag": "0030_onboarding_test_invite",
+      "breakpoints": true
     }
   ]
 }

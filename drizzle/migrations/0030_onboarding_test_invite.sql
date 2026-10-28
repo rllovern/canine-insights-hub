@@ -1,0 +1,2 @@
+ALTER TABLE public.onboarding_invites ADD COLUMN IF NOT EXISTS is_test boolean NOT NULL DEFAULT false;
+UPDATE public.onboarding_invites SET is_test = true WHERE id = '78307b4e-ce53-48bc-921b-d9e5de90be82';
