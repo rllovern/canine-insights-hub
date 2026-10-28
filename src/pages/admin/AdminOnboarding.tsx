@@ -217,7 +217,7 @@ export default function AdminOnboarding() {
                 const count = sub ? flags.filter((f) => f.submission_id === sub.id).length : 0;
                 return (
                   <TableRow key={inv.id}>
-                    <TableCell className="font-medium">{inv.location_label}</TableCell>
+                    <TableCell className="font-medium">{inv.location_label}{(inv as { is_test?: boolean }).is_test && <Badge variant="outline" className="ml-2">Test</Badge>}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{inv.contact_name ?? inv.contact_email}</TableCell>
                     <TableCell>
                       <Badge variant={inv.status === "submitted" || inv.status === "approved" ? "default" : "secondary"}>

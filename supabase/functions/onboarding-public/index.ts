@@ -39,13 +39,14 @@ type Invite = {
   expires_at: string;
   revoked_at: string | null;
   last_sent_at: string | null;
+  is_test: boolean;
 };
 
 async function resolveInvite(token: string): Promise<{ invite?: Invite; error?: string; status?: number }> {
   if (!token || typeof token !== "string" || token.length < 16) return { error: "Invalid link", status: 400 };
   const { data, error } = await admin
     .from("onboarding_invites")
-    .select("id, property_id, location_label, contact_name, contact_email, prefill, status, expires_at, revoked_at, last_sent_at")
+    .select("id, property_id, location_label, contact_name, contact_email, prefill, status, expires_at, revoked_at, last_sent_at, is_test")
     .eq("token", token)
     .maybeSingle();
   if (error) return { error: "Could not open this questionnaire", status: 500 };
@@ -113,6 +114,7 @@ Deno.serve(async (req) => {
           contact_name: invite.contact_name,
           contact_email: invite.contact_email,
           prefill: invite.prefill ?? {},
+          is_test: invite.is_test === true,
         },
         submission: {
           answers: submission.answers ?? {},
@@ -135,13 +137,26 @@ Deno.serve(async (req) => {
       const step2 = pickStep2(incoming);
       const merged: Answers = { ...stored, ...step2 };
       if (action === "step2_submit") {
-        const missing = step2Missing(merged);
+        const missing = invite.is_test ? [] : step2Missing(merged);
         if (missing.length) return json({ error: `Please answer: ${missing.join(", ")}` }, 400);
         merged[STEP2_DONE_KEY] = new Date().toISOString();
       }
       const { error: e2 } = await admin.from("onboarding_submissions").update({ answers: merged }).eq("id", submission.id);
       if (e2) return json({ error: e2.message }, 500);
       return json({ ok: true, saved_at: new Date().toISOString() });
+    }
+
+    // Test invites only: wipe answers so the walkthrough can start again.
+    if (action === "reset") {
+      if (!invite.is_test) return json({ error: "Not allowed" }, 403);
+      await admin.from("onboarding_flags").delete().eq("submission_id", submission.id);
+      const { error: rErr } = await admin
+        .from("onboarding_submissions")
+        .update({ answers: {}, current_section: 0, status: "in_progress", submitted_at: null })
+        .eq("id", submission.id);
+      if (rErr) return json({ error: rErr.message }, 500);
+      await admin.from("onboarding_invites").update({ status: "in_progress" }).eq("id", invite.id);
+      return json({ ok: true });
     }
 
     if (submission.status === "submitted" || submission.status === "approved") {
@@ -162,6 +177,18 @@ Deno.serve(async (req) => {
       return json({ ok: true, saved_at: new Date().toISOString(), format_warnings: formatErrors(answers) });
     }
 
+    if (action === "submit" && invite.is_test) {
+      // Test walkthrough: no validation, flags, overlap checks or email.
+      const answers = normalize((body.answers ?? {}) as Answers);
+      const { error: tErr } = await admin
+        .from("onboarding_submissions")
+        .update({ answers, status: "submitted", submitted_at: new Date().toISOString() })
+        .eq("id", submission.id);
+      if (tErr) return json({ error: tErr.message }, 500);
+      await admin.from("onboarding_invites").update({ status: "submitted" }).eq("id", invite.id);
+      return json({ ok: true, flags: 0, test: true });
+    }
+
     if (action === "submit") {
       const answers = normalize((body.answers ?? {}) as Answers);
       const fmt = formatErrors(answers);
@@ -172,7 +199,8 @@ Deno.serve(async (req) => {
       // Territory overlap is checked against every other location's answers.
       const { data: others } = await admin
         .from("onboarding_submissions")
-        .select("id, answers, onboarding_invites!inner(location_label)")
+        .select("id, answers, onboarding_invites!inner(location_label, is_test)")
+        .eq("onboarding_invites.is_test", false)
         .neq("id", submission.id);
       const otherAreas = (others ?? []).map((o: Record<string, unknown>) => ({
         label: ((o.onboarding_invites as { location_label?: string })?.location_label) ?? "another location",
