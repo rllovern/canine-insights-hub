@@ -223,6 +223,11 @@ export default function AdminOnboarding() {
                       <Badge variant={inv.status === "submitted" || inv.status === "approved" ? "default" : "secondary"}>
                         {STATUS_LABEL[inv.status] ?? inv.status}
                       </Badge>
+                      {(inv.status === "submitted" || inv.status === "approved") && (
+                        <Badge variant="outline" className="ml-1">
+                          Step 2: {typeof (sub?.answers as Record<string, unknown> | undefined)?._step2_completed_at === "string" ? "complete" : "not started"}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>{count ? <Badge variant="destructive">{count}</Badge> : <span className="text-muted-foreground">—</span>}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">

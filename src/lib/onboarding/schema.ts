@@ -21,9 +21,16 @@ export type FieldType =
   | "hours"
   | "geolist"
   | "rank"
-  | "repeatable";
+  | "repeatable"
+  | "visual_radio";
 
 export type Answers = Record<string, unknown>;
+
+export interface VisualChoice {
+  value: string;
+  label: string;
+  image: string;
+}
 
 export interface FieldDef {
   key: string;
@@ -33,6 +40,10 @@ export interface FieldDef {
   help?: string;
   placeholder?: string;
   options?: string[];
+  /** Picture cards for visual_radio. */
+  choices?: VisualChoice[];
+  /** Unit shown after a number input, e.g. "miles". */
+  suffix?: string;
   /** Minimum characters for text / textarea answers. */
   minChars?: number;
   maxChars?: number;
@@ -208,6 +219,9 @@ export const SECTIONS: SectionDef[] = [
         key: "travel_radius_miles",
         label: "How far will you travel for an in-home session?",
         type: "number",
+        suffix: "miles",
+        placeholder: "25",
+        help: "Answer in miles.",
         required: true,
         min: 0,
         max: 300,
@@ -247,6 +261,12 @@ export const SECTIONS: SectionDef[] = [
           { key: "price_low", label: "Price (or low end)", type: "currency", required: true, showIf: (i) => i.price_type !== "Quote only" },
           { key: "price_high", label: "High end", type: "currency", showIf: (i) => i.price_type === "Price range" },
           { key: "duration", label: "Length of the program", type: "text", required: true },
+          {
+            key: "price_breakdown",
+            label: "Price breakdown / add-ons (optional)",
+            type: "textarea",
+            placeholder: "3-week board and train $3,650 / extra week $900 / follow-up lesson $150",
+          },
           { key: "is_flagship", label: "This is the program we should push hardest", type: "boolean" },
         ],
       },
@@ -465,6 +485,72 @@ export const SECTIONS: SectionDef[] = [
 
 export const REVIEW_SECTION_KEY = "review";
 
+/* ---------------- Step 2: Website & Brand Setup ---------------- */
+
+import logoStandard from "@/assets/onboarding/branding/logo-standard.png.asset.json";
+import logoCustom from "@/assets/onboarding/branding/logo-custom.png.asset.json";
+import colorDeepMoss from "@/assets/onboarding/branding/color-deep-moss.png.asset.json";
+import colorMidnight from "@/assets/onboarding/branding/color-midnight-steel.png.asset.json";
+import colorEmber from "@/assets/onboarding/branding/color-ember.png.asset.json";
+import colorCustom from "@/assets/onboarding/branding/color-custom.png.asset.json";
+
+/** Answer keys owned by Step 2 — the only keys a Step 2 save may change. */
+export const STEP2_KEYS = ["training_locations", "logo_choice", "color_palette", "brand_notes"] as const;
+export const STEP2_DONE_KEY = "_step2_completed_at";
+
+export const STEP2_SECTIONS: SectionDef[] = [
+  {
+    key: "website_branding",
+    title: "Website & brand setup",
+    blurb: "A few quick choices for your website. Takes about 2 minutes.",
+    estMinutes: 2,
+    required: true,
+    fields: [
+      {
+        key: "training_locations",
+        label: "Where do you train dogs?",
+        type: "multiselect",
+        required: true,
+        minItems: 1,
+        help: "Pick all that apply.",
+        options: ["In my home", "At a training facility", "In the client's home", "Out in public places"],
+      },
+      {
+        key: "logo_choice",
+        label: "Pick your logo",
+        type: "visual_radio",
+        required: true,
+        choices: [
+          { value: "Standard", label: "Standard logo", image: logoStandard.url },
+          { value: "Custom", label: "Custom logo", image: logoCustom.url },
+        ],
+      },
+      {
+        key: "color_palette",
+        label: "Pick your website colors",
+        type: "visual_radio",
+        required: true,
+        choices: [
+          { value: "Deep Moss", label: "Deep Moss", image: colorDeepMoss.url },
+          { value: "Midnight Steel", label: "Midnight Steel", image: colorMidnight.url },
+          { value: "Ember", label: "Ember", image: colorEmber.url },
+          { value: "Custom", label: "Custom", image: colorCustom.url },
+        ],
+      },
+      { key: "brand_notes", label: "Anything else the web team should know? (optional)", type: "textarea", maxChars: 2000 },
+    ],
+  },
+];
+
+/** Custom logo or colors means the client should book a design call. */
+export function needsDesignCall(a: Answers): boolean {
+  return a.logo_choice === "Custom" || a.color_palette === "Custom";
+}
+
+export function step2Complete(a: Answers): boolean {
+  return typeof a[STEP2_DONE_KEY] === "string";
+}
+
 export function sectionByKey(key: string) {
   return SECTIONS.find((s) => s.key === key);
 }
@@ -597,6 +683,7 @@ export function flattenAnswers(answers: Answers): Array<{ section: string; label
       const h = v as Record<string, { closed?: boolean; open?: string; close?: string }>;
       return DAYS.map((d) => `${d}: ${h?.[d]?.closed ? "Closed" : `${h?.[d]?.open ?? "?"}–${h?.[d]?.close ?? "?"}`}`).join("; ");
     }
+    if (f.type === "number" && f.suffix) return `${String(v)} ${f.suffix}`;
     if (f.type === "repeatable") {
       const rowsIn = (v as Answers[]) ?? [];
       return rowsIn
@@ -613,7 +700,7 @@ export function flattenAnswers(answers: Answers): Array<{ section: string; label
     if (typeof v === "boolean") return v ? "Yes" : "No";
     return String(v);
   };
-  for (const s of SECTIONS) {
+  for (const s of [...SECTIONS, ...STEP2_SECTIONS]) {
     for (const f of s.fields) {
       if (f.showIf && !f.showIf(answers)) continue;
       rows.push({ section: s.title, label: f.label, value: render(f, answers[f.key]) });

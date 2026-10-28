@@ -13,8 +13,14 @@ import {
   totalEstimatedMinutes,
   validateSection,
   visibleFields,
+  STEP2_SECTIONS,
+  needsDesignCall,
+  step2Complete,
   type Answers,
 } from "@/lib/onboarding/schema";
+
+/** Web team's design-call booking page. Empty until the real link is provided. */
+const DESIGN_CALL_URL = "";
 import ridgesideLogo from "@/assets/ridgeside-logo-full.webp";
 
 type InviteInfo = { location_label: string; contact_name: string | null; contact_email: string; prefill: Record<string, unknown> };
@@ -129,6 +135,7 @@ export default function Onboarding() {
     try {
       await call("submit", { answers });
       setSubmitted(true);
+      setShowErrors(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       toast({ title: "Could not submit", description: (e as Error).message, variant: "destructive" });
@@ -153,6 +160,84 @@ export default function Onboarding() {
     return (
       <div className="grid min-h-screen place-items-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (submitted && !step2Complete(answers)) {
+    const s2 = STEP2_SECTIONS[0];
+    const errs2 = validateSection(s2, answers);
+    const saveStep2 = async (final: boolean) => {
+      if (final && Object.keys(errs2).length) {
+        setShowErrors(true);
+        toast({ title: "A few answers need attention", description: "The highlighted questions are required.", variant: "destructive" });
+        return;
+      }
+      setSubmitting(true);
+      try {
+        await call(final ? "step2_submit" : "step2_save", { answers });
+        if (final) setAnswers((a) => ({ ...a, _step2_completed_at: new Date().toISOString() }));
+        else toast({ title: "Saved" });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (e) {
+        toast({ title: "Could not save", description: (e as Error).message, variant: "destructive" });
+      } finally {
+        setSubmitting(false);
+      }
+    };
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="border-b border-border bg-card">
+          <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6">
+            <img src={ridgesideLogo} alt="Ridgeside K9" className="h-7 w-auto" />
+            <span className="text-xs text-muted-foreground">{invite.location_label}</span>
+          </div>
+        </header>
+        <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
+          <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+            <Check className="h-5 w-5 shrink-0 text-primary" />
+            <span><strong>Step 1 complete.</strong> Your operations and advertising answers are saved with the team.</span>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">Step 2 of 2</p>
+            <h1 className="text-2xl font-semibold tracking-tight">{s2.title}</h1>
+            {s2.blurb && <p className="mt-2 text-sm text-muted-foreground">{s2.blurb}</p>}
+          </div>
+          <div className="space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
+            {visibleFields(s2, answers).map((f) => (
+              <FieldInput
+                key={f.key}
+                field={f}
+                value={answers[f.key]}
+                scope={answers}
+                error={showErrors ? errs2[f.key] : undefined}
+                onChange={(v) => setAnswers((prev) => ({ ...prev, [f.key]: v }))}
+              />
+            ))}
+            {needsDesignCall(answers) && (
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 text-sm">
+                <p className="font-medium">Let's talk about your custom design</p>
+                <p className="mt-1 text-muted-foreground">
+                  Because you chose a custom logo or colors, our web designer would like a short call with you.
+                </p>
+                {DESIGN_CALL_URL ? (
+                  <Button asChild className="mt-3">
+                    <a href={DESIGN_CALL_URL} target="_blank" rel="noopener noreferrer">Book a design call</a>
+                  </Button>
+                ) : (
+                  <p className="mt-2 font-medium">We'll reach out to schedule a design call.</p>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" disabled={submitting} onClick={() => saveStep2(false)}>Save and finish later</Button>
+            <Button disabled={submitting} onClick={() => saveStep2(true)}>
+              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Submit step 2
+            </Button>
+          </div>
+        </main>
       </div>
     );
   }

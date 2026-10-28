@@ -207,17 +207,42 @@ export function FieldInput({ field, value, scope, error, prefillValue, onChange 
         return <GeoList value={value} onChange={onChange} />;
       case "repeatable":
         return <Repeatable field={field} value={value} onChange={onChange} />;
+      case "visual_radio":
+        return (
+          <div role="radiogroup" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {(field.choices ?? []).map((c) => {
+              const active = value === c.value;
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => onChange(c.value)}
+                  className={`overflow-hidden rounded-lg border-2 text-left transition ${active ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/50"}`}
+                >
+                  <img src={c.image} alt={c.label} loading="lazy" className="aspect-[3/2] w-full object-cover" />
+                  <span className="block px-3 py-2 text-sm font-medium">{c.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
       case "number":
       case "currency":
         return (
-          <Input
-            id={id}
-            type="number"
-            inputMode="decimal"
-            value={(value as number | string) ?? ""}
-            placeholder={field.placeholder}
-            onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              id={id}
+              type="number"
+              inputMode="decimal"
+              className={field.suffix ? "w-32" : undefined}
+              value={(value as number | string) ?? ""}
+              placeholder={field.placeholder}
+              onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+            />
+            {field.suffix && <span className="text-sm text-muted-foreground">{field.suffix}</span>}
+          </div>
         );
       case "date":
         return <Input id={id} type="date" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} />;

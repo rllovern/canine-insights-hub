@@ -2,7 +2,7 @@
 // The owner is anonymous: every request carries the invite token, which is
 // resolved server-side before any read or write happens with the service role.
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFlags, formatErrors, incompleteSections, normalize, type Answers } from "./validate.ts";
+import { buildFlags, formatErrors, incompleteSections, normalize, pickStep2, step2Missing, STEP2_DONE_KEY, type Answers } from "./validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -121,6 +121,27 @@ Deno.serve(async (req) => {
           submitted_at: submission.submitted_at,
         },
       });
+    }
+
+    // Step 2 (website & brand) opens only after Step 1 is submitted, and may
+    // only touch its own keys so Step 1 answers can never be rewritten here.
+    if (action === "step2_save" || action === "step2_submit") {
+      if (submission.status !== "submitted" && submission.status !== "approved") {
+        return json({ error: "Finish step 1 first." }, 409);
+      }
+      const stored = (submission.answers ?? {}) as Answers;
+      if (typeof stored[STEP2_DONE_KEY] === "string") return json({ error: "Step 2 has already been submitted." }, 409);
+      const incoming = (body.answers ?? {}) as Answers;
+      const step2 = pickStep2(incoming);
+      const merged: Answers = { ...stored, ...step2 };
+      if (action === "step2_submit") {
+        const missing = step2Missing(merged);
+        if (missing.length) return json({ error: `Please answer: ${missing.join(", ")}` }, 400);
+        merged[STEP2_DONE_KEY] = new Date().toISOString();
+      }
+      const { error: e2 } = await admin.from("onboarding_submissions").update({ answers: merged }).eq("id", submission.id);
+      if (e2) return json({ error: e2.message }, 500);
+      return json({ ok: true, saved_at: new Date().toISOString() });
     }
 
     if (submission.status === "submitted" || submission.status === "approved") {
