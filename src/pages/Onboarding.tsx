@@ -23,7 +23,7 @@ import {
 const DESIGN_CALL_URL = "";
 import ridgesideLogo from "@/assets/ridgeside-logo-full.webp";
 
-type InviteInfo = { location_label: string; contact_name: string | null; contact_email: string; prefill: Record<string, unknown> };
+type InviteInfo = { location_label: string; contact_name: string | null; contact_email: string; prefill: Record<string, unknown>; is_test?: boolean };
 
 const REVIEW_INDEX = SECTIONS.length;
 
@@ -107,8 +107,24 @@ export default function Onboarding() {
   const minutesLeft = SECTIONS.slice(step).reduce((n, s) => n + s.estMinutes, 0);
   const outstanding = useMemo(() => outstandingSections(answers), [answers]);
 
+  const isTest = invite?.is_test === true;
+
+  const resetTest = async () => {
+    if (!window.confirm("Clear all test answers and start over?")) return;
+    try {
+      await call("reset");
+      setAnswers({});
+      setStep(0);
+      setSubmitted(false);
+      setShowErrors(false);
+      window.scrollTo({ top: 0 });
+    } catch (e) {
+      toast({ title: "Could not reset", description: (e as Error).message, variant: "destructive" });
+    }
+  };
+
   const goNext = async () => {
-    if (section && Object.keys(errors).length) {
+    if (section && Object.keys(errors).length && !isTest) {
       setShowErrors(true);
       toast({ title: "A few answers need attention", description: "The highlighted questions are required.", variant: "destructive" });
       return;
@@ -165,6 +181,7 @@ export default function Onboarding() {
   }
 
   if (submitted && !step2Complete(answers)) {
+    void 0;
     const s2 = STEP2_SECTIONS[0];
     const errs2 = validateSection(s2, answers);
     const saveStep2 = async (final: boolean) => {
@@ -260,6 +277,32 @@ export default function Onboarding() {
   }
 
   const prefill = invite.prefill ?? {};
+
+  const testBar = isTest ? (
+    <div className="border-b border-border bg-muted px-4 py-2 text-xs">
+      <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2">
+        <span className="font-semibold">Test mode</span>
+        <span className="text-muted-foreground">Required answers don't block you. Nothing is sent to the team.</span>
+        <select
+          aria-label="Jump to page"
+          className="ml-auto rounded border border-border bg-background px-2 py-1"
+          value={submitted ? "step2" : String(step)}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "step2") { if (!submitted) void submit(); return; }
+            setSubmitted(false);
+            setStep(Number(v));
+            window.scrollTo({ top: 0 });
+          }}
+        >
+          {SECTIONS.map((s, i) => <option key={s.key} value={i}>{i + 1}. {s.title}</option>)}
+          <option value={REVIEW_INDEX}>Review and submit</option>
+          <option value="step2">Step 2: Website & brand</option>
+        </select>
+        <Button size="sm" variant="outline" className="h-7" onClick={resetTest}>Reset test</Button>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="min-h-screen bg-background">
