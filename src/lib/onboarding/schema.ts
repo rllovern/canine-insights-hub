@@ -479,6 +479,19 @@ export const SECTIONS: SectionDef[] = [
         required: true,
         minChars: 120,
       },
+      {
+        key: "growth_appetite",
+        label: "How should we balance proven campaigns with testing new ones?",
+        type: "radio",
+        required: true,
+        help:
+          "Playing it completely safe can make an account stall. Newer Google campaign types — like ads across YouTube, Gmail and Discover, or campaigns that run across all of Google at once — often unlock growth we can't reach otherwise. Tests may take a few weeks to prove themselves, and some won't work. Your answer tells us how much room you want us to have to try them.",
+        options: [
+          "Keep it steady — stick mostly to what is already working",
+          "Balanced — keep the core steady and test new campaigns with some of the budget",
+          "Push for growth — test new campaign types boldly, accepting some weeks may underperform",
+        ],
+      },
     ],
   },
 ];
