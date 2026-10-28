@@ -1,5 +1,8 @@
 import { useEffect } from "react";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -72,6 +75,23 @@ function GeoList({ value, onChange }: { value: unknown; onChange: (v: unknown) =
   );
 }
 
+function SortableRow({ id, index }: { id: string; index: number }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...attributes}
+      {...listeners}
+      className={`flex cursor-grab touch-none select-none items-center gap-2 rounded-md border bg-card p-3 active:cursor-grabbing ${isDragging ? "z-10 border-primary shadow-lg" : "border-border"}`}
+    >
+      <GripVertical className="h-4 w-4 text-muted-foreground" />
+      <span className="w-6 text-sm text-muted-foreground">{index + 1}</span>
+      <span className="flex-1 text-sm">{id}</span>
+    </li>
+  );
+}
+
 function RankList({ options, value, onChange }: { options: string[]; value: unknown; onChange: (v: unknown) => void }) {
   const valid = Array.isArray(value) && (value as string[]).length === options.length;
   const order: string[] = valid ? (value as string[]) : options;
@@ -80,28 +100,50 @@ function RankList({ options, value, onChange }: { options: string[]; value: unkn
     if (!valid && options.length > 0) onChange([...options]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valid, options.join("|")]);
-  const move = (i: number, dir: -1 | 1) => {
-    const next = [...order];
-    const j = i + dir;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    onChange(next);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onDragEnd = (e: DragEndEvent) => {
+    if (!e.over || e.active.id === e.over.id) return;
+    onChange(arrayMove(order, order.indexOf(String(e.active.id)), order.indexOf(String(e.over.id))));
   };
   return (
-    <ol className="space-y-2">
-      {order.map((opt, i) => (
-        <li key={opt} className="flex items-center gap-2 rounded-md border border-border p-2">
-          <span className="w-6 text-sm text-muted-foreground">{i + 1}</span>
-          <span className="flex-1 text-sm">{opt}</span>
-          <Button type="button" variant="ghost" size="icon" onClick={() => move(i, -1)} aria-label="Move up">
-            <ArrowUp className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="icon" onClick={() => move(i, 1)} aria-label="Move down">
-            <ArrowDown className="h-4 w-4" />
-          </Button>
-        </li>
-      ))}
-    </ol>
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">Drag to reorder.</p>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={order} strategy={verticalListSortingStrategy}>
+          <ol className="space-y-2">
+            {order.map((opt, i) => <SortableRow key={opt} id={opt} index={i} />)}
+          </ol>
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
+function Choice({ options, value, onChange }: { options: string[]; value: unknown; onChange: (v: unknown) => void }) {
+  return (
+    <div role="radiogroup" className="grid gap-2">
+      {options.map((o) => {
+        const [title, ...rest] = o.split(" — ");
+        const active = value === o;
+        return (
+          <button
+            key={o}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(o)}
+            className={`rounded-md border-2 p-3 text-left text-sm transition ${active ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+          >
+            <span className="font-medium">{title}</span>
+            {rest.length > 0 && <span className="block text-muted-foreground">{rest.join(" — ")}</span>}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -199,6 +241,8 @@ export function FieldInput({ field, value, scope, error, prefillValue, onChange 
         );
       case "multiselect":
         return <MultiSelect options={field.options ?? []} value={value} onChange={onChange} />;
+      case "radio":
+        return <Choice options={field.options ?? []} value={value} onChange={onChange} />;
       case "rank":
         return <RankList options={field.options ?? []} value={value} onChange={onChange} />;
       case "hours":

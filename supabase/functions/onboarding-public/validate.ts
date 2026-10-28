@@ -56,6 +56,7 @@ const REQUIRED: Record<string, Array<{ key: string; minChars?: number; minItems?
     { key: "close_rate" },
     { key: "capacity_limit" },
     { key: "growth_goal", minChars: 120 },
+    { key: "growth_appetite" },
   ],
 };
 
