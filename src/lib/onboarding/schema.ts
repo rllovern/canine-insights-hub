@@ -21,9 +21,16 @@ export type FieldType =
   | "hours"
   | "geolist"
   | "rank"
-  | "repeatable";
+  | "repeatable"
+  | "visual_radio";
 
 export type Answers = Record<string, unknown>;
+
+export interface VisualChoice {
+  value: string;
+  label: string;
+  image: string;
+}
 
 export interface FieldDef {
   key: string;
@@ -33,6 +40,10 @@ export interface FieldDef {
   help?: string;
   placeholder?: string;
   options?: string[];
+  /** Picture cards for visual_radio. */
+  choices?: VisualChoice[];
+  /** Unit shown after a number input, e.g. "miles". */
+  suffix?: string;
   /** Minimum characters for text / textarea answers. */
   minChars?: number;
   maxChars?: number;
