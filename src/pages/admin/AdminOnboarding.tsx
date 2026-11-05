@@ -21,7 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/data/PageHeader";
-import { downloadCsv, downloadJson, downloadPdf } from "@/lib/onboarding/exports";
+import { copyForAsana, downloadCsv, downloadJson, downloadPdf } from "@/lib/onboarding/exports";
 import { flattenAnswers, type Answers } from "@/lib/onboarding/schema";
 import { generateReportToken } from "@/lib/tokens";
 
@@ -332,6 +332,17 @@ export default function AdminOnboarding() {
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => downloadPdf(open.location_label, openSubmission.answers, { submittedAt: openSubmission.submitted_at })}>
                   <FileText className="mr-1 h-4 w-4" /> PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    void copyForAsana(open.location_label, openSubmission.answers)
+                      .then(() => toast({ title: "Copied for Asana", description: "Paste into the task description." }))
+                      .catch(() => toast({ title: "Could not copy", variant: "destructive" }))
+                  }
+                >
+                  <Copy className="mr-1 h-4 w-4" /> Copy for Asana
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(open.location_label, openSubmission.answers)}>
                   <FileSpreadsheet className="mr-1 h-4 w-4" /> CSV
