@@ -22,6 +22,41 @@ export function downloadCsv(label: string, answers: Answers) {
   download(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${label}-onboarding.csv`);
 }
 
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Builds Asana-friendly rich text (headings, bold questions, line breaks) plus a plain-text fallback. */
+export function buildAsanaCopy(label: string, answers: Answers) {
+  const rows = flattenAnswers(answers);
+  const html: string[] = [`<h1>${esc(label)} — Onboarding</h1>`];
+  const text: string[] = [`${label} — Onboarding`, ""];
+  let current = "";
+  for (const r of rows) {
+    if (r.section !== current) {
+      current = r.section;
+      html.push(`<h2>${esc(current)}</h2>`);
+      text.push("", current.toUpperCase(), "");
+    }
+    const lines = (r.value || "—").split("\n");
+    html.push(`<p><strong>${esc(r.label)}</strong><br>${lines.map(esc).join("<br>")}</p>`);
+    text.push(r.label, ...lines, "");
+  }
+  return { html: html.join(""), text: text.join("\n") };
+}
+
+export async function copyForAsana(label: string, answers: Answers) {
+  const { html, text } = buildAsanaCopy(label, answers);
+  if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([text], { type: "text/plain" }),
+      }),
+    ]);
+  } else {
+    await navigator.clipboard.writeText(text);
+  }
+}
+
 export function downloadPdf(label: string, answers: Answers, meta: { submittedAt?: string | null }) {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const margin = 48;
